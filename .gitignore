@@ -60,3 +60,16 @@ Brick-Tools/p2_tool
 *.zip
 MacOS/build-*.sh
 
+
+# droidHPSDR: Android / NDK build artefacts
+.gradle/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.cxx/
+*.apk
+*.aab
+*.keystore
+local.properties
+.idea/
