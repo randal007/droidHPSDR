@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>droidHPSDR — Android front end for OpenHPSDR radios</title>
+<meta name="description" content="An Android SDR transceiver front end for OpenHPSDR Protocol 1 and 2 radios, focused on the Hermes Lite 2 / 2+. Fork of deskHPSDR. Pre-alpha.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>📻</text></svg>">
+<style>
+  :root{
+    --bg:#f7f7f5; --panel:#ffffff; --ink:#16181d; --muted:#5c626e;
+    --line:#e2e2dd; --accent:#0f6e5c; --accent-soft:#e6f2ef;
+    --warn-bg:#fff6e5; --warn-line:#e8c37a; --warn-ink:#6b4a06;
+    --code-bg:#f0f0ec;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0f1115; --panel:#161920; --ink:#e6e8ec; --muted:#9aa1ae;
+      --line:#272b35; --accent:#4fd1b0; --accent-soft:#12241f;
+      --warn-bg:#241d0e; --warn-line:#6b5518; --warn-ink:#e8c88a;
+      --code-bg:#1c2029;
+    }
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+       font-size:16px;line-height:1.62;letter-spacing:-0.003em}
+  .wrap{max-width:830px;margin:0 auto;padding:0 22px 90px}
+  a{color:var(--accent);text-decoration:none;border-bottom:1px solid transparent}
+  a:hover{border-bottom-color:currentColor}
+
+  /* header */
+  header{padding:64px 0 34px;border-bottom:1px solid var(--line);margin-bottom:34px}
+  .spectrum{height:44px;width:100%;margin-bottom:30px;border-radius:3px;
+    background:
+      repeating-linear-gradient(90deg,
+        rgba(127,127,127,.16) 0 1px, transparent 1px 26px),
+      linear-gradient(90deg,#0b2a3d,#0f6e5c 22%,#7fbf3f 38%,#f2c14b 47%,#e2683c 52%,#f2c14b 57%,#7fbf3f 66%,#0f6e5c 80%,#0b2a3d);
+    opacity:.88}
+  h1{font-family:var(--mono);font-size:2.35rem;line-height:1.1;margin:0 0 6px;
+     letter-spacing:-0.035em;font-weight:650}
+  h1 .lo{color:var(--muted);font-weight:400}
+  .tagline{font-size:1.12rem;color:var(--muted);margin:0 0 22px;max-width:62ch}
+  .lineage{font-size:.9rem;color:var(--muted);margin:0 0 26px}
+  .btns{display:flex;gap:10px;flex-wrap:wrap}
+  .btn{display:inline-block;padding:9px 17px;border-radius:6px;font-size:.93rem;
+       font-weight:520;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+  .btn:hover{border-color:var(--accent);border-bottom-color:var(--accent)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  @media (prefers-color-scheme:dark){.btn.primary{color:#07120f}}
+
+  /* status */
+  .status{background:var(--warn-bg);border:1px solid var(--warn-line);color:var(--warn-ink);
+          border-radius:7px;padding:15px 18px;margin:0 0 40px;font-size:.95rem}
+  .status strong{font-family:var(--mono);letter-spacing:-.02em}
+
+  h2{font-size:1.4rem;margin:52px 0 14px;letter-spacing:-.02em;font-weight:640}
+  h3{font-size:1.03rem;margin:30px 0 7px;font-weight:640}
+  p{margin:0 0 15px;max-width:70ch}
+  .muted{color:var(--muted)}
+  code{font-family:var(--mono);font-size:.87em;background:var(--code-bg);
+       padding:1.5px 5px;border-radius:4px}
+
+  /* callout for the headline decision */
+  .keydec{border-left:3px solid var(--accent);background:var(--accent-soft);
+          padding:14px 18px;border-radius:0 7px 7px 0;margin:0 0 15px}
+  .keydec p{margin:0}
+
+  /* tables */
+  .tablewrap{overflow-x:auto;margin:0 0 15px}
+  table{border-collapse:collapse;width:100%;font-size:.93rem;min-width:420px}
+  th,td{text-align:left;padding:9px 13px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-weight:620;color:var(--muted);font-size:.82rem;text-transform:uppercase;
+     letter-spacing:.05em}
+  td:first-child{font-weight:560;white-space:nowrap}
+
+  /* architecture stack */
+  .stack{font-family:var(--mono);font-size:.85rem;margin:0 0 15px;
+         border:1px solid var(--line);border-radius:7px;overflow:hidden}
+  .layer{display:flex;justify-content:space-between;gap:14px;align-items:baseline;
+         padding:10px 15px;border-bottom:1px solid var(--line);background:var(--panel)}
+  .layer:last-child{border-bottom:0}
+  .layer .lname{font-weight:600}
+  .layer .ldesc{color:var(--muted);flex:1;min-width:0}
+  .tag{font-size:.72rem;letter-spacing:.05em;text-transform:uppercase;
+       padding:2px 8px;border-radius:20px;white-space:nowrap;border:1px solid var(--line)}
+  .tag.new{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+  .tag.keep{color:var(--muted)}
+
+  /* roadmap */
+  ol.road{list-style:none;padding:0;margin:0 0 15px;counter-reset:none}
+  ol.road li{display:flex;gap:15px;padding:11px 0;border-bottom:1px solid var(--line)}
+  ol.road li:last-child{border-bottom:0}
+  .mid{font-family:var(--mono);font-weight:640;color:var(--accent);min-width:2.4em}
+  .mbody{flex:1}
+  .mtitle{font-weight:600}
+  .mtext{color:var(--muted);font-size:.93rem}
+
+  ul.plain{padding-left:20px;margin:0 0 15px}
+  ul.plain li{margin-bottom:7px}
+
+  footer{margin-top:64px;padding-top:22px;border-top:1px solid var(--line);
+         font-size:.88rem;color:var(--muted)}
+  footer p{margin:0 0 9px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="spectrum" role="presentation"></div>
+  <h1><span class="lo">droid</span>HPSDR</h1>
+  <p class="tagline">An Android SDR transceiver front end for OpenHPSDR Protocol 1 and 2 radios, with a focus on the Hermes Lite 2 / 2+.</p>
+  <p class="lineage">Forked from <a href="https://github.com/dl1bz/deskhpsdr">deskHPSDR</a> (DL1BZ), itself forked from <a href="https://github.com/dl1ycf/pihpsdr">piHPSDR</a> (DL1YCF). GPL&nbsp;v3 or later.</p>
+  <div class="btns">
+    <a class="btn primary" href="https://github.com/randal007/droidHPSDR">Repository</a>
+    <a class="btn" href="https://github.com/randal007/droidHPSDR/blob/master/README.md">README</a>
+    <a class="btn" href="https://github.com/randal007/droidHPSDR/issues">Issues</a>
+  </div>
+</header>
+
+<div class="status">
+  <strong>Pre-alpha. Nothing works yet.</strong> This repository is design notes and scaffolding.
+  Do not expect a build. Do not expect an APK. Watch the repo if you want to know when Milestone&nbsp;1 lands.
+</div>
+
+<h2>Why</h2>
+<p>deskHPSDR is a mature, WDSP-based transceiver front end aimed squarely at desktop macOS and Linux, with a 1280×600 minimum screen size and a mouse-oriented GTK3 UI. It is explicitly not targeting small screens or mobile.</p>
+<p>SDR++ Brown already runs on Android and supports the HL2 with SSB transmit, but it uses its own DSP chain rather than WDSP, and does not implement PureSignal.</p>
+<p>droidHPSDR aims for the intersection: the WDSP DSP core and radio feature set from deskHPSDR, running on Android, with a touch-first UI.</p>
+
+<h2>Design decisions</h2>
+
+<h3>Audio runs through the radio, not through Android</h3>
+<div class="keydec">
+  <p>With a Hermes Lite 2 Plus companion board, mic and speaker audio ride inside the Protocol 1 frames — mic samples up in the EP6 stream, demodulated audio down in EP2, to and from the AK4951 codec on the companion board. <strong>The Android audio stack is not in the signal path at all</strong> for the primary configuration. No Oboe, no AAudio latency negotiation, no audio policy surprises.</p>
+</div>
+<p class="muted">This is the single most important architectural decision in the project. Local Android audio via Oboe is a secondary path for plain HL2 users, planned but not prioritised. Note the tradeoff: the HL2+ requires custom gateware rather than the standard HL2 gateware.</p>
+
+<h3>WDSP is kept</h3>
+<p>PureSignal, the full noise reduction suite, the TX audio chain, and the filter set all live in WDSP. Porting the DSP to something else would mean losing them. WDSP and FFTW3 cross-compile for arm64 with the NDK.</p>
+
+<h3>Rendering borrowed, UI not</h3>
+<p>The waterfall and panadapter use OpenGL ES rather than Cairo. Widgets are Dear ImGui. Both approaches, and much of the Android bootstrap, are informed by SDR++ / SDR++ Brown — but the UI layout is original and aims at a deskHPSDR / Thetis feel, not an SDR++ feel.</p>
+
+<h3>Transport is deliberately abstracted</h3>
+<p>Both wired and wireless are first-class, behind the same interface. Buffer depth is a user setting, defaulting deeper on WiFi.</p>
+<ul class="plain">
+  <li><strong>WiFi</strong> — the HL2 takes a DHCP lease from the router and is found by the normal Protocol 1 discovery broadcast. Needs a WiFi lock, a foreground service, and a deeper jitter buffer to survive power-save behaviour.</li>
+  <li><strong>USB Ethernet</strong> — lowest jitter, preferred for TX. With no DHCP server on the link the HL2 falls back to APIPA at <code>169.254.19.221 / 255.255.0.0</code>, so the wired path skips discovery and targets it directly.</li>
+</ul>
+<p>Android does not self-assign an IPv4 link-local address, so <code>eth0</code> needs a static address set once by hand (<code>169.254.1.1 / 255.255.0.0</code>). Android persists this per adapter. The HL2's EEPROM fixed-IP option is deliberately <em>not</em> used — it disables DHCP and would break the WiFi path.</p>
+
+<h3>The radio keeps running when the app is not on screen</h3>
+<p>Protocol, DSP, and audio threads must be fully independent of the render loop. The GL surface can stop; the stream cannot. This is a constraint on M1 and M2, not a feature to add later — retrofitting it means rewriting the threading model a second time. Requires a foreground service with a persistent notification, a WiFi lock, and a battery optimisation exemption, or Doze will drop the socket.</p>
+
+<h2>Hardware targets</h2>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Hardware</th><th>Intent</th></tr></thead>
+  <tbody>
+    <tr><td>Hermes Lite 2</td><td>Primary target — in hand</td></tr>
+    <tr><td>HL2 Plus companion board</td><td>Primary target — in hand. Mic, phones, speaker, CW sidetone</td></tr>
+    <tr><td>N2ADR filter board</td><td>Supported</td></tr>
+    <tr><td>HL2 IO Board</td><td>Planned — I²C over the HPSDR protocol, Quisk-style</td></tr>
+    <tr><td>PureSignal</td><td>Planned — needs PS-A plus DUPLEX and the RF3 feedback stream</td></tr>
+    <tr><td>Protocol 2 radios (ANAN etc.)</td><td>Inherited from deskHPSDR, untested</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="muted">Build targets are arm64-v8a only, minSdk 31. Development phone is an unrooted Galaxy S24 Ultra.</p>
+
+<h2>Architecture</h2>
+<div class="stack">
+  <div class="layer"><span class="lname">UI</span><span class="ldesc">ImGui, touch-first</span><span class="tag new">new</span></div>
+  <div class="layer"><span class="lname">Render</span><span class="ldesc">OpenGL ES waterfall</span><span class="tag new">new</span></div>
+  <div class="layer"><span class="lname">Android shell</span><span class="ldesc">NativeActivity, JNI</span><span class="tag new">new</span></div>
+  <div class="layer"><span class="lname">Radio state</span><span class="ldesc">VFO, band, mode</span><span class="tag keep">from deskHPSDR</span></div>
+  <div class="layer"><span class="lname">DSP</span><span class="ldesc">WDSP + FFTW3</span><span class="tag keep">unchanged</span></div>
+  <div class="layer"><span class="lname">Protocol</span><span class="ldesc">P1 / P2, discovery</span><span class="tag keep">from deskHPSDR</span></div>
+  <div class="layer"><span class="lname">Transport</span><span class="ldesc">USB Ethernet / WiFi</span><span class="tag keep">reworked</span></div>
+</div>
+<p>The hard part is not any single layer. It is that deskHPSDR does not separate them — GTK types appear inside receiver and transmitter structs, and cross-thread updates go through <code>g_idle_add</code> on a GMainLoop. Untangling that is Milestone&nbsp;1. GLib without GTK does cross-compile for Android, so keeping GLib and removing only the widget layer is worth attempting before rewriting the threading model.</p>
+
+<h2>Roadmap</h2>
+<ol class="road">
+  <li><span class="mid">M0</span><span class="mbody"><span class="mtitle">Transport check.</span> <span class="mtext">Largely answered — SDR++ Brown already reaches this radio from this phone. Only open item is confirming a USB Ethernet adapter takes a static config on the unrooted phone.</span></span></li>
+  <li><span class="mid">M1</span><span class="mbody"><span class="mtitle">Headless core.</span> <span class="mtext">Cross-compile WDSP, FFTW3, and the protocol layer for arm64. Discover, stream, and print S-meter values to logcat. No UI.</span></span></li>
+  <li><span class="mid">M2</span><span class="mbody"><span class="mtitle">HL2+ codec loopback.</span> <span class="mtext">Headless proof that audio into the EP2 slots reaches the companion board's speaker and mic samples arrive in EP6. Validates the whole audio architecture, so it comes before any UI.</span></span></li>
+  <li><span class="mid">M3</span><span class="mbody"><span class="mtitle">Picture.</span> <span class="mtext">Android shell plus GL waterfall.</span></span></li>
+  <li><span class="mid">M4</span><span class="mbody"><span class="mtitle">Usable RX.</span> <span class="mtext">VFO, band, mode, filter, AGC. Enough to actually listen.</span></span></li>
+  <li><span class="mid">M5</span><span class="mbody"><span class="mtitle">TX.</span> <span class="mtext">SSB first, then CW.</span></span></li>
+  <li><span class="mid">M6</span><span class="mbody"><span class="mtitle">Extras.</span> <span class="mtext">IO board I²C, PureSignal, local Oboe audio path.</span></span></li>
+  <li><span class="mid">M7</span><span class="mbody"><span class="mtitle">Coexistence.</span> <span class="mtext">Bluetooth headset support, and running alongside digital mode apps. Parts of this may not be achievable without root.</span></span></li>
+</ol>
+
+<h2>Wanted, but not solved</h2>
+
+<h3>Running alongside digital mode apps</h3>
+<p>The goal is to leave droidHPSDR running in the background while FT8CN, a Winlink client, or similar uses the radio. Android has no virtual audio cable, and the two directions are not equivalent: capturing another app's playback is possible via AudioPlaybackCapture on Android 10+, behind a MediaProjection consent prompt and only where the source app has not opted out, while feeding another app's microphone input has no public API at all — a virtual mic needs root or a system-level HAL.</p>
+<p>So a software-only loopback covers at most one direction. The workable approach is to keep the digital audio path physical: HL2+ analog audio to a USB audio interface that the digital app owns directly, while droidHPSDR owns only the network connection. Nothing is shared and nothing is injected. PTT then comes from HL2+ VOX or from the rigctl TCP server inherited from piHPSDR, if the digital app supports network CAT — needs verifying per app. Wired setups will need a powered hub carrying both the Ethernet adapter and the audio interface.</p>
+
+<h3>Bluetooth headset audio</h3>
+<p>Depends on the local Oboe path, since Bluetooth necessarily goes through the Android audio stack rather than the HL2+ codec. Latency decides usability: A2DP is 150–250 ms, acceptable for listening but not for TX monitoring; HFP/SCO is low latency but narrowband mono and poor quality; LE Audio / LC3 is the only genuinely good option, and needs recent hardware on both ends. Likely lands as a listening-only feature first.</p>
+
+<h2>Non-goals</h2>
+<ul class="plain">
+  <li>Small screens below phone size, and Raspberry Pi builds — use piHPSDR.</li>
+  <li>Measurement, IF-tap, or panadapter-only use — use something specialised.</li>
+  <li>Getting merged upstream. deskHPSDR targets desktop macOS and Linux; this is a permanent fork.</li>
+</ul>
+
+<footer>
+  <p><strong>Licence and attribution.</strong> GPL v3 or later, inherited from all upstream sources.
+  <a href="https://github.com/dl1bz/deskhpsdr">deskHPSDR</a> — DL1BZ, radio state, protocol handling, HL2-specific work.
+  <a href="https://github.com/dl1ycf/pihpsdr">piHPSDR</a> — DL1YCF, original codebase.
+  WDSP — Dr. Warren Pratt, NR0V, all DSP.
+  SDR++ / SDR++ Brown — Alexandre Rouma; Sanny Sanoff, Android and rendering approach.</p>
+  <p>Please do not send droidHPSDR bug reports to any of the upstream authors. This is an unofficial fork and their projects have different goals. <a href="https://github.com/randal007/droidHPSDR/issues">Open an issue here.</a></p>
+</footer>
+
+</div>
+</body>
+</html>
