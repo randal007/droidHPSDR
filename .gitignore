@@ -62,3 +62,17 @@ MacOS/build-*.sh
 rx200-sim*
 miniaudio/*.txt
 miniaudio/test*
+
+
+# droidHPSDR: Android / NDK build artefacts
+.gradle/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.cxx/
+*.apk
+*.aab
+*.keystore
+local.properties
+.idea/
