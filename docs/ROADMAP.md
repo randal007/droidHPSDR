@@ -14,6 +14,12 @@ next, what's waiting on whom. Session history lives in git and in
   First step: 10-20 generated UI pictures, tweaked with Randal round by
   round (see "How the look gets decided"), before any app code.
 - No transmit until Randal asks for it (M7).
+- **Waiting on Randal:** whether to delete the empty leftover repo
+  `randal007/DroidHPSDR-scaffold` (README only, from 2026-09-07).
+- **Phone state (2026-11-23):** developer options + USB debugging on; adb
+  over WiFi via `adb tcpip 5555` (gone after a phone restart: plug in USB
+  once and repeat); `m0-probe`, `wdsp-smoke`, `m1-rx` in /data/local/tmp;
+  Ethernet adapter configured static 169.254.1.1/16.
 
 ## Goal
 

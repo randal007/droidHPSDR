@@ -31,9 +31,9 @@ hardware that isn't here.
 
 ## Restart 2026-11-23 — what changed since September
 
-Randal picked the project back up. Nothing under `src/` was touched in
-September; only the docs and `tools/m0-probe` (built for arm64, verified from
-the desktop, **never run on a phone**) exist. New requirements:
+Randal picked the project back up (in September only docs and
+`tools/m0-probe` existed). The same day M1 was finished; see
+docs/ROADMAP.md. New requirements from that restart:
 
 - S26 Ultra replaces S24 Ultra (above).
 - IO board and HL2+ are both required (above).
@@ -86,14 +86,15 @@ propose swapping the DSP layer.
 
 ### 3. `core/` contains no UI types
 
-No GTK, Compose, GL or JNI types anywhere under `core/`. This is the whole point
-of the port — deskHPSDR fails this today, with `GtkWidget*` members sitting
-inside receiver and transmitter structs and cross-thread updates going through
-`g_idle_add` on a GMainLoop.
+How this works since 2026-11-23: upstream files compile **unchanged** from
+`src/` against the stand-in headers in `android/native/compat/` (opaque GTK
+types, pthread-backed GLib locks/threads, `g_idle_add` → our own queue). No
+GLib port, no `core/` move (see docs/PORTING-NOTES.md).
 
-Worth attempting first: **GLib without GTK does cross-compile for Android.**
-Keeping GLib and removing only the widget layer may avoid rewriting the
-threading model entirely. Try that before anything more invasive.
+So the rule is: **no Compose, GL or JNI types in `src/` or `compat/`.** UI
+code lives in the app (`android/app`, from M3) and talks to the radio core
+through one JNI bridge. UI notifications from upstream (`g_idle_add` targets
+like `ext_vfo_update`) reach the UI through that queue, never directly.
 
 ### 4. Radio threads are independent of rendering
 
@@ -288,7 +289,12 @@ every step, then report. Nothing may live only in this conversation.
 
 ## Known unknowns
 
-- Whether GLib-without-GTK actually builds clean for Android.
-- Whether the EP2 audio path works without deskHPSDR-side changes for HL2+.
-- Whether One UI on the S26 Ultra exposes static Ethernet config as expected.
-- Thermal behaviour under sustained WDSP load. WDSP is double-heavy.
+Answered 2026-11-23: GLib isn't needed (compat headers); the HL2+ speaker
+path works with deskHPSDR's code unchanged (FT8 heard); One UI does take a
+static Ethernet address (switch Ethernet off to save, see Network setup).
+
+Still open:
+- Heat and battery over a long session with the display running (WDSP itself
+  is light: plain USB 53x real time on one core).
+- Whether running alongside digital-mode apps is achievable without root
+  (README, "Wanted, but not solved").
