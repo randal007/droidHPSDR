@@ -43,6 +43,14 @@ move when an antenna is connected and disconnected, and change with band.
   - Speed: plain USB ~45x real time on the desktop, 53x on the phone; NNR is the
     heaviest (~7x desktop, 6.5x phone, single-threaded) and still fine.
 
+**2026-11-23, later: Box 2 done.** `docs/PORTING-NOTES.md` and
+`docs/HARDWARE.md`. `old_protocol.c` makes no GTK calls (3 GLib functions);
+`receiver.c` only 10, all display. The IO board and HL2+ codec logic are inside
+`old_protocol.c`. Box 3 evidence points to option B: a small compat header
+set (opaque GTK/Cairo types, pthread-backed GMutex/GThread, `g_idle_add` →
+own queue) so the upstream files compile unchanged; no GLib port. `radio.c`
+(56 GUI calls + WebKit) is replaced for M1 by a headless state file.
+
 ## What a "box" is
 
 One box = **one session, one branch, one commit, one testable outcome.**
