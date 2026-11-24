@@ -51,6 +51,33 @@ set (opaque GTK/Cairo types, pthread-backed GMutex/GThread, `g_idle_add` →
 own queue) so the upstream files compile unchanged; no GLib port. `radio.c`
 (56 GUI calls + WebKit) is replaced for M1 by a headless state file.
 
+**2026-11-23, night: M1 receive working on the phone (Boxes 3, 6, 8; Box 7
+skipped, see below).**
+- Box 3 decided: option B. `android/native/compat/` holds stand-in
+  `glib.h`, `gtk/gtk.h`, `gdk/gdk.h`, `cairo.h` + `glib_compat.c` (pthreads,
+  a callback queue for `g_idle_add`, no-op widget calls). No GLib port.
+- Box 6: `android/native/CMakeLists.txt` (NDK toolchain). Upstream
+  `old_protocol.c old_discovery.c discovered.c message.c nw_toolset.c band.c
+  mode.c filter.c receiver.c` compile **unchanged**, zero warnings.
+  `headless/radio_state.c` is generated from upstream definitions (defaults
+  kept; RX-ONLY overrides marked), `headless/stubs.c` covers the rest.
+- Box 7 (moving files into `core/`) is no longer needed: upstream files stay
+  in `src/` untouched and everything droidHPSDR-specific lives in
+  `android/native/`, which keeps cherry-picks trivial.
+- Box 8: `headless/m1_main.c` → `m1-rx`, run with `android/native/run-m1.sh`
+  (looks up the Ethernet network handle, binds with
+  `android_setprocnetwork`). **RECEIVE ONLY**: `radio_is_transmitting()` is
+  a stub returning 0 (checked in the disassembly), the radio's CW keyer and
+  PA bits stay off, drive level 0, no WDSP TX channel.
+- Result over USB Ethernet, 23:00 local: streams with 0 lost packets, clean
+  stop. S-meter follows the bands: 40 m FT8 -76..-84 dBm (moving with FT8
+  slots), 30 m -80, 10 m -97 (dead at night). **"HL2 IO board detected on
+  I2C2"** from the unchanged protocol code. HL2+ codec bit set; whether audio
+  reached the HL2+ speaker is still to be confirmed by ear.
+- Bug found on the way: `old_protocol.c` reads `receiver[1]` unconditionally,
+  so (like radio.c) both receivers must exist even when only one is used.
+- Still open for the formal M1 acceptance: antenna off/on by hand.
+
 ## What a "box" is
 
 One box = **one session, one branch, one commit, one testable outcome.**

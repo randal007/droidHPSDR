@@ -1,0 +1,55 @@
+# droidHPSDR native build (M1: headless receive test).
+#
+# Configure (from the repo root):
+#   cmake -S android/native -B build-android/cmake -G Ninja \
+#     -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake \
+#     -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=31 -DCMAKE_BUILD_TYPE=Release
+#   cmake --build build-android/cmake
+#
+# Needs the libraries from android/deps/build-deps.sh in build-android/arm64-v8a.
+# Upstream deskHPSDR files are compiled unchanged from ../../src.
+
+cmake_minimum_required(VERSION 3.22)
+project(droidhpsdr C)
+
+set(CMAKE_C_STANDARD 17)
+set(CMAKE_C_EXTENSIONS ON)   # upstream uses GNU C (e.g. `linux` macro in WDSP headers)
+
+get_filename_component(REPO ${CMAKE_CURRENT_SOURCE_DIR}/../.. ABSOLUTE)
+set(DEPS ${REPO}/build-android/${ANDROID_ABI})
+set(UPSTREAM ${REPO}/src)
+
+# deskHPSDR files compiled unchanged (see docs/PORTING-NOTES.md).
+set(UPSTREAM_SOURCES
+  old_protocol.c old_discovery.c discovered.c message.c nw_toolset.c
+  band.c mode.c filter.c receiver.c)
+list(TRANSFORM UPSTREAM_SOURCES PREPEND ${UPSTREAM}/)
+
+add_library(droidcore STATIC
+  ${UPSTREAM_SOURCES}
+  compat/glib_compat.c
+  headless/radio_state.c
+  headless/stubs.c)
+# compat/ first so <gtk/gtk.h>, <glib.h>, <gdk/gdk.h>, <cairo.h> are the shims.
+target_include_directories(droidcore PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/compat
+  ${CMAKE_CURRENT_SOURCE_DIR}/headless
+  ${UPSTREAM}
+  ${REPO}/wdsp-2.11
+  ${DEPS}/fftw-double/include)
+# Same audio defines as upstream's Linux build, so struct layouts match its headers.
+target_compile_definitions(droidcore PUBLIC __linux__ AUDIO_RINGBUFFER MINIAUDIO)
+target_compile_options(droidcore PRIVATE -Wno-unused-parameter)
+
+add_library(wdsp STATIC IMPORTED)
+set_target_properties(wdsp PROPERTIES IMPORTED_LOCATION ${DEPS}/wdsp/libwdsp.a)
+target_link_libraries(droidcore PUBLIC
+  wdsp
+  ${DEPS}/wdsp-libs/lib/librnnoise.a
+  ${DEPS}/wdsp-libs/lib/libspecbleach.a
+  ${DEPS}/fftw-double/lib/libfftw3.a
+  ${DEPS}/fftw-float/lib/libfftw3f.a
+  android log m)
+
+add_executable(m1-rx headless/m1_main.c)
+target_link_libraries(m1-rx droidcore)
