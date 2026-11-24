@@ -76,7 +76,15 @@ skipped, see below).**
   reached the HL2+ speaker is still to be confirmed by ear.
 - Bug found on the way: `old_protocol.c` reads `receiver[1]` unconditionally,
   so (like radio.c) both receivers must exist even when only one is used.
-- Still open for the formal M1 acceptance: antenna off/on by hand.
+- 60 s on 40 m FT8: the S-meter rises ~9 dB for exactly 12.5 s every 30 s
+  (11.0-23.6 s, 41.1-53.6 s), i.e. the FT8 transmissions of one slot parity.
+  Randal saw the amplifier switch bands with each run (IO board band
+  outputs work) and **heard the FT8 audio clearly on the HL2+ speaker**.
+- **M1 accepted (Randal, 2026-11-23): "it's working perfectly fine".** The
+  antenna off/on step was dropped as unnecessary given the above.
+- **M2, speaker half: done** by the same run (demodulated audio in the EP2
+  slots reaches the HL2+ codec). Mic half (EP6 mic samples) is left for the
+  TX milestone; no TX until Randal asks for it.
 
 ## What a "box" is
 
