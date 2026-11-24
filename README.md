@@ -8,7 +8,7 @@ Forked from [deskHPSDR](https://github.com/dl1bz/deskhpsdr) by DL1BZ, which was 
 
 ## Status
 
-**Pre-alpha. Nothing works yet.** This repository is currently design notes and scaffolding. Do not expect a build. Do not expect an APK. Watch the repo if you want to know when Milestone 1 lands.
+**Pre-alpha.** Milestone 1 works: on a Galaxy S26 Ultra, deskHPSDR's own protocol and receiver code plus WDSP receive from a Hermes Lite 2 over USB Ethernet, with the IO board and the HL2+ speaker working. Receive only, no app yet: a command-line test run over adb. No APK yet.
 
 ---
 
@@ -113,14 +113,9 @@ GLib without GTK does cross-compile for Android. Keeping GLib and removing only 
 
 ## Roadmap
 
-- **M0 — Transport check.** Largely answered: SDR++ Brown already reaches this radio from this phone. USB Ethernet is known to work from this phone; only the WiFi discovery check on the phone remains.
-- **M1 — Headless core.** Cross-compile WDSP, FFTW3, and the protocol layer for arm64. Discover, stream, and print S-meter values to logcat. No UI.
-- **M2 — HL2+ codec loopback.** Headless proof that audio into the EP2 slots reaches the companion board's speaker and mic samples arrive in EP6. This validates the whole audio architecture, so it comes before any UI.
-- **M3 — Picture.** Android shell plus GL waterfall.
-- **M4 — Usable RX.** VFO, band, mode, filter, AGC. Enough to actually listen.
-- **M5 — TX.** SSB first, then CW.
-- **M6 — Extras.** IO board I2C, PureSignal, local Oboe audio path.
-- **M7 — Coexistence.** Bluetooth headset support, and running alongside digital mode apps. See "Wanted, but not solved" above — parts of this may not be achievable without root.
+The plan and current status are in [docs/ROADMAP.md](docs/ROADMAP.md): every
+deskHPSDR feature ([docs/FEATURES.md](docs/FEATURES.md)), one section at a
+time. Milestone 1 (headless receive on the phone) is done.
 
 ---
 
@@ -164,10 +159,20 @@ makes every future cherry-pick conflict.
 
 ## Building
 
-Not yet. Will require the Android NDK, CMake, and cross-compiled FFTW3.
-deskHPSDR builds with a Makefile plus `make.config.deskhpsdr`; converting that
-to CMake is part of M1. Targets are arm64-v8a only, minSdk 31. Build
-instructions land with M1.
+Linux desktop with the Android NDK (r27), CMake and Ninja. Targets arm64-v8a
+only, minSdk 31.
+
+```
+android/deps/build-deps.sh     # FFTW 3.3.11, rnnoise, libspecbleach, WDSP 2.11
+cmake -S android/native -B build-android/cmake -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+  -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=31 -DCMAKE_BUILD_TYPE=Release
+cmake --build build-android/cmake
+android/native/run-m1.sh -f 7074000 -t 30   # receive test on the phone via adb
+```
+
+deskHPSDR's own files compile unchanged from `src/`; how that works is in
+[docs/PORTING-NOTES.md](docs/PORTING-NOTES.md). The app (Gradle) arrives with M3.
 
 ---
 
