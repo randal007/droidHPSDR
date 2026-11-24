@@ -40,7 +40,7 @@ PureSignal, the full noise reduction suite, the TX audio chain, and the filter s
 
 ### Rendering borrowed, UI not
 
-The waterfall and panadapter use OpenGL ES rather than Cairo. Widgets are Dear ImGui. Both approaches, and much of the Android bootstrap, are informed by SDR++ / SDR++ Brown — but the UI layout is original and aims at a deskHPSDR / Thetis feel, not an SDR++ feel.
+The waterfall and panadapter use OpenGL ES rather than Cairo. Controls and menus are Kotlin / Jetpack Compose; the spectrum and 3D waterfall are drawn natively on the GPU. Both approaches, and much of the Android bootstrap, are informed by SDR++ / SDR++ Brown — but the UI layout is original and aims at a deskHPSDR / Thetis feel, not an SDR++ feel.
 
 ### Transport is deliberately abstracted
 
@@ -76,12 +76,12 @@ Requires a foreground service with a persistent notification, a WiFi lock, and a
 | Hermes Lite 2 | Primary target — in hand |
 | HL2 Plus companion board | Primary target — in hand. Mic, phones, speaker, CW sidetone |
 | N2ADR filter board | Supported |
-| HL2 IO Board | Planned — I2C over the HPSDR protocol, Quisk-style |
+| HL2 IO Board | Required — in hand. I2C 0x1D over Protocol 1, as deskHPSDR does it |
 | PureSignal | Planned — needs PS-A plus DUPLEX and the RF3 feedback stream |
 | Protocol 2 radios (ANAN etc.) | Inherited from deskHPSDR, untested |
 
 Build targets are arm64-v8a only, minSdk 31. Development phone is an unrooted
-Galaxy S24 Ultra.
+Galaxy S26 Ultra.
 
 ---
 
@@ -89,7 +89,7 @@ Galaxy S24 Ultra.
 
 ```
 ┌─────────────────────────────────────────┐
-│  UI layer          ImGui, touch-first   │  new
+│  UI layer          Compose, touch-first │  new
 ├─────────────────────────────────────────┤
 │  Render layer      OpenGL ES waterfall  │  new
 ├─────────────────────────────────────────┤
@@ -113,7 +113,7 @@ GLib without GTK does cross-compile for Android. Keeping GLib and removing only 
 
 ## Roadmap
 
-- **M0 — Transport check.** Largely answered: SDR++ Brown already reaches this radio from this phone. Only open item is confirming a USB Ethernet adapter takes a static config on the unrooted phone.
+- **M0 — Transport check.** Largely answered: SDR++ Brown already reaches this radio from this phone. USB Ethernet is known to work from this phone; only the WiFi discovery check on the phone remains.
 - **M1 — Headless core.** Cross-compile WDSP, FFTW3, and the protocol layer for arm64. Discover, stream, and print S-meter values to logcat. No UI.
 - **M2 — HL2+ codec loopback.** Headless proof that audio into the EP2 slots reaches the companion board's speaker and mic samples arrive in EP6. This validates the whole audio architecture, so it comes before any UI.
 - **M3 — Picture.** Android shell plus GL waterfall.

@@ -8,6 +8,41 @@ move when an antenna is connected and disconnected, and change with band.
 
 ---
 
+## Progress
+
+**2026-11-23**
+- Fork rebased onto upstream deskHPSDR `9f49c21` (2026-11-16, 224 commits newer,
+  WDSP 2.11). `src/` identical to upstream. Pre-rebase state kept on branch
+  `backup/pre-rebase-2026-11-23`. Not yet pushed (needs a force-push).
+- **Boxes 4 and 5 done, with NR3/NR4 included instead of excluded:**
+  `android/deps/build-deps.sh` cross-compiles FFTW 3.3.11 (double + float,
+  NEON on both), DL1BZ's rnnoise and libspecbleach (from git.bzsax.de, same
+  as upstream's `update_libs.sh`), and WDSP 2.11 (83 objects, zero warnings,
+  out of tree, `wdsp-2.11/` untouched) into `build-android/arm64-v8a/`. Full
+  build takes about 7 min, most of it the 56 MB rnnoise model download.
+- Box 5's test program is `android/deps/wdsp-smoke.c` (`build-deps.sh smoke`).
+  Links with no missing symbols; needs only libc/libm/libdl. It checks USB
+  demod, LSB rejection, S-meter tracking (+-20 dB), NR2/NR3/NR4/NNR and speed.
+  **All pass on the desktop and on the phone** (S26 Ultra SM-S948W, Android 16,
+  Snapdragon SM8850, 8 cores; run 2026-11-23 over adb from /data/local/tmp).
+  Phone numbers: FFTW wisdom computed in **11.4 s** (vs ~7.5 min on the x86
+  desktop, which has far more SIMD variants to time); plain USB 53x real time,
+  NR2 41x, NR3 55x, NR4 152x, NNR 6.5x. Demod, LSB rejection and S-meter
+  results are identical to the desktop's.
+- Learned from the desktop run:
+  - **FFTW wisdom took ~7.5 min** on this desktop but 11.4 s on the phone
+    (cached afterwards in the given directory). A short first-start
+    "preparing DSP" moment is enough; no need to ship pre-computed wisdom.
+  - WDSP's I/Q sign: a tone above the VFO is `(cos, -sin)`. `(cos, +sin)`
+    lands on the LSB side.
+  - rnnoise (NR3) silences a steady pure tone; NNR cuts it ~25 dB. Expected
+    for speech denoisers, so the test only checks they run.
+  - **M0 done over USB Ethernet** (the radio direct to the phone, APIPA): see
+    CLAUDE.md "Verified on the S26 Ultra". Main lesson: sockets must be bound
+    to the Ethernet Network, or unicast to the radio goes out over WiFi.
+  - Speed: plain USB ~45x real time on the desktop, 53x on the phone; NNR is the
+    heaviest (~7x desktop, 6.5x phone, single-threaded) and still fine.
+
 ## What a "box" is
 
 One box = **one session, one branch, one commit, one testable outcome.**
@@ -56,7 +91,7 @@ No repository code. Purely the build host and phone.
 
 - Install Android NDK (r27 or later) and `platform-tools` for `adb`.
   `cmake` and `ninja` are already present on this box; the NDK and `adb` are not.
-- Enable developer mode + USB debugging on the S24 Ultra, confirm `adb devices`.
+- Enable developer mode + USB debugging on the S26 Ultra, confirm `adb devices`.
 - Cross-compile a hello-world C file with `aarch64-linux-android31-clang`,
   `adb push` to `/data/local/tmp`, run it.
 
@@ -82,8 +117,8 @@ One C file. No WDSP, no GLib, no UI. Target well under 300 lines.
 - Crib the packet layout from `src/old_discovery.c`; do not include it.
 
 **Done — this is also the M0 acceptance test:** a discovery reply from the radio
-over WiFi, *and* over USB Ethernet with `eth0` statically set to
-`169.254.1.1 / 255.255.0.0` in One UI.
+over WiFi. (The USB Ethernet half was dropped 2026-11-23: Randal already uses
+the adapter with this radio; the app always allows typing the IP.)
 
 **Do not write:** any link-local range scan. With no address on `eth0` there is
 no route and the scan cannot leave the phone. It is not a workaround for a
@@ -214,8 +249,6 @@ The sequence is chosen so the cheap boxes retire the expensive risks first:
 
 **Open unknowns that could reorder this,** carried from CLAUDE.md:
 
-- Whether One UI on the S24 Ultra exposes static Ethernet config as expected.
-  Box 1 answers it. If it does not, the wired path is gone and WiFi carries M1.
 - Whether GLib-without-GTK builds clean for Android. Box 3 answers it.
 - Thermal behaviour under sustained WDSP load. Not an M1 question, but note
   anything alarming during Box 8.

@@ -19,11 +19,42 @@ hardware that isn't here.
 - **Hermes Lite 2** with **HL2+ companion board installed** (AK4951 codec, mic
   jack with PTT, phones, local speaker, CW sidetone). Requires the custom
   gateware, not stock HL2 gateware.
-- **Samsung Galaxy S24 Ultra, not rooted.** Snapdragon 8 Gen 3, ample CPU
-  headroom for WDSP. No root means no `ifconfig` and no `CAP_NET_ADMIN` — network
+- **Samsung Galaxy S26 Ultra, not rooted** (replaced the S24 Ultra the
+  September notes were written for). Ample CPU and GPU headroom for WDSP and a
+  fancy display. No root means no `ifconfig` and no `CAP_NET_ADMIN` — network
   interfaces can only be configured through One UI's settings, never
-  programmatically.
-- HL2 IO board: planned, not yet in scope.
+  programmatically. Wired link: a USB-C Ethernet adapter straight to the radio.
+- **HL2 IO board (N2ADR), installed. A must-have**, not an extra (Randal,
+  2026-11-23). deskHPSDR already drives it over I2C address 0x1D in
+  `old_protocol.c` (detection, band/antenna, TUNE_IOB, AH-4); reuse that.
+- Both boards must work together: HL2+ codec and IO board at once.
+
+## Restart 2026-11-23 — what changed since September
+
+Randal picked the project back up. Nothing under `src/` was touched in
+September; only the docs and `tools/m0-probe` (built for arm64, verified from
+the desktop, **never run on a phone**) exist. New requirements:
+
+- S26 Ultra replaces S24 Ultra (above).
+- IO board and HL2+ are both required (above).
+- **Look:** the spectrum and 3D waterfall should look like the X6100 JS8
+  project's 3D spectrum (OpenX6100 PR #344, `~/Work/x6100/wt-spectrum-3d/src/spectrum.c`,
+  mock-ups `~/Pictures/x6100-spectrum-3d-mockups`, picked look = "3" coloured by
+  strength), but GPU-drawn and fancier, since the phone can afford it. Also
+  deskHPSDR's own 3D waterfall (`src/waterfall.c`, our colour-theme patches on
+  `randal007/deskhpsdr` branch display-features).
+- **UI stack decided (Randal, 2026-11-23): Kotlin + Jetpack Compose** for
+  controls, menus and settings, plus a native GPU surface (GLES 3 or Vulkan,
+  drawn from C++) for the spectrum and 3D waterfall. Replaces the September
+  ImGui choice: it looks like a desktop tool. Port the X6100 3D spectrum's
+  *look* (colours, perspective, drift), not its code (that one is CPU-drawn).
+- Heiko Amft DL1BZ (deskHPSDR author, has a private iOS/macOS port) advised:
+  build WDSP for the target first; everything else is network code + UI around
+  it; Warren Pratt's WDSP API doc is the reference. He swapped FFTW for Apple
+  vDSP; on Android FFTW cross-compiles, so no swap is needed.
+- upstream deskHPSDR has moved on (2026-11-16, IO board I2C hardening, Pico
+  detection, codec fixes). The fork's `src/` is still identical to upstream as
+  of 2026-09-07, so rebasing onto current upstream before Box 2 is free.
 
 SDR++ Brown already connects to this radio from this phone, so the transport
 path is known-good. It does **not** use the HL2+ codec, which is the gap this
@@ -55,7 +86,7 @@ propose swapping the DSP layer.
 
 ### 3. `core/` contains no UI types
 
-No GTK, ImGui, GL or JNI types anywhere under `core/`. This is the whole point
+No GTK, Compose, GL or JNI types anywhere under `core/`. This is the whole point
 of the port — deskHPSDR fails this today, with `GtkWidget*` members sitting
 inside receiver and transmitter structs and cross-thread updates going through
 `g_idle_add` on a GMainLoop.
@@ -69,7 +100,7 @@ threading model entirely. Try that before anything more invasive.
 Protocol, DSP and audio threads must keep running when the GL surface stops.
 Backgrounding the app must not stall the radio, because running alongside
 digital-mode apps is a goal. Do not drive DSP from the render loop, however
-natural that looks with ImGui.
+natural that looks from a GL render callback.
 
 Needs a foreground service, a WiFi lock, and a battery-optimisation exemption.
 
@@ -96,6 +127,25 @@ The phone does **not** self-assign an IPv4 link-local address the way Windows
 does, so eth0 must be given a static address by hand in One UI:
 `169.254.1.1 / 255.255.0.0`. Android persists this per adapter, so it is a
 one-time step.
+
+**Verified on the S26 Ultra, 2026-11-23:**
+
+- Static setup: Settings > Connections > More connection settings > Ethernet >
+  Configure Ethernet device > Static IP. **Save stays greyed out until the
+  Ethernet switch on that page is turned off**; set the address, save, switch
+  Ethernet back on. eth0 then shows 169.254.1.1/16.
+- m0-probe broadcast over eth0 finds the HL2 (169.254.19.221, MAC
+  00:1c:c0:a2:13:dd, gateware 75.0). `ping -I eth0` 169.254.19.221: ~1.5 ms.
+- **Unicast fails unless the socket is bound to the Ethernet *network*.**
+  Android routes per network: an unbound socket uses the default network
+  (WiFi), so `m0-probe -w` (bound only to the source address) and a plain
+  `ping` get nothing back, while broadcasts happen to get through. The app
+  must bind its sockets to the Ethernet `Network` (`Network.bindSocket()` in
+  Kotlin, or `android_setsocknetwork()` from the NDK with the handle passed
+  down over JNI). Binding to the local address is not enough on Android.
+- adb over WiFi while the only USB-C port holds the adapter: with the phone
+  on USB once, `adb tcpip 5555`, then `adb connect <phone-wifi-ip>:5555`
+  (approve the prompt again). Lasts until the phone reboots.
 
 Consequences for code:
 
@@ -134,7 +184,7 @@ core/
   transport/    usb-eth and wifi behind one interface
 ui/
   panadapter/   GLES waterfall
-  panels/       ImGui
+  panels/       Kotlin / Jetpack Compose (lives under android/)
 android/        Gradle, NativeActivity, JNI
 vendor/         wdsp, fftw, ft8_lib (submodules)
 tools/
@@ -159,9 +209,9 @@ Decided; don't widen these without a reason.
 
 ## Milestones
 
-- **M0 — transport check.** Mostly answered. Only open item: confirm a USB
-  Ethernet adapter gets a working static config on the unrooted S24 Ultra via
-  One UI. Manual test, not a coding task.
+- **M0 — transport check.** m0-probe gets a discovery reply on the phone over
+  WiFi. The USB Ethernet test was dropped (Randal, 2026-11-23): he already uses
+  the adapter with this radio, and the app always allows typing the IP.
 - **M1 — headless core.** Cross-compile WDSP, FFTW3 and the protocol layer for
   arm64. Discover, stream, print S-meter values to logcat. No UI.
 - **M2 — HL2+ codec loopback.** Headless proof that audio written into the EP2
@@ -170,7 +220,8 @@ Decided; don't widen these without a reason.
 - **M3 — picture.** Android shell + GL waterfall.
 - **M4 — usable RX.** VFO, band, mode, filter, AGC.
 - **M5 — TX.** SSB first, then CW.
-- **M6 — extras.** IO board I2C, PureSignal, built-in FT8/FT4.
+- **M6 — extras.** PureSignal, built-in FT8/FT4. (IO board I2C moved out of
+  extras on 2026-11-23: it is required, so it lands with M4/M5 band changes.)
 
 ## Acceptance criteria
 
@@ -223,5 +274,5 @@ M1 and M2 have no screen, so "done" needs defining up front.
 
 - Whether GLib-without-GTK actually builds clean for Android.
 - Whether the EP2 audio path works without deskHPSDR-side changes for HL2+.
-- Whether One UI on the S24 Ultra exposes static Ethernet config as expected.
+- Whether One UI on the S26 Ultra exposes static Ethernet config as expected.
 - Thermal behaviour under sustained WDSP load. WDSP is double-heavy.
