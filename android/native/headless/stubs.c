@@ -103,15 +103,7 @@ void schedule_action(enum ACTION action, enum ACTION_MODE mode, int val) { (void
 void vfo_num_pad(int val, int v) { (void)val; (void)v; }
 gboolean rigctl_debug = FALSE;
 
-/* ---- display (the Compose/GL UI replaces these later) ---- */
-
-void rx_panadapter_init(RECEIVER *rx, int width, int height) { (void)rx; (void)width; (void)height; }
-void rx_panadapter_update(RECEIVER *rx) { (void)rx; }
-void waterfall_init(RECEIVER *rx, int width, int height) { (void)rx; (void)width; (void)height; }
-void waterfall_update(RECEIVER *rx) { (void)rx; }
-void meter_update(RECEIVER *rx, int meter_type, double value, double alc, double swr) {
-  (void)rx; (void)meter_type; (void)value; (void)alc; (void)swr;
-}
+/* ---- display: headless/display_null.c (m1-rx) or app/display_bridge.c (the app) ---- */
 
 /* ---- properties: no props file in M1, so every setting keeps its default ---- */
 

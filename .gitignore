@@ -79,3 +79,4 @@ local.properties
 
 # droidHPSDR: cross-compiled dependencies (android/deps/build-deps.sh)
 build-android/
+android/app/.cxx/

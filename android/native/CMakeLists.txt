@@ -1,4 +1,5 @@
-# droidHPSDR native build (M1: headless receive test).
+# droidHPSDR native build: the headless receive test (m1-rx, milestone 1)
+# and the app's JNI library (libdroidhpsdr.so, built by Gradle from android/app).
 #
 # Configure (from the repo root):
 #   cmake -S android/native -B build-android/cmake -G Ninja \
@@ -40,6 +41,7 @@ target_include_directories(droidcore PUBLIC
 # Same audio defines as upstream's Linux build, so struct layouts match its headers.
 target_compile_definitions(droidcore PUBLIC __linux__ AUDIO_RINGBUFFER MINIAUDIO)
 target_compile_options(droidcore PRIVATE -Wno-unused-parameter)
+set_target_properties(droidcore PROPERTIES POSITION_INDEPENDENT_CODE ON)   # linked into libdroidhpsdr.so
 
 add_library(wdsp STATIC IMPORTED)
 set_target_properties(wdsp PROPERTIES IMPORTED_LOCATION ${DEPS}/wdsp/libwdsp.a)
@@ -51,5 +53,15 @@ target_link_libraries(droidcore PUBLIC
   ${DEPS}/fftw-float/lib/libfftw3f.a
   android log m)
 
-add_executable(m1-rx headless/m1_main.c)
+add_executable(m1-rx headless/m1_main.c headless/display_null.c)
 target_link_libraries(m1-rx droidcore)
+
+# The app: radio core + upstream display hook + GPU renderer + JNI bridge.
+add_library(droidhpsdr SHARED
+  app/radio_core.c
+  app/display_bridge.c
+  app/gl_render.c
+  app/jni_bridge.c)
+target_include_directories(droidhpsdr PRIVATE app)
+target_compile_options(droidhpsdr PRIVATE -Wall -Wno-unused-parameter)
+target_link_libraries(droidhpsdr droidcore GLESv3)
