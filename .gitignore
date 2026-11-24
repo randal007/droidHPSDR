@@ -76,3 +76,6 @@ android/.cxx/
 *.keystore
 local.properties
 .idea/
+
+# droidHPSDR: cross-compiled dependencies (android/deps/build-deps.sh)
+build-android/
