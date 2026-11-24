@@ -11,7 +11,8 @@ next, what's waiting on whom. Session history lives in git and in
   phone, IO board detected and switching bands, FT8 audio heard on the HL2+
   speaker. Receive only.
 - **Next: M3, the app and the waterfall**, started in a fresh session.
-  First step: UI mock-ups for Randal to pick from, before any app code.
+  First step: 10-20 generated UI pictures, tweaked with Randal round by
+  round (see "How the look gets decided"), before any app code.
 - No transmit until Randal asks for it (M7).
 
 ## Goal
@@ -42,20 +43,41 @@ or explicitly marked "not doing" by Randal.
 One section per session where possible. Don't start the next section with
 the previous one half-ticked.
 
-## Phone UI principles (draft, confirmed by mock-ups in M3)
+## Phone UI principles
+
+### Randal's requirements (2026-11-23, his words condensed)
+
+- **Really user friendly.** He doesn't like any existing Android SDR app's
+  UI; droidHPSDR should not look or feel like them.
+- **Tune with your finger on the spectrum/waterfall:** scroll/drag it to
+  tune, swipe (fling) to move further, **pinch to zoom**, **tap a signal to
+  go to it**, hold a finger on the frequency and drag it.
+- **Drag the filter bandwidth** directly on the spectrum (its edges).
+- **No on-screen knob, dial or scroll wheel** for tuning.
+
+### How the look gets decided (M3 step 1)
+
+1. Study for ideas: deskHPSDR, AetherSDR (`randal007/AetherSDR`, Qt6
+   FlexRadio app), the X6100 3D spectrum, and the Android SDR apps mainly
+   as examples of what to avoid.
+2. **10-20 generated pictures** of genuinely different full-screen layouts
+   at the S26 Ultra's real size, landscape and portrait.
+3. Randal picks favourites; tweak those pictures round by round until the
+   rough look is settled. **No app UI code before that.**
+
+### Draft ideas to test in the pictures
 
 - **The spectrum and waterfall are the screen.** Controls live around and
   over them, not instead of them.
 - **Landscape is the operating view** (S26 Ultra, 6.9", 3120×1440);
-  portrait gets a usable layout too, decided in M3.
+  portrait gets a usable layout too.
 - **Three layers, like deskHPSDR's own:** an always-visible VFO/meter bar;
   a strip of the most-used controls (deskHPSDR's sliders + toolbar, user
   configurable like its toolbar); and the menus as sheets that slide over
   the waterfall, grouped the way deskHPSDR groups them so a deskHPSDR user
   finds things.
-- **Touch first:** drag the waterfall to tune, pinch to zoom, tap a signal
-  to go to it, long-press for that control's settings. Big readable
-  numbers, no flicker (Randal's X6100 preferences).
+- Long-press a control for its settings. Big readable numbers, no flicker
+  (Randal's X6100 preferences).
 - **The look:** the X6100 3D spectrum (`~/Work/x6100/wt-spectrum-3d`,
   mock-ups in `~/Pictures/x6100-spectrum-3d-mockups`, "look 3" coloured by
   strength) and deskHPSDR's 3D waterfall with our colour themes and peak
@@ -79,8 +101,9 @@ The first thing that looks like droidHPSDR.
 - Spectrum + waterfall on the GPU from WDSP's analyzer (`Spectrum0` /
   `GetPixels`): 2D first, then 3D with a 2D/3D switch; colour themes; peak
   hold and peak labels; smooth at the phone's refresh rate.
-- Tuning by touch: drag, fling, tap-to-signal, pinch zoom/pan
-  (deskHPSDR's zoompan), the frequency readout.
+- Tuning by touch, Randal's way: drag/scroll the spectrum, fling, pinch
+  zoom (deskHPSDR's zoompan), tap a signal, hold-and-drag the frequency,
+  drag the filter edges for bandwidth. No knob, dial or wheel.
 - FEATURES.md: the display-related parts of Display, FFT and Screen menus.
 
 **Done when:** on the radio, the waterfall looks the way Randal picked from
