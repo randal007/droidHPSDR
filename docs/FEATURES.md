@@ -88,11 +88,11 @@ Which milestone each section belongs to: docs/ROADMAP.md.
 
 ### Rx menu (`src/rx_menu.c`)
 
-- [ ] Sample Rate
+- [x] Sample Rate (checked on the radio 2026-11-24)
 - [ ] 48000  _(choice)_
-- [ ] 96000  _(choice)_
-- [ ] 192000  _(choice)_
-- [ ] 384000  _(choice)_
+- [x] 96000  _(choice)_ (checked on the radio 2026-11-24)
+- [x] 192000  _(choice)_ (checked on the radio 2026-11-24)
+- [x] 384000  _(choice)_ (checked on the radio 2026-11-24)
 - [ ] 768000  _(choice)_
 - [ ] 1536000  _(choice)_
 - [ ] Select ADC
@@ -110,7 +110,7 @@ Which milestone each section belongs to: docs/ROADMAP.md.
 - [ ] Hz
 - [ ] Offset RTTY
 - [ ] Offset OFF
-- [ ] Use Computer Audio Output
+- [x] Use Computer Audio Output — PHONE button, AAudio (checked on the radio 2026-11-24)
 - [ ] Test Audio
 - [ ] Stereo / Mono Downmix (L+R)  _(choice)_
 - [ ] Left Channel only  _(choice)_
@@ -213,11 +213,11 @@ Which milestone each section belongs to: docs/ROADMAP.md.
 - [ ] Panadapter Step
 - [ ] Waterfall High
 - [ ] Waterfall Low
-- [ ] Waterfall Automatic
-- [ ] Panadapter Automatic: (Related to Noisefloor)
+- [x] Waterfall Automatic — auto levels (checked on the radio 2026-11-24)
+- [x] Panadapter Automatic: (Related to Noisefloor) — auto levels (checked on the radio 2026-11-24)
 - [ ] Noisefloor Margin
 - [ ] Show Worldmap
-- [ ] 3D Waterfall History
+- [x] 3D Waterfall History — 3D view (four looks) (checked on the radio 2026-11-24)
 - [ ] Detector
 - [ ] Peak  _(choice)_
 - [ ] Rosenfell  _(choice)_
@@ -229,23 +229,23 @@ Which milestone each section belongs to: docs/ROADMAP.md.
 - [ ] Time Window  _(choice)_
 - [ ] Log Recursive  _(choice)_
 - [ ] Av. Time (ms)
-- [ ] Display Panadapter
-- [ ] Fill Panadapter
-- [ ] Gradient Panadapter
-- [ ] Display Waterfall
+- [x] Display Panadapter — 2D view (checked on the radio 2026-11-24)
+- [x] Fill Panadapter (checked on the radio 2026-11-24)
+- [x] Gradient Panadapter (checked on the radio 2026-11-24)
+- [x] Display Waterfall (checked on the radio 2026-11-24)
 - [ ] Display Info Bar
 - [ ] Show Solardata in Info Bar
 - [ ] Show ADC OVF Alarm
 - [ ] Show clock & UDP broadcast
 - [ ] Show AH4 state
-- [ ] Enable Peak Labels on Panadapter
-- [ ] Peak Labels as S-Meter values
+- [x] Enable Peak Labels on Panadapter (checked on the radio 2026-11-24)
+- [x] Peak Labels as S-Meter values — default on (checked on the radio 2026-11-24)
 - [ ] Peak Labels in Passband Only
 - [ ] Hide Peaks Below Noise Floor
-- [ ] Number of Peaks to label
+- [x] Number of Peaks to label (checked on the radio 2026-11-24)
 - [ ] Panadapter Ignore Adjacent Peaks
 - [ ] Panadapter Noise Floor Percentile
-- [ ] Enable PEAKS & HOLD
+- [x] Enable PEAKS & HOLD (checked on the radio 2026-11-24)
 - [ ] Type of Peaks & Hold function
 - [ ] Decay hold time (s)
 - [ ] Drop (dbm/s)
@@ -286,10 +286,10 @@ Which milestone each section belongs to: docs/ROADMAP.md.
 - [ ] Main Window size fixed here, free Main Window scaling NOT supported
 - [ ] deskHPSDR is made for Desktops, therefore no VFO bar layouts available !
 - [ ] Minimum Screensize must be 1280x600 or higher !
-- [ ] Full Screen Mode
+- [x] Full Screen Mode — always full screen (checked on the radio 2026-11-24)
 - [ ] Slider Background Color
 - [ ] Menu Background Color
-- [ ] Display Zoom/Pan
+- [x] Display Zoom/Pan — pinch zoom, upstream zoom 1-16 (checked on the radio 2026-11-24)
 - [ ] Display Sliders
 - [ ] Display Toolbar
 - [ ] Display Extras

@@ -6,20 +6,20 @@ next, what's waiting on whom. Session history lives in git and in
 
 ## Now (in short)
 
-- **M3 under way (branch `m3-app`, 2026-11-24).** The app runs on the S26
-  Ultra against the HL2: layout 1 ("glass cockpit", Randal's pick from the
-  round-1 pictures), GPU 3D view + waterfall, X6100 band bar and segment
-  tag, touch tuning, HL2+ speaker audio. Details in the M3 section.
-- **Waiting on the radio (Randal):** a test run of the 2026-11-24 evening
-  builds - phone audio, 2D view, peak hold/labels, smooth motion, sharp
-  zoom, hold-to-tune, display settings, screen-off audio.
-- No transmit until Randal asks for it (M7).
+- **M3 done 2026-11-24** (branch `m3-app`): the app on the S26 Ultra runs the
+  HL2 at 384 kHz over USB Ethernet - layout 1, GPU 3D view (four looks) or
+  2D, waterfall, band bar, touch tuning, HL2+ and phone audio, screen-off
+  audio. Details in the M3 section.
+- **M4 under way:** design picks in the M4 section; next is code. One open
+  design question: VFO pill glass 40 % or 28 % (round 9 pictures).
+- Not installed yet: the type-a-frequency keypad (adb dropped).
+- No transmit until Randal asks for it (M7). One receiver; RX2 later.
 - **Waiting on Randal:** whether to delete the empty leftover repo
   `randal007/DroidHPSDR-scaffold` (README only, from 2026-09-07).
-- **Phone:** adb over **wireless debugging** (paired 2026-11-24; the port
-  changes, find it with `adb mdns services`); Ethernet adapter static
-  169.254.1.1/16. The app asks for *Local network* access (Android 17), which
-  it needs to reach the HL2.
+- **Phone:** adb over **wireless debugging** (paired; it switches itself off,
+  turn it on again and find the port with `adb mdns services`); Ethernet
+  adapter static 169.254.1.1/16. The app asks for *Local network* access
+  (Android 17), which it needs to reach the HL2.
 
 ## Goal
 
@@ -94,7 +94,7 @@ the previous one half-ticked.
 
 ## Sections
 
-### M3 — The app and the waterfall *(in progress)*
+### M3 — The app and the waterfall *(done 2026-11-24)*
 
 The first thing that looks like droidHPSDR.
 
@@ -123,19 +123,14 @@ The first thing that looks like droidHPSDR.
   tuning, drag the filter edges, per-mode filter limits and memory.
 - FT8 audio on the HL2+ speaker; IO board detected.
 
-**Built, not yet run on the radio:** phone audio (upstream
-`buffered_audio.c` + AAudio backend, PHONE chip), 2D view with peak hold,
-six waterfall themes, peak labels, smooth motion between rows, sharp zoom
-(upstream zoom 1-16), hold-and-drag the frequency digits, display settings
-(split, fps, FFT window, detector, 3D depth), radio address fields (WiFi
-needs the IP: an app cannot broadcast), battery-optimisation request,
-demo band (`--ez demo true`) for display work with the radio off.
+**Checked on the radio 2026-11-24 (Randal):** phone audio (sounds great),
+audio keeps playing with the screen off, sharp zoom with real data and no
+black, smooth motion, 2D view (averaged) and S-unit peak labels, hold the
+frequency digits and drag, 192/384 kHz switching. FEATURES.md ticked.
 
-**Still to do:**
-- Test all of the above on the radio, plus audio with the screen off and
-  Bluetooth headphones; tune the row delay (menu slider, 90 ms now).
-- FEATURES.md: tick the checked display items; propose "not doing" lines
-  for desktop-only ones (CSS, window size) for Randal to agree.
+**Built after the test, to check next time:** tap the frequency to type one
+(deskHPSDR's VFO number pad; was not installed: adb dropped). Bluetooth
+headphones and the WiFi path (type the radio's IP) not tried yet.
 
 **Done when:** on the radio, the waterfall looks the way Randal picked from
 the mock-ups, tunes by touch, and audio keeps playing with the screen off.
