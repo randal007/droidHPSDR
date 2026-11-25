@@ -6,19 +6,18 @@ next, what's waiting on whom. Session history lives in git and in
 
 ## Now (in short)
 
-- **M3 done 2026-11-24** (branch `m3-app`): the app on the S26 Ultra runs the
-  HL2 at 384 kHz over USB Ethernet - layout 1, GPU 3D view (four looks) or
-  2D, waterfall, band bar, touch tuning, HL2+ and phone audio, screen-off
-  audio. Details in the M3 section.
-- **M4 under way:** design settled (M4 section); building it.
-- Not installed yet: the type-a-frequency keypad (adb dropped).
+- **M3 done 2026-11-24.** **M4 built 2026-11-24 and running** (Randal:
+  "runs pretty good"); its radio test and ticks are the first job next
+  session, then the M4 leftovers, then **M5** (plan in the M5 section).
+- Branch `m3-app` (pushed) holds M3 and M4; `master` is still at M1.
 - No transmit until Randal asks for it (M7). One receiver; RX2 later.
 - **Waiting on Randal:** whether to delete the empty leftover repo
-  `randal007/DroidHPSDR-scaffold` (README only, from 2026-09-07).
-- **Phone:** adb over **wireless debugging** (paired; it switches itself off,
-  turn it on again and find the port with `adb mdns services`); Ethernet
-  adapter static 169.254.1.1/16. The app asks for *Local network* access
-  (Android 17), which it needs to reach the HL2.
+  `randal007/DroidHPSDR-scaffold`; the proposed "not doing" lines in
+  `docs/M4-INVENTORY.md` (preamp, attenuator, dither, 768k/1536k, ...).
+- **Phone:** the app (debug build) installed; adb over **wireless
+  debugging** (paired; it switches itself off: turn it on again, find the
+  port with `adb mdns services`, the phone's WiFi address changes);
+  Ethernet adapter static 169.254.1.1/16; Local network permission granted.
 
 ## Goal
 
@@ -141,6 +140,29 @@ Everything needed to *use* the receiver day to day.
 **Inventory:** `docs/M4-INVENTORY.md` (proposed "not doing" lines wait for
 Randal). **Pictures:** `~/Pictures/droidhpsdr-mockups/m4-round1` to `round7`.
 
+**State 2026-11-24: built and running on the radio.** Upstream `vfo.c`,
+`store.c`, `property.c`, `appearance.c` now compile unchanged, so tuning,
+modes, filters, bands, band stacks, memories, A/B, RIT, CTUN, lock and AGC
+modes all run deskHPSDR's own code, and settings live in deskHPSDR's props
+file (`<MAC>.props` in the app's files). The VFO pill, VFO panel, band sheet
+(stack + memories), filter presets, AGC chip and RIT-by-dragging are in.
+Also: Ethernet unplug/replug recovers by itself, a watchdog restarts a
+silent stream, tap the frequency to type one.
+
+**Next session, in order:**
+1. Radio test with Randal: replug the adapter; VFO panel (A>B, B>A, swap,
+   RIT, RIT 0, CTUN, lock, step); RIT drag; band stack cycling (tap the
+   band again); store/recall a memory; filter presets and Var1; AGC;
+   keypad; close and reopen the app (props restored?). Tick FEATURES.md.
+2. M4 leftovers: F, the AGC line on the 2D view (drag = AGC gain / hang
+   threshold, as deskHPSDR draws it; `rx->agc_gain`, `agc_hang_threshold`,
+   `rx_set_agc_gain`), AGC auto + offset; G, the analog meter option and
+   peak/average (`smetermode`); the rest of the RX menu that matters on an
+   HL2 (HL2 ADC auto gain, DIGU/DIGL/RTTY offsets, audio channel, test
+   audio, RX audio network reserve for WiFi). Randal's answers on the
+   "not doing" proposals in M4-INVENTORY.md.
+3. Then M5.
+
 **Randal's picks so far (2026-11-24):**
 - VFO: the A+B mix. The top pill shows VFO A big and **VFO B small under
   it** (no "hold to swap" text; holding B swaps). Tapping the pill opens the
@@ -163,17 +185,34 @@ Randal). **Pictures:** `~/Pictures/droidhpsdr-mockups/m4-round1` to `round7`.
   profile can be copied over.
 - FEATURES.md: VFO, Band, Bandstack, Mode, Filter, AGC, Meter, Store, RX.
 
-### M5 — Receive DSP
+### M5 — Receive DSP *(planned 2026-11-24)*
 
-- Noise: NB, NB2, NR1–NR4, NNR (WDSP 2.11 neural, voice and CW models),
-  ANF, SNB; squelch; CW peak / APF; binaural.
-- RX equalizer with its graph.
-- Second receiver (RX2): **later** (Randal, 2026-11-24). One receiver for
-  now; deskHPSDR can run RX2, so it may come back after the main work.
-  `receiver[1]` already exists in code because `old_protocol.c` reads it.
-- Remaining Display / FFT / Screen settings.
-- FEATURES.md: Noise, Equalizer, Display, FFT, Screen, Diversity, DDC,
-  Toolbar, Switch (several are not HL2 features: decide per item).
+**What:** deskHPSDR's Noise menu (NB/NB2, NR/NR2/NR3/NR4, NNR with its
+models, ANF, SNB, MNF notches, NR position pre/post AGC, all the NR2/NR4/NB
+fine settings and Defaults), squelch, CW audio peak filter, binaural, the
+RX equalizer with its graph, and the remaining Display/FFT/Screen items.
+
+**How (same steps as every section):**
+1. Inventory `docs/M5-INVENTORY.md` from FEATURES.md (Noise, Equalizer,
+   Display, FFT, Screen, Toolbar, Switch) and upstream: what each does on an
+   HL2. Diversity and RX2 items are already "later".
+2. Pictures first. Ideas to draw: the DSP drawer from round 1 (picture L5)
+   on layout 1; NR mode as one segmented row with the per-mode settings
+   behind a hold; the EQ as a graph you drag points on; squelch as a line on
+   the spectrum like the AGC line. Randal picks.
+3. Build on upstream: the settings are fields of `RECEIVER` applied by
+   `rx_set_noise()`, `rx_set_anf()`, `rx_set_squelch()`,
+   `rx_set_equalizer()`, `rx_set_af_binaural()`, `rx_set_cw_peak()`
+   (receiver.c, compiled). deskHPSDR keeps them **per mode**: noise_menu.c's
+   `update_noise_for_rx()` copies them into `mode_settings[mode]` and calls
+   `copy_mode_settings()`; noise_menu.c itself is GTK, so copy that small
+   function (with attribution) instead of compiling the dialog. The props
+   file already saves them (rx_save_state, modesettings).
+4. NNR's models are built into WDSP 2.11 (`nnr_model_*.c`): check the
+   "no wdsp_nnr_3.bin" log line (built-in model in use) and the CPU cost on
+   the phone.
+5. Radio test (does NR2/NR4/NNR sound right on the HL2+ and the phone?),
+   tick FEATURES.md.
 
 ### M6 — Hardware: HL2, IO board, HL2+, PA
 
