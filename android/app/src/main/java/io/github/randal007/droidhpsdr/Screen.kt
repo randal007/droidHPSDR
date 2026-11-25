@@ -1068,14 +1068,15 @@ private fun MainMenu(st: Status, onStart: () -> Unit, close: () -> Unit, open: (
 
 @Composable
 private fun MenuButton(label: String, modifier: Modifier, later: String? = null, onClick: () -> Unit) {
-    Column(
+    Row(
         modifier.height(32.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF0F1624))
             .border(1.dp, Line, RoundedCornerShape(10.dp)).clickable(onClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, color = if (later == null) Txt else Dim.copy(alpha = 0.7f), fontSize = 13.sp,
             fontWeight = FontWeight.Medium, maxLines = 1)
-        if (later != null) Text(later, color = Dim.copy(alpha = 0.55f), fontSize = 8.5.sp)
+        if (later != null) Text(later, color = Dim.copy(alpha = 0.5f), fontSize = 9.sp)
     }
 }
 
