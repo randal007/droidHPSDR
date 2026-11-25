@@ -82,7 +82,9 @@ object Dsp {
     const val LOW_LATENCY = 35; const val FIR_SIZE = 36
     const val EQ_GAIN0 = 37   // 13 gains; [0] = the added frequency-independent gain
     const val EQ_FREQ0 = 50   // 13 frequencies; [0] unused
-    const val COUNT = 63
+    // the AGC lines (M4 pick F): gain and hang threshold to set; the lines' levels (dBm) are read-only
+    const val AGC_GAIN = 63; const val AGC_HANG_TH = 64; const val AGC_LINE = 65; const val AGC_HANG_LINE = 66
+    const val COUNT = 67
 
     val NR_NAMES = listOf("Off", "NR", "NR2", "NR3", "NR4", "NNR")
     val NB_NAMES = listOf("Off", "NB", "NB2")
@@ -95,6 +97,7 @@ object Dsp {
         d[NB_SLEW] = 0.01; d[NB_LEAD] = 0.01; d[NB_LAG] = 0.01; d[NB_THRESH] = 30.0
         d[NR4_REDUCTION] = 10.0; d[NR4_RESCALE] = 2.0; d[NR4_THRESHOLD] = -10.0; d[NNR_FLOOR] = -25.0
         d[FIR_SIZE] = 2048.0
+        d[AGC_GAIN] = 80.0; d[AGC_LINE] = -95.0; d[AGC_HANG_LINE] = -105.0   // levels: made up until the radio says
         listOf(0.0, 50.0, 100.0, 200.0, 500.0, 1000.0, 1500.0, 2000.0, 2500.0, 3000.0, 5000.0, 6000.0, 8000.0)
             .forEachIndexed { i, f -> d[EQ_FREQ0 + i] = f }
     }

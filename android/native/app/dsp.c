@@ -21,6 +21,8 @@
 #include <math.h>
 #include <gtk/gtk.h>
 
+#include "adc.h"
+#include "band.h"
 #include "mode.h"
 #include "radio.h"
 #include "receiver.h"
@@ -120,7 +122,10 @@ enum {
   F_SQL_ON, F_SQL, F_EQ_ON, F_BINAURAL, F_CW_PEAK, F_LOW_LATENCY, F_FIR_SIZE,
   F_EQ_GAIN0,                 /* 13 gains: [0] is the added frequency-independent gain */
   F_EQ_FREQ0 = F_EQ_GAIN0 + 13,
-  F_COUNT = F_EQ_FREQ0 + 13,
+  /* the AGC lines on the spectrum (M4 pick F): gain and hang threshold to set,
+   * the two lines' levels in dBm to read (rx_panadapter.c draws them there) */
+  F_AGC_GAIN = F_EQ_FREQ0 + 13, F_AGC_HANG_TH, F_AGC_LINE, F_AGC_HANG_LINE,
+  F_COUNT,
 };
 
 int droid_dsp_count(void) { return F_COUNT; }
@@ -153,6 +158,13 @@ void droid_dsp_get(double *out) {
     out[F_EQ_GAIN0 + i] = rx->eq_gain[i];
     out[F_EQ_FREQ0 + i] = rx->eq_freq[i];
   }
+  /* rx_panadapter.c: the lines sit at agc_thresh / agc_hang + soffset */
+  const BAND *band = band_get_band(vfo[0].band);
+  double soffset = (double)(rx_gain_calibration - band->gain) + (double)adc[rx->adc].attenuation - adc[rx->adc].gain;
+  out[F_AGC_GAIN] = rx->agc_gain;
+  out[F_AGC_HANG_TH] = rx->agc_hang_threshold;
+  out[F_AGC_LINE] = rx->agc_thresh + soffset;
+  out[F_AGC_HANG_LINE] = rx->agc_hang + soffset;
 }
 
 /* On the radio's loop thread (radio_core.c CMD_DSP). */
@@ -211,6 +223,9 @@ void droid_dsp_apply(int field, double v) {
     rx_filter_changed(rx);
     g_idle_add(ext_vfo_update, NULL);
     break;
+  /* sliders.c's AGC gain slider (-20..120) and agc_menu.c's hang threshold (0..100) */
+  case F_AGC_GAIN: rx->agc_gain = clampd(v, -20.0, 120.0); rx_set_agc_gain(rx); break;
+  case F_AGC_HANG_TH: rx->agc_hang_threshold = clampi(v, 0, 100); rx_set_agc(rx); break;
   case F_LOW_LATENCY: rx->low_latency = v != 0; rx_set_fft_latency(rx); break;
   case F_FIR_SIZE: {  /* a power of two, at least the DSP size, 1k..16k (fft_menu.c) */
     int s = clampi(v, 1024, 16384);

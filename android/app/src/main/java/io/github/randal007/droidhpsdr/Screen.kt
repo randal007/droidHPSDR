@@ -198,6 +198,22 @@ private fun SpectrumOverlay(modifier: Modifier) {
         val s = ((dbm - SpectrumView.floor3d(Radio.style.value, nf)) / SpectrumView.RANGE_3D).coerceIn(0.0, 1.0)
         splitY * (1 - SpectrumView.ridge3d(Radio.style.value, s)).toFloat()
     }
+    // Lines on the spectrum (squelch, AGC) stay between the VFO pill (top) and the frequency axis.
+    fun levelY(splitY: Float, top: Float, gap: Float, nf: Double, dbm: Double) =
+        sqlY(splitY, nf, dbm).coerceIn(top, splitY - gap)
+    /** The level a height stands for: levelY backwards (it only falls as the level rises). */
+    fun dbmAt(splitY: Float, top: Float, gap: Float, nf: Double, y: Float): Double {
+        var a = -170.0; var b = 10.0
+        repeat(32) { val m = (a + b) / 2; if (levelY(splitY, top, gap, nf, m) > y) a = m else b = m }
+        return (a + b) / 2
+    }
+    /** Squelch: in AM a real level (dBm); in the other modes upstream's 0..100 as a height. */
+    fun sqlLineY(mode: Int, v: Double, splitY: Float, top: Float, gap: Float, nf: Double): Float =
+        if (mode == Modes.AM || mode == Modes.SAM) levelY(splitY, top, gap, nf, sqlDbm(v))
+        else top + (1 - v / 100.0).toFloat() * (splitY - gap - top)
+    fun sqlAt(mode: Int, y: Float, splitY: Float, top: Float, gap: Float, nf: Double): Double =
+        if (mode == Modes.AM || mode == Modes.SAM) ((dbmAt(splitY, top, gap, nf, y) + 160.0) / 160.0 * 100.0).coerceIn(0.0, 100.0)
+        else ((1 - (y - top) / (splitY - gap - top)) * 100.0).coerceIn(0.0, 100.0)
 
     Canvas(
         modifier.pointerInput(Unit) {
@@ -219,19 +235,28 @@ private fun SpectrumOverlay(modifier: Modifier) {
                 val dB = abs(down.position.x - xb)
                 val d0 = Radio.dsp.value
                 val splitY = size.height * Radio.split.value
-                // the notch (D5): grab it to change its width, push it off the top to remove it
+                val top = 90.dp.toPx(); val gap = 12.dp.toPx(); val nf = Radio.displayFloor
+                // the notch (D5): drag it to move it, drag an edge (when it is wide enough) for its width,
+                // push it off the top to remove it
                 val notchOn = d0[Dsp.MNF] != 0.0 && d0[Dsp.MNF_FREQ] > 0
                 val nx = ((d0[Dsp.MNF_FREQ] - lo) / hzpx).toFloat()
-                val nHalf = maxOf((d0[Dsp.MNF_WIDTH] / 2 / hzpx).toFloat(), 14.dp.toPx())
-                // the squelch line (D6): drag it up and down
+                val nHalfReal = (d0[Dsp.MNF_WIDTH] / 2 / hzpx).toFloat()
+                val nHalf = maxOf(nHalfReal, 16.dp.toPx())
+                val notchEdge = nHalfReal >= 20.dp.toPx() && abs(abs(down.position.x - nx) - nHalfReal) < 12.dp.toPx()
+                // the squelch line (D6): drag it up and down inside the passband
                 val sqlOn = d0[Dsp.SQL_ON] != 0.0
-                val sy = sqlY(splitY, Radio.displayFloor, sqlDbm(d0[Dsp.SQL]))
-                val dbPerPx = (if (Radio.flat.value) SpectrumView.PAN_HI - SpectrumView.PAN_LO else SpectrumView.RANGE_3D.toDouble()) / splitY
+                val sy = sqlLineY(st.mode, d0[Dsp.SQL], splitY, top, gap, nf)
+                // the AGC lines (M4 pick F): grab their handles on the left
+                val agcY = levelY(splitY, top, gap, nf, d0[Dsp.AGC_LINE])
+                val hangY = levelY(splitY, top, gap, nf, d0[Dsp.AGC_HANG_LINE])
+                val handleW = 190.dp.toPx()
                 // 0 = tune, 1 = low edge, 2 = high edge, 3 = RIT (RIT on: drag the middle of the passband),
-                // 5 = notch, 6 = squelch line
+                // 5 = notch, 6 = squelch line, 7 = AGC gain line, 8 = AGC hang threshold line
                 val edge = when {
                     sqlOn && abs(down.position.y - sy) < 16.dp.toPx() &&
                         down.position.x > minOf(xa, xb) - 20.dp.toPx() && down.position.x < maxOf(xa, xb) + 20.dp.toPx() -> 6
+                    st.agc != 0 && down.position.x < handleW && abs(down.position.y - agcY) < 16.dp.toPx() -> 7
+                    (st.agc == 1 || st.agc == 2) && down.position.x < handleW && abs(down.position.y - hangY) < 16.dp.toPx() -> 8
                     notchOn && abs(down.position.x - nx) < nHalf -> 5
                     minOf(dA, dB) <= edgeTol -> if (dA < dB) 1 else 2
                     st.ritOn && down.position.x > xa && down.position.x < xb -> 3
@@ -267,15 +292,28 @@ private fun SpectrumOverlay(modifier: Modifier) {
                             1 -> Radio.setFilter((st.filterLow + dx * hzpx).roundToInt(), st.filterHigh)
                             2 -> Radio.setFilter(st.filterLow, (st.filterHigh + dx * hzpx).roundToInt())
                             3 -> Radio.rit(true, ((st.rit + dx * hzpx) / 10).roundToLong() * 10)
-                            5 -> if (c.position.y - down.position.y < -70.dp.toPx() && c.position.y < splitY * 0.25f) {
+                            5 -> if (c.position.y - down.position.y < -70.dp.toPx() && c.position.y < splitY * 0.3f) {
                                 Radio.setDsp(Dsp.MNF, 0.0)   // pushed off the top: gone
                             } else if (Radio.dsp.value[Dsp.MNF] != 0.0) {
-                                val wHz = (2 * abs(c.position.x - nx) * hzpx).coerceIn(10.0, 15000.0)
-                                Radio.setDsp(Dsp.MNF_WIDTH, (wHz / 10).roundToInt() * 10.0)
+                                if (notchEdge) {
+                                    val wHz = (2 * abs(c.position.x - nx) * hzpx).coerceIn(10.0, 15000.0)
+                                    Radio.setDsp(Dsp.MNF_WIDTH, (wHz / 10).roundToInt() * 10.0)
+                                } else {
+                                    Radio.setDsp(Dsp.MNF_FREQ, (d0[Dsp.MNF_FREQ] + dx * hzpx).roundToLong().toDouble())
+                                }
                             }
-                            6 -> {
-                                val v = (d0[Dsp.SQL] - (c.position.y - down.position.y) * dbPerPx * 100.0 / 160.0).coerceIn(0.0, 100.0)
-                                Radio.setDsp(Dsp.SQL, v.roundToInt().toDouble())
+                            6 -> Radio.setDsp(Dsp.SQL, sqlAt(st.mode, c.position.y, splitY, top, gap, nf).roundToInt().toDouble())
+                            7 -> {
+                                // more AGC gain = a lower line (WDSP's AGC top and its knee)
+                                val target = dbmAt(splitY, top, gap, nf, c.position.y)
+                                val g = (d0[Dsp.AGC_GAIN] - (target - d0[Dsp.AGC_LINE])).coerceIn(-20.0, 120.0).roundToInt().toDouble()
+                                Radio.setDsp(Dsp.AGC_GAIN, g)
+                                Radio.setDsp(Dsp.AGC_LINE, d0[Dsp.AGC_LINE] - (g - d0[Dsp.AGC_GAIN]))   // until the radio says
+                            }
+                            8 -> {
+                                val th = (d0[Dsp.AGC_HANG_TH] - (c.position.y - down.position.y) / 3.dp.toPx()).coerceIn(0.0, 100.0)
+                                Radio.setDsp(Dsp.AGC_HANG_TH, th.roundToInt().toDouble())
+                                Radio.setDsp(Dsp.AGC_HANG_LINE, dbmAt(splitY, top, gap, nf, c.position.y))
                             }
                             else -> Radio.tune(f0 - dx * hzpx)
                         }
@@ -344,12 +382,37 @@ private fun SpectrumOverlay(modifier: Modifier) {
         }
 
         // the squelch line across the passband, with its level (dBm only in AM: see sqlLabel)
+        val top = 90.dp.toPx(); val gap = 12.dp.toPx()
+        // deskHPSDR's AGC lines (rx_panadapter.c): the AGC gain knee, and for Long/Slow the hang threshold
+        fun hline(y: Float, col: Color, text: String) {
+            val dash = 12.dp.toPx()
+            var xx = 12.dp.toPx()
+            while (xx < w - 12.dp.toPx()) {
+                drawLine(col.copy(alpha = 0.85f), Offset(xx, y), Offset(xx + dash, y), 1.8.dp.toPx()); xx += dash * 1.7f
+            }
+            val t = measurer.measure(text, TextStyle(color = col, fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold))
+            val bx = 12.dp.toPx()
+            drawRoundRect(Color(0xE008101E), Offset(bx, y - t.size.height / 2 - 5.dp.toPx()),
+                Size(t.size.width + 18.dp.toPx(), t.size.height + 10.dp.toPx()), CornerRadius(13.dp.toPx()))
+            drawRoundRect(col.copy(alpha = 0.6f), Offset(bx, y - t.size.height / 2 - 5.dp.toPx()),
+                Size(t.size.width + 18.dp.toPx(), t.size.height + 10.dp.toPx()), CornerRadius(13.dp.toPx()),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(1.dp.toPx()))
+            drawText(t, topLeft = Offset(bx + 9.dp.toPx(), y - t.size.height / 2))
+        }
+        if (status.agc != 0) {
+            val nf = Radio.displayFloor
+            if (status.agc == 1 || status.agc == 2) {
+                hline(levelY(splitY, top, gap, nf, dsp[Dsp.AGC_HANG_LINE]), Color(0xFFFF7F50),
+                    "AGC-Th %.0f dBm  ↕".format(dsp[Dsp.AGC_HANG_LINE]))
+            }
+            hline(levelY(splitY, top, gap, nf, dsp[Dsp.AGC_LINE]), Amb, "AGC-G %.0f dBm  ↕".format(dsp[Dsp.AGC_LINE]))
+        }
         if (dsp[Dsp.SQL_ON] != 0.0) {
-            val sy = sqlY(splitY, Radio.displayFloor, sqlDbm(dsp[Dsp.SQL]))
+            val sy = sqlLineY(status.mode, dsp[Dsp.SQL], splitY, top, gap, Radio.displayFloor)
             val dash = 10.dp.toPx()
             var xx = minOf(pa, pb)
             while (xx < maxOf(pa, pb)) {
-                drawLine(Grn, Offset(xx, sy), Offset(minOf(xx + dash, maxOf(pa, pb)), sy), 2.dp.toPx())
+                drawLine(Grn, Offset(xx, sy), Offset(minOf(xx + dash, maxOf(pa, pb)), sy), 3.dp.toPx())
                 xx += dash * 1.8f
             }
             val t = measurer.measure("SQL " + sqlLabel(status.mode, dsp[Dsp.SQL]) + "  drag ↕",
