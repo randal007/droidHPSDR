@@ -78,6 +78,9 @@ void droid_set_volume_db(double db);   /* -40..0 */
 void droid_set_lna_db(double db);      /* -12..48 */
 void droid_set_phone_audio(int on);    /* also play on the phone (deskHPSDR's local audio) */
 void droid_set_zoom(int zoom);         /* upstream's zoom, 1..16 */
+void droid_set_fps(int fps);           /* spectrum rows per second */
+void droid_set_window(int type);       /* FFT window, Screen menu order */
+void droid_set_detector(int det);      /* 0 Peak, 1 Average, 2 Rosenfell, 3 Sample */
 
 typedef struct {
   long long freq;

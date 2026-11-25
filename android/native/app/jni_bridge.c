@@ -124,6 +124,12 @@ JNIEXPORT void JNICALL FN(setZoom)(JNIEnv *env, jobject self, jint zoom) {
   (void)env; (void)self;
   droid_set_zoom(zoom);
 }
+JNIEXPORT void JNICALL FN(setDisplay)(JNIEnv *env, jobject self, jint fps, jint window, jint detector) {
+  (void)env; (void)self;
+  droid_set_fps(fps);
+  droid_set_window(window);
+  droid_set_detector(detector);
+}
 JNIEXPORT void JNICALL FN(setPhoneAudio)(JNIEnv *env, jobject self, jboolean on) {
   (void)env; (void)self;
   droid_set_phone_audio(on);

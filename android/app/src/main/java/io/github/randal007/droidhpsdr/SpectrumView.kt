@@ -40,7 +40,7 @@ class SpectrumView(ctx: Context) : GLSurfaceView(ctx) {
             val f = Radio.freq.value.toDouble()
             val half = Radio.span.value / 2
             Native.glDraw(
-                f - half, f + half, SPLIT.toDouble(), style,
+                f - half, f + half, Radio.split.value.toDouble(), style,
                 floor3d(style, nf).toFloat(), RANGE_3D,
                 (nf - 2.5).toFloat(), (nf + 48.0).toFloat(),
                 Radio.flat.value, (nf + PAN_LO).toFloat(), (nf + PAN_HI).toFloat(),
@@ -51,9 +51,6 @@ class SpectrumView(ctx: Context) : GLSurfaceView(ctx) {
     }
 
     companion object {
-        /** Fraction of the height for the 3D view; the waterfall takes the rest. */
-        const val SPLIT = 0.5f
-
         // levels, relative to the noise floor (auto, like deskHPSDR's "Related to Noisefloor")
         const val RANGE_3D = 52f
         const val PAN_LO = -8.0

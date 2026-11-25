@@ -27,6 +27,8 @@ object Native {
     external fun setPhoneAudio(on: Boolean)
     /** Upstream's spectrum zoom, 1..16 (more detail when pinched in). */
     external fun setZoom(zoom: Int)
+    /** Rows per second, FFT window (Screen menu order), detector (0 Peak, 1 Average, 2 Rosenfell, 3 Sample). */
+    external fun setDisplay(fps: Int, window: Int, detector: Int)
     /** How old a spectrum row's data is, so rows drawn while tuning land at the right frequency. */
     external fun setRowDelayMs(ms: Int)
 

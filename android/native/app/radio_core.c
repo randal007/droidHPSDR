@@ -48,7 +48,7 @@
 
 /* ---- requests from the UI, run on the loop thread ---- */
 
-enum { CMD_FREQ, CMD_MODE, CMD_FILTER, CMD_VOLUME, CMD_LNA, CMD_PHONE_AUDIO, CMD_ZOOM };
+enum { CMD_FREQ, CMD_MODE, CMD_FILTER, CMD_VOLUME, CMD_LNA, CMD_PHONE_AUDIO, CMD_ZOOM, CMD_FPS, CMD_WINDOW, CMD_DETECTOR };
 typedef struct { int type; long long i; double d; int a, b; } cmd;
 #define CMD_MAX 256
 static cmd cmds[CMD_MAX];
@@ -82,6 +82,9 @@ void droid_set_volume_db(double db) { post((cmd){ .type = CMD_VOLUME, .d = db })
 void droid_set_lna_db(double db) { post((cmd){ .type = CMD_LNA, .d = db }); }
 void droid_set_phone_audio(int on) { post((cmd){ .type = CMD_PHONE_AUDIO, .a = on }); }
 void droid_set_zoom(int zoom) { post((cmd){ .type = CMD_ZOOM, .a = zoom }); }
+void droid_set_fps(int fps) { post((cmd){ .type = CMD_FPS, .a = fps }); }
+void droid_set_window(int type) { post((cmd){ .type = CMD_WINDOW, .a = type }); }
+void droid_set_detector(int det) { post((cmd){ .type = CMD_DETECTOR, .a = det }); }
 
 /* ---- when the radio was on which frequency ----
  * A spectrum row describes samples from some time before it is drawn (the
@@ -159,6 +162,22 @@ static void run(const cmd *c) {
     rx->zoom = c->a;
     rx_update_zoom_locked(rx);
     g_mutex_unlock(&rx->display_mutex);
+    break;
+  /* deskHPSDR's Display and Screen menus: field, then upstream's setter */
+  case CMD_FPS:
+    if (c->a < 5 || c->a > 60 || c->a == rx->fps) break;
+    rx->fps = c->a;
+    rx_set_framerate(rx);
+    break;
+  case CMD_WINDOW:   /* 0 Rectangular .. 5 Kaiser (default) .. 6 7-term Blackman-Harris */
+    if (c->a < 0 || c->a > 6) break;
+    rx->pan_window_type = c->a;
+    rx_set_analyzer(rx);
+    break;
+  case CMD_DETECTOR:   /* 0 Peak, 1 Average, 2 Rosenfell, 3 Sample */
+    if (c->a < 0 || c->a > 3) break;
+    rx->display_detector_mode = DET_PEAK + c->a;
+    rx_set_detector(rx);
     break;
   case CMD_PHONE_AUDIO:
     /* deskHPSDR's "local audio": receiver.c then also hands every audio

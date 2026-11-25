@@ -90,6 +90,7 @@ class RadioService : Service() {
                     Radio.setPhase(Phase.RUNNING, "", net)
                     Radio.applyModeFilter()
                     Radio.applyZoom()
+                    Radio.setDisplay()
                     getSystemService(NotificationManager::class.java).notify(1, notification("Receiving on $net"))
                 } else {
                     Radio.setPhase(Phase.ERROR, err)

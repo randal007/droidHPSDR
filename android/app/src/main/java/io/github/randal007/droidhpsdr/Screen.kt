@@ -159,6 +159,7 @@ private fun SpectrumOverlay(modifier: Modifier) {
     val status by Radio.status.collectAsState()
     val region by Radio.region.collectAsState()
     val peaks by Radio.peaks.collectAsState()
+    val split by Radio.split.collectAsState()
     val flat by Radio.flat.collectAsState()
     val style by Radio.style.collectAsState()
     val measurer = rememberTextMeasurer()
@@ -245,7 +246,7 @@ private fun SpectrumOverlay(modifier: Modifier) {
     ) {
         val w = size.width
         val h = size.height
-        val splitY = h * SpectrumView.SPLIT
+        val splitY = h * split
         val lo = freq - span / 2
         val hzpx = span / w
         fun x(f: Double) = ((f - lo) / hzpx).toFloat()
@@ -728,6 +729,22 @@ private fun DisplaySheet() {
     Label("3D history (rows, 30 a second)")
     val depths = listOf(40, 80, 120, 160)
     GridButtons(depths.map { "$it" }, "$depth", 4) { Radio.setDepthRows(depths[it]) }
+    val split by Radio.split.collectAsState()
+    val fps by Radio.fps.collectAsState()
+    val win by Radio.window.collectAsState()
+    val det by Radio.detector.collectAsState()
+    Label("Spectrum / waterfall split")
+    val splits = listOf(0.35f, 0.45f, 0.5f, 0.6f)
+    GridButtons(splits.map { "${(it * 100).roundToInt()} %" }, "${(split * 100).roundToInt()} %", 4) { Radio.setSplit(splits[it]) }
+    Label("Frames per second (spectrum rows)")
+    val rates = listOf(15, 20, 30, 60)
+    GridButtons(rates.map { "$it" }, "$fps", 4) { Radio.setDisplay(fps = rates[it]) }
+    Label("FFT window")
+    val windows = listOf("Rectangular", "Blackman-Harris 4", "Hann", "Flat-top", "Hamming", "Kaiser", "Blackman-Harris 7")
+    GridButtons(windows, windows[win], 4) { Radio.setDisplay(window = it) }
+    Label("Detector")
+    val dets = listOf("Peak", "Average", "Rosenfell", "Sample")
+    GridButtons(dets, dets[det], 4) { Radio.setDisplay(detector = it) }
     Label("Peak hold (2D)")
     GridButtons(listOf("On", "Off"), if (hold) "On" else "Off", 2) { Radio.setPeakHold(it == 0) }
     Label("Peak labels")

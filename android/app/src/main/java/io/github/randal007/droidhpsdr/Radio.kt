@@ -106,6 +106,10 @@ object Radio {
     val peakLabels = MutableStateFlow(5)         // how many peaks to label, 0 = off
     val labelsPassband = MutableStateFlow(false) // label only inside the passband
     val peaks = MutableStateFlow<List<Pair<Double, Double>>>(emptyList())   // (Hz, dBm)
+    val split = MutableStateFlow(0.5f)           // share of the height for the 3D/2D view
+    val fps = MutableStateFlow(FPS)              // spectrum rows per second
+    val window = MutableStateFlow(5)             // FFT window: 5 = Kaiser, upstream's default
+    val detector = MutableStateFlow(1)           // 1 = Average, upstream's default
 
     /** The display's smoothed noise floor (dBm), written by the renderer, read by the labels. */
     @Volatile var displayFloor = -125.0
@@ -136,6 +140,10 @@ object Radio {
         peakHold.value = prefs.getBoolean("peakHold", true)
         peakLabels.value = prefs.getInt("peakLabels", 5)
         labelsPassband.value = prefs.getBoolean("labelsPassband", false)
+        split.value = prefs.getFloat("split", 0.5f)
+        fps.value = prefs.getInt("fps", FPS)
+        window.value = prefs.getInt("window", 5)
+        detector.value = prefs.getInt("detector", 1)
         wiredIp.value = prefs.getString("wiredIp", "169.254.19.221") ?: "169.254.19.221"
         wifiIp.value = prefs.getString("wifiIp", "") ?: ""
         status.value = status.value.copy(mode = prefs.getInt("mode", Modes.DIGU))
@@ -240,6 +248,13 @@ object Radio {
     fun setLabelsPassband(on: Boolean) { labelsPassband.value = on; prefs.edit().putBoolean("labelsPassband", on).apply() }
     fun setWiredIp(ip: String) { wiredIp.value = ip.trim(); prefs.edit().putString("wiredIp", ip.trim()).apply() }
     fun setWifiIp(ip: String) { wifiIp.value = ip.trim(); prefs.edit().putString("wifiIp", ip.trim()).apply() }
+
+    fun setSplit(f: Float) { split.value = f; prefs.edit().putFloat("split", f).apply() }
+    fun setDisplay(fps: Int = this.fps.value, window: Int = this.window.value, detector: Int = this.detector.value) {
+        this.fps.value = fps; this.window.value = window; this.detector.value = detector
+        prefs.edit().putInt("fps", fps).putInt("window", window).putInt("detector", detector).apply()
+        if (running) Native.setDisplay(fps, window, detector)
+    }
 
     fun setRegion(r: Int) {
         region.value = r
