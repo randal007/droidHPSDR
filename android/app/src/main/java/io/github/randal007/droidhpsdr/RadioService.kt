@@ -42,6 +42,13 @@ class RadioService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        if (intent?.action == ACTION_RESTART && Radio.running && !starting) {
+            // new sample rate: stop the stream and start it again, keeping the service
+            Native.stop()
+            Radio.setPhase(Phase.CONNECTING, "Restarting at ${Radio.sampleRate.value / 1000} kHz")
+            startRadio()
+            return START_STICKY
+        }
         startForeground(1, notification("Starting"), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
         if (!Radio.running && !starting) startRadio()
         return START_STICKY
@@ -81,7 +88,7 @@ class RadioService : Service() {
                 val s = Radio.status.value
                 val err = Native.start(
                     Radio.freq.value, s.mode, Radio.lnaDb.value, true,
-                    Radio.SAMPLE_RATE, Radio.PIXELS, Radio.FPS, ip,
+                    Radio.sampleRate.value, Radio.PIXELS, Radio.FPS, ip,
                 )
                 if (err.isEmpty()) {
                     Native.setVolumeDb(Radio.volumeDb.value)
@@ -155,8 +162,11 @@ class RadioService : Service() {
         const val CHANNEL = "radio"
         const val WIRED_HL2 = "169.254.19.221"
         const val ACTION_STOP = "io.github.randal007.droidhpsdr.STOP"
+        const val ACTION_RESTART = "io.github.randal007.droidhpsdr.RESTART"
 
         fun start(ctx: Context) = ctx.startForegroundService(Intent(ctx, RadioService::class.java))
+        fun restart(ctx: Context) =
+            ctx.startForegroundService(Intent(ctx, RadioService::class.java).setAction(ACTION_RESTART))
         fun stop(ctx: Context) = ctx.startService(Intent(ctx, RadioService::class.java).setAction(ACTION_STOP))
     }
 }

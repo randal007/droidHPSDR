@@ -86,7 +86,7 @@ data class Status(
 object Radio {
     const val PIXELS = 2048
     const val FPS = 30
-    const val SAMPLE_RATE = 192000
+    const val SAMPLE_RATE = 384000   // default; the HL2 does 48/96/192/384 kHz
 
     val status = MutableStateFlow(Status())
     val freq = MutableStateFlow(14_074_000L)
@@ -115,6 +115,9 @@ object Radio {
     @Volatile var displayFloor = -125.0
 
     // where the radio is: wired (APIPA, see CLAUDE.md) and on WiFi (its DHCP address)
+    /** The radio's sample rate: how wide a band it hears at once (more to scroll into). */
+    val sampleRate = MutableStateFlow(SAMPLE_RATE)
+
     val wiredIp = MutableStateFlow("169.254.19.221")
     val wifiIp = MutableStateFlow("")
 
@@ -144,6 +147,7 @@ object Radio {
         fps.value = prefs.getInt("fps", FPS)
         window.value = prefs.getInt("window", 5)
         detector.value = prefs.getInt("detector", 1)
+        sampleRate.value = prefs.getInt("sampleRate", SAMPLE_RATE)
         wiredIp.value = prefs.getString("wiredIp", "169.254.19.221") ?: "169.254.19.221"
         wifiIp.value = prefs.getString("wifiIp", "") ?: ""
         status.value = status.value.copy(mode = prefs.getInt("mode", Modes.DIGU))
@@ -253,6 +257,9 @@ object Radio {
     fun setWiredIp(ip: String) { wiredIp.value = ip.trim(); prefs.edit().putString("wiredIp", ip.trim()).apply() }
     fun setWifiIp(ip: String) { wifiIp.value = ip.trim(); prefs.edit().putString("wifiIp", ip.trim()).apply() }
 
+    /** Saved; RadioService restarts the stream at the new rate (as radio_change_sample_rate does). */
+    fun setSampleRate(r: Int) { sampleRate.value = r; prefs.edit().putInt("sampleRate", r).apply() }
+
     fun setSplit(f: Float) { split.value = f; prefs.edit().putFloat("split", f).apply() }
     fun setDisplay(fps: Int = this.fps.value, window: Int = this.window.value, detector: Int = this.detector.value) {
         this.fps.value = fps; this.window.value = window; this.detector.value = detector
@@ -305,7 +312,7 @@ object Radio {
             while (isActive) {
                 Native.status(a)
                 if (status.value.phase == Phase.DEMO) {
-                    status.value = status.value.copy(meterDbm = a[6], noiseFloor = a[11], sampleRate = SAMPLE_RATE)
+                    status.value = status.value.copy(meterDbm = a[6], noiseFloor = a[11], sampleRate = 192000)
                 } else if (a[0] != 0.0) {
                     status.value = status.value.copy(
                         mode = a[2].toInt(), filterLow = a[3].toInt(), filterHigh = a[4].toInt(),

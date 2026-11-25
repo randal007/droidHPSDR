@@ -200,6 +200,7 @@ static void run(const cmd *c) {
 
 static atomic_int running;
 static pthread_t loop_thread;
+static int p1_started;   /* old_protocol_init done: the radio is found and the protocol set up */
 
 static void *loop(void *arg) {
   (void)arg;
@@ -255,7 +256,8 @@ int droid_radio_start(const droid_start_opts *o, char *msg, int msglen) {
   if (atomic_load(&running)) return 0;
   droid_demo_stop();   /* the demo never feeds the display while the radio does */
 
-  /* ---- discovery: deskHPSDR's own ---- */
+  /* ---- discovery: deskHPSDR's own; once, like old_protocol_init ---- */
+  if (p1_started) goto setup;
   protocol = ORIGINAL_PROTOCOL;
   devices = 0;
   /* A known address (the wired link) uses upstream's targeted discovery:
@@ -275,9 +277,10 @@ int droid_radio_start(const droid_start_opts *o, char *msg, int msglen) {
     snprintf(msg, msglen, devices ? "found %d radio(s), but no Hermes Lite 2" : "no radio answered", devices);
     return -1;
   }
+  radio = &discovered[pick];   /* kept for every later start */
 
+setup:
   /* ---- what radio.c's start_radio() sets for an HL2 (see m1_main.c) ---- */
-  radio = &discovered[pick];
   device = radio->device;
   protocol = radio->protocol;
   n_adc = 1;
@@ -316,7 +319,11 @@ int droid_radio_start(const droid_start_opts *o, char *msg, int msglen) {
   }
   active_receiver = receiver[0];
   can_transmit = 0;
-  if (o->sample_rate != receiver[0]->sample_rate) rx_change_sample_rate(receiver[0], o->sample_rate);
+  if (o->sample_rate != receiver[0]->sample_rate) {
+    /* radio.c's radio_change_sample_rate(), with the stream stopped */
+    rx_change_sample_rate(receiver[0], o->sample_rate);
+    if (p1_started) old_protocol_set_mic_sample_rate(o->sample_rate);
+  }
   rx_mode_changed(receiver[0]);
   for (int i = 0; i < 2; i++) rx_frequency_changed(receiver[i]);
 
@@ -340,7 +347,15 @@ int droid_radio_start(const droid_start_opts *o, char *msg, int msglen) {
            radio->software_version / 10, radio->software_version % 10);
 
   fhist_add(vfo[0].frequency);
-  old_protocol_init(rx->sample_rate);
+  /* old_protocol.c: "old_protocol_init is only called ONCE. old_protocol_stop
+   * and old_protocol_run just send start/stop packets" - so a restart (new
+   * sample rate, Stop then Start) only runs it again. */
+  if (p1_started) {
+    old_protocol_run();
+  } else {
+    old_protocol_init(rx->sample_rate);
+    p1_started = 1;
+  }
   atomic_store(&running, 1);
   pthread_create(&loop_thread, NULL, loop, NULL);
   return 0;

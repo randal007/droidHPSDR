@@ -515,7 +515,8 @@ private fun ChipRow(st: Status, open: (Sheet) -> Unit, modifier: Modifier) {
             Radio.setStep(steps[(steps.indexOf(step) + 1) % steps.size])
         }
         Chip("SPAN", "${(span / 1000).roundToInt()} kHz") {
-            val spans = listOf(6_000.0, 12_000.0, 24_000.0, 48_000.0, 96_000.0, 182_000.0)
+            val spans = listOf(6_000.0, 12_000.0, 24_000.0, 48_000.0, 96_000.0, 182_000.0, 364_000.0)
+                .filter { it <= st.sampleRate * 0.95 }
             Radio.setSpan(spans.firstOrNull { it > span * 1.05 } ?: spans.first())
         }
     }
@@ -785,6 +786,15 @@ private fun MenuSheet(st: Status, onStart: () -> Unit, onStop: () -> Unit, close
             ctx.startActivity(
                 Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${ctx.packageName}")),
             )
+        }
+    }
+    val rate by Radio.sampleRate.collectAsState()
+    Label("Sample rate: how wide a band the radio hears at once (restarts the stream)")
+    val rates = listOf(96000, 192000, 384000)
+    GridButtons(rates.map { "${it / 1000} kHz" }, "${rate / 1000} kHz", 3) {
+        if (rates[it] != rate) {
+            Radio.setSampleRate(rates[it])
+            if (st.phase == Phase.RUNNING) RadioService.restart(ctx)
         }
     }
     Text("Band plan region", color = Dim, fontSize = 11.sp)
