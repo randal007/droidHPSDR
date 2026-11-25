@@ -13,6 +13,24 @@ next, what's waiting on whom. Session history lives in git and in
   lines on the spectrum (F) and the RX page. **Nothing of this is tested on
   the radio yet**; the notch/squelch/AGC fixes and the RX page are not even
   on the phone yet (adb dropped).
+- **2026-11-25 (Randal away from home, phone not reachable):** code review
+  of M4+M5 (`m3-done..HEAD`, high): 10 findings, all checked by hand and
+  fixed in f5defd6 (CTUN snapped back, start/stop races and wake-lock leak
+  on restarts, per-mode step not followed, auto gain stalled the loop on
+  toggle, band-stack index unchecked, toolbar drag one place only, CW
+  squelch scale, an attribution). **Not on the phone yet.** Extra things to
+  try with the radio: CTUN on + drag (stays put, spectrum not shifted);
+  unplug/replug the adapter, then Stop right after replugging; step per
+  mode (USB 100 → CWU 25 → back).
+- **Code review per milestone (Randal 2026-11-25):** tags `m1-done`
+  (master tip) and `m3-done` (e580fa6) mark the ends; review = `/code-review
+  <level> <tag>..<tag>`. M4+M5 done; M1 and M3 still to review. Tag
+  `m5-done` when M5 is accepted.
+- **M5 round 2 pictures sent** (E1-E6, `tools/mockups/layouts6.js`):
+  Display tabs + manual levels (E1) or dragging the dB scale (E2),
+  averaging + peaks & hold (E3), info bar as a top strip (E4) or in the
+  meter card with an overload alarm (E5), the Screen page (E6). Waiting on
+  Randal's picks.
 - Branch `m3-app` (pushed) holds M3-M5; `master` is still at M1.
 - No transmit until Randal asks for it (M7). One receiver; RX2 later.
 - **Decided 2026-11-24:** no "not doing" lines: what isn't an HL2 item goes
