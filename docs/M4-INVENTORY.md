@@ -3,7 +3,9 @@
 Step 1 of M4 (ROADMAP "How each section is done"): every control in
 FEATURES.md's M4 part, plus the toolbar actions that belong to it, and what
 each really does on an HL2. Read from upstream `9f49c21` on 2026-11-24.
-Proposed "not doing" lines are **proposals until Randal agrees**.
+**Randal 2026-11-24:** the proposed "not doing" lines below are the
+**later** list instead: anything that isn't an HL2 item is done later,
+unless it would be harder to add later.
 
 Already in the app from M3: band picker, mode picker, filter presets and
 edge dragging (with per-mode limits and ESSB), step, AF, LNA gain, sample

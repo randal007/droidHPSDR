@@ -6,14 +6,26 @@ next, what's waiting on whom. Session history lives in git and in
 
 ## Now (in short)
 
-- **M3 done 2026-11-24.** **M4 built 2026-11-24 and running** (Randal:
-  "runs pretty good"); its radio test and ticks are the first job next
-  session, then the M4 leftovers, then **M5** (plan in the M5 section).
-- Branch `m3-app` (pushed) holds M3 and M4; `master` is still at M1.
+- **2026-11-24 evening (demo mode, Randal away from the radio):** the ☰
+  button opens deskHPSDR's main menu (same columns and order); M5 built from
+  Randal's picks (D1 Noise drawer, D5 notch, D6 squelch line, D7 EQ graph,
+  D8 settings pages, D9 editable bottom row); M4 leftovers built: the AGC
+  lines on the spectrum (F) and the RX page. **Nothing of this is tested on
+  the radio yet**; the notch/squelch/AGC fixes and the RX page are not even
+  on the phone yet (adb dropped).
+- Branch `m3-app` (pushed) holds M3-M5; `master` is still at M1.
 - No transmit until Randal asks for it (M7). One receiver; RX2 later.
+- **Decided 2026-11-24:** no "not doing" lines: what isn't an HL2 item goes
+  on a **later** list (unless it would be harder later). Worldmap later as
+  pictures behind the 2D waterfall (Thetis). Themes and window size are
+  covered by the 3D looks and split settings.
+- **Next with the radio:** the M4 test list (M4 section), then M5: does
+  NR2/NR4/NNR sound right on the HL2+ and the phone, notch, squelch, EQ,
+  auto gain, AGC line levels against deskHPSDR's.
+- **Still M4:** G (analog meter, peak/average), AGC auto + offset (deskHPSDR
+  runs it in rx_panadapter.c, which the app replaces).
 - **Waiting on Randal:** whether to delete the empty leftover repo
-  `randal007/DroidHPSDR-scaffold`; the proposed "not doing" lines in
-  `docs/M4-INVENTORY.md` (preamp, attenuator, dither, 768k/1536k, ...).
+  `randal007/DroidHPSDR-scaffold`.
 - **Phone:** the app (debug build) installed; adb over **wireless
   debugging** (paired; it switches itself off: turn it on again, find the
   port with `adb mdns services`, the phone's WiFi address changes);

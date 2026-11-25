@@ -105,6 +105,9 @@ void droid_dsp_apply(int field, double value); /* on the loop thread */
 void droid_dsp_get(double *out);               /* droid_dsp_count() values */
 int droid_dsp_count(void);
 
+/* HL2 ADC auto gain (autogain.c, from rigctl.c): start/stop the thread */
+void droid_autogain_run(int run);
+
 /* lists for the UI: deskHPSDR's tables, read on the loop thread's data */
 int droid_filters(int mode, char titles[][16], int *lo, int *hi, int max);
 int droid_bands(char titles[][16], long long *fmin, long long *fmax, int max);

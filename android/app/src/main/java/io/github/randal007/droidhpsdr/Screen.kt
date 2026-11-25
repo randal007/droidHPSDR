@@ -107,7 +107,7 @@ internal val Grn = Color(0xFF3EE07A)
 internal val Red = Color(0xFFFF5A50)
 
 
-internal enum class Sheet { BAND, MODE, AF, LNA, FILTER, MENU, DISPLAY, FREQ, VFO, AGC, SDR, DISCOVERY, ABOUT, NOISE, EQ, DSP, TOOLBAR }
+internal enum class Sheet { BAND, MODE, AF, LNA, FILTER, MENU, DISPLAY, FREQ, VFO, AGC, SDR, DISCOVERY, ABOUT, NOISE, EQ, DSP, TOOLBAR, RX }
 
 internal fun Modifier.glass(r: Int = 14) =
     clip(RoundedCornerShape(r.dp)).background(Glass).border(1.dp, Line, RoundedCornerShape(r.dp))
@@ -852,6 +852,7 @@ private fun SheetHost(
                 Sheet.DISCOVERY -> DiscoverySheet(st, onStart, onStop, close)
                 Sheet.ABOUT -> AboutSheet()
                 Sheet.DSP -> DspSheet(st)
+                Sheet.RX -> RxSheet(st)
                 Sheet.NOISE, Sheet.EQ, Sheet.TOOLBAR -> {}
                 Sheet.DISPLAY -> DisplaySheet()
                 Sheet.FREQ -> FreqSheet(close)
@@ -1125,7 +1126,7 @@ private val MENU_COLUMNS = listOf(
         MenuItem("Meter", later = "M4"), MenuItem("XVTR", later = "M6"), MenuItem("Discovery", Sheet.DISCOVERY)),
     listOf(MenuItem("VFO", Sheet.VFO), MenuItem("Band", Sheet.BAND), MenuItem("BandStack", Sheet.BAND),
         MenuItem("Mode", Sheet.MODE), MenuItem("Memory", Sheet.BAND)),
-    listOf(MenuItem("RX", later = "M4"), MenuItem("RX Filter", Sheet.FILTER), MenuItem("Noise", Sheet.NOISE),
+    listOf(MenuItem("RX", Sheet.RX), MenuItem("RX Filter", Sheet.FILTER), MenuItem("Noise", Sheet.NOISE),
         MenuItem("AGC", Sheet.AGC)),
     listOf(MenuItem("TX", later = "M7"), MenuItem("PA", later = "M6"), MenuItem("VOX", later = "M7"),
         MenuItem("PS", later = "M7"), MenuItem("CW", later = "M7")),
@@ -1216,17 +1217,8 @@ private fun MenuButton(label: String, modifier: Modifier, later: String? = null,
 /** deskHPSDR's SDR Device (Radio) menu: the parts built so far. The HL2 settings come with M6. */
 @Composable
 private fun SdrDeviceSheet(st: Status) {
-    val ctx = LocalContext.current
     SheetTitle("SDR Device")
-    val rate by Radio.sampleRate.collectAsState()
-    Label("Sample rate: how wide a band the radio hears at once (restarts the stream)")
-    val rates = listOf(96000, 192000, 384000)
-    GridButtons(rates.map { "${it / 1000} kHz" }, "${rate / 1000} kHz", 3) {
-        if (rates[it] != rate) {
-            Radio.setSampleRate(rates[it])
-            if (st.phase == Phase.RUNNING) RadioService.restart(ctx)
-        }
-    }
+    Text("The HL2's own settings (IO board, HL2+, PA) come with M6. Sample rate: ☰ → RX.", color = Dim, fontSize = 11.sp)
     val region by Radio.region.collectAsState()
     Label("Band plan region")
     GridButtons(listOf("Region 1", "Region 2", "Region 3"), "Region $region", 3) { Radio.setRegion(it + 1) }

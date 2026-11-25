@@ -3,7 +3,12 @@
 Step 1 of M5 (ROADMAP "How each section is done"): every control in
 FEATURES.md's M5 part, plus squelch, CW peak and binaural, and what each
 really does on an HL2. Read from upstream (`src/`, as compiled) on
-2026-11-24. Proposed "not doing" lines are **proposals until Randal agrees**.
+2026-11-24. **Randal's decisions (2026-11-24):** picks D1 (Noise drawer), D5-D9. Nothing
+is "not doing": what doesn't apply to an HL2 goes on the **later** list,
+unless leaving it would make it harder later. RX I/Q: build the manual
+adjustment. Worldmap: later, as pictures behind the 2D waterfall like
+Thetis. CSS themes / window size: covered by the 3D looks and the split
+settings already.
 
 Everything here is receive-side DSP inside WDSP, so it works the same on an
 HL2 as on any radio. `receiver.c` (already compiled) applies it:
@@ -53,7 +58,7 @@ small function (with attribution) instead of compiling the dialog.
 | FIR filter NC (1k-16k, default 2048) | yes | more = steeper skirts, more CPU |
 | Binaural (I and Q on left/right) | phone audio only, and only in stereo | the HL2+ speaker path is the AK4951; binaural matters with headphones on the phone. Off with NNR |
 | TX filter type / NC | TX | M7 |
-| RX image measure, image offset, RX IQ gain / phase / reset / auto / status | **not on an HL2**: the HL2 samples RF directly and mixes in the FPGA, so there is no analogue I/Q imbalance and no image to correct | propose **not doing: no I/Q imbalance on a direct-sampling radio** |
+| RX image measure, image offset, RX IQ gain / phase / reset / auto / status | **not on an HL2**: the HL2 samples RF directly and mixes in the FPGA, so there is no analogue I/Q imbalance and no image to correct | manual gain/phase/reset **built** (DSP sheet); image measure and Auto RX IQ need rx_panadapter.c's measurement: later |
 | RX2 column | RX2 | later |
 
 ## WDSP EQ (`equalizer_menu.c`)
@@ -77,7 +82,7 @@ waterfall, peak labels, S-meter labels, number of peaks, peaks & hold.
 | Panadapter high / low / step, waterfall high / low, noise floor margin | to build | manual levels for when auto is off |
 | Peaks & hold: type, decay hold time, drop rate | to build | |
 | Info bar: show it, solar data, ADC overload alarm, clock & UDP broadcast, AH4 state | to build | solar data needs the network (M8 has solar data); ADC overload already counted in the status line; AH4 state is M6 |
-| Show worldmap | propose **not doing** for now: a desktop background picture behind the panadapter; on the phone the 3D view is the background | |
+| Show worldmap | **later**: pictures behind the 2D waterfall, like Thetis (Randal) | |
 | PEAKS & HOLD for TX, TX pan colours | TX | M7 |
 | Peak & hold line colour | to build | with the themes |
 
@@ -89,8 +94,8 @@ waterfall, peak labels, S-meter labels, number of peaks, peaks & hold.
 | FFT window (7 kinds), FFT size (Auto + sizes) | window **built in M3** (Display sheet), not ticked; size to build | |
 | Display sliders / toolbar / extras / warnings / PA current | maps to which strips show on the phone | ties in with the Toolbar question below |
 | Save zoom level, preserve narrow peaks | to build | |
-| Save / remove / reload CSS, Default / Dark theme, Touch UI, slider and menu background colours | GTK styling | propose **not doing: GTK stylesheets; the phone has its own look and the 3D themes** |
-| Main window width / height, "made for desktops" notes, minimum 1280x600 | desktop window | propose **not doing: the phone screen is fixed** |
+| Save / remove / reload CSS, Default / Dark theme, Touch UI, slider and menu background colours | GTK styling | covered: the phone's own look and the 3D themes (Randal) |
+| Main window width / height, "made for desktops" notes, minimum 1280x600 | desktop window | covered: the split/percentage settings (Randal) |
 | TX audio level display, peak levels, popover | TX | M7 |
 
 ## Toolbar and Switch (`toolbar_menu.c`, `switch_menu.c`)
@@ -98,7 +103,7 @@ waterfall, peak labels, S-meter labels, number of peaks, peaks & hold.
 | Control | On a phone | Note |
 |---|---|---|
 | Toolbar: assign any action to the function buttons (FNC, X) | yes, the phone way: **the bottom chip row becomes user-configurable** (ROADMAP's "three layers" idea) | pictures |
-| Switch menu: Defaults | GPIO switches of a controller board (Pi/G2) | propose **not doing: no GPIO controller on a phone** |
+| Switch menu: Defaults | GPIO switches of a controller board (Pi/G2) | **later** (not an HL2 item) |
 
 ## Questions for Randal
 

@@ -60,6 +60,18 @@ void rx_panadapter_update(RECEIVER *rx) {
   double fmin = (double)droid_freq_ago(droid_row_delay_us) - (double)rx->sample_rate * 0.5 + (double)start * hzpp;
 
   droid_rows_push(rx->pixel_samples + start, (float)soffset, width, fmin, hzpp);
+
+  /* rx_panadapter.c clears the protocol's sticky ADC overload flags after a
+   * while (1 s with auto gain, 2 s without); the auto gain thread reads them */
+  static int adc_error_count = 0;
+  if (adc0_p_ovl || adc1_p_ovl) {
+    adc_error_count++;
+    if (adc_error_count > (autogain_enabled ? 1 : 2) * rx->fps) {
+      adc_error_count = 0;
+      adc0_p_ovl = 0;
+      adc1_p_ovl = 0;
+    }
+  }
 }
 
 void droid_rows_push(const float *db, float offset, int width, double fmin, double hzpp) {

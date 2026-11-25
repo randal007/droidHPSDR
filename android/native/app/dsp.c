@@ -21,7 +21,9 @@
 #include <math.h>
 #include <gtk/gtk.h>
 
+#include <stdatomic.h>
 #include "adc.h"
+#include "audio.h"
 #include "band.h"
 #include "mode.h"
 #include "radio.h"
@@ -125,6 +127,9 @@ enum {
   /* the AGC lines on the spectrum (M4 pick F): gain and hang threshold to set,
    * the two lines' levels in dBm to read (rx_panadapter.c draws them there) */
   F_AGC_GAIN = F_EQ_FREQ0 + 13, F_AGC_HANG_TH, F_AGC_LINE, F_AGC_HANG_LINE,
+  /* deskHPSDR's RX menu, the parts that matter on an HL2 */
+  F_AUTOGAIN, F_AUTOGAIN_TIME, F_DIGU_OFFSET, F_DIGL_OFFSET, F_AUDIO_CHANNEL, F_TEST_AUDIO,
+  F_RESERVE_ON, F_RESERVE_MS, F_MUTE_RADIO, F_RX_IQ_GAIN, F_RX_IQ_PHASE, F_LNA,
   F_COUNT,
 };
 
@@ -165,6 +170,15 @@ void droid_dsp_get(double *out) {
   out[F_AGC_HANG_TH] = rx->agc_hang_threshold;
   out[F_AGC_LINE] = rx->agc_thresh + soffset;
   out[F_AGC_HANG_LINE] = rx->agc_hang + soffset;
+  out[F_AUTOGAIN] = autogain_enabled; out[F_AUTOGAIN_TIME] = autogain_time_enabled;
+  out[F_DIGU_OFFSET] = rx->digi_offset_u; out[F_DIGL_OFFSET] = rx->digi_offset_l;
+  out[F_AUDIO_CHANNEL] = rx->audio_channel;
+  out[F_RESERVE_ON] = g_atomic_int_get(&rx_audio_network_reserve_enabled);
+  out[F_RESERVE_MS] = g_atomic_int_get(&rx_audio_network_reserve_ms);
+  out[F_MUTE_RADIO] = rx->mute_radio;
+  out[F_RX_IQ_GAIN] = atomic_load_explicit(&((RECEIVER *)rx)->rx_iq_gain, memory_order_relaxed);
+  out[F_RX_IQ_PHASE] = atomic_load_explicit(&((RECEIVER *)rx)->rx_iq_phase, memory_order_relaxed);
+  out[F_LNA] = adc[rx->adc].gain;
 }
 
 /* On the radio's loop thread (radio_core.c CMD_DSP). */
@@ -226,6 +240,19 @@ void droid_dsp_apply(int field, double v) {
   /* sliders.c's AGC gain slider (-20..120) and agc_menu.c's hang threshold (0..100) */
   case F_AGC_GAIN: rx->agc_gain = clampd(v, -20.0, 120.0); rx_set_agc_gain(rx); break;
   case F_AGC_HANG_TH: rx->agc_hang_threshold = clampi(v, 0, 100); rx_set_agc(rx); break;
+  /* rx_menu.c */
+  case F_AUTOGAIN: autogain_enabled = v != 0; droid_autogain_run(1); g_idle_add(ext_vfo_update, NULL); break;
+  case F_AUTOGAIN_TIME: autogain_time_enabled = v != 0; droid_autogain_run(1); break;
+  case F_DIGU_OFFSET: rx->digi_offset_u = clampi(v, 0, 4000); rx_frequency_changed(rx); g_idle_add(ext_vfo_update, NULL); break;
+  case F_DIGL_OFFSET: rx->digi_offset_l = clampi(v, 0, 4000); rx_frequency_changed(rx); g_idle_add(ext_vfo_update, NULL); break;
+  case F_AUDIO_CHANNEL: rx->audio_channel = clampi(v, STEREO, RIGHT); break;
+  case F_TEST_AUDIO: audio_test_start(rx); break;
+  case F_RESERVE_ON: g_atomic_int_set(&rx_audio_network_reserve_enabled, v != 0); break;
+  case F_RESERVE_MS: g_atomic_int_set(&rx_audio_network_reserve_ms, clampi(v, 5, 500)); break;
+  case F_MUTE_RADIO: rx->mute_radio = v != 0; break;
+  /* fft_menu.c: manual RX I/Q correction, applied by receiver.c */
+  case F_RX_IQ_GAIN: atomic_store_explicit(&rx->rx_iq_gain, clampd(v, -5.0, 5.0), memory_order_relaxed); break;
+  case F_RX_IQ_PHASE: atomic_store_explicit(&rx->rx_iq_phase, clampd(v, -20.0, 20.0), memory_order_relaxed); break;
   case F_LOW_LATENCY: rx->low_latency = v != 0; rx_set_fft_latency(rx); break;
   case F_FIR_SIZE: {  /* a power of two, at least the DSP size, 1k..16k (fft_menu.c) */
     int s = clampi(v, 1024, 16384);

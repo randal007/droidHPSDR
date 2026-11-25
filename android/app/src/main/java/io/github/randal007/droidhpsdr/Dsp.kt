@@ -132,7 +132,7 @@ internal fun Setting(label: String, value: Double, range: ClosedFloatingPointRan
 }
 
 @Composable
-private fun SmallButton(t: String, modifier: Modifier = Modifier, on: Boolean = false, onClick: () -> Unit) {
+internal fun SmallButton(t: String, modifier: Modifier = Modifier, on: Boolean = false, onClick: () -> Unit) {
     Box(
         modifier.height(32.dp).clip(RoundedCornerShape(10.dp))
             .background(if (on) Color(0x293FD0FF) else Color(0xFF0F1624))
@@ -441,6 +441,69 @@ internal fun DspSheet(st: Status) {
         sub = "phone audio in stereo; off with NNR") { set(Dsp.BINAURAL, it) }
     if (st.mode == Modes.CWU || st.mode == Modes.CWL) {
         Toggle("CW audio peak filter", on(d, Dsp.CW_PEAK)) { set(Dsp.CW_PEAK, it) }
+    }
+    Label("RX I/Q correction (manual): balances the I and Q channels to cancel a mirror image")
+    Setting("I/Q gain", d[Dsp.RX_IQ_GAIN], -5f..5f, 0.01, { "%+.2f dB".format(it) }) { Radio.setDsp(Dsp.RX_IQ_GAIN, it) }
+    Setting("I/Q phase", d[Dsp.RX_IQ_PHASE], -20f..20f, 0.05, { "%+.2f°".format(it) }) { Radio.setDsp(Dsp.RX_IQ_PHASE, it) }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        SmallButton("Reset I/Q") { Radio.setDsp(Dsp.RX_IQ_GAIN, 0.0); Radio.setDsp(Dsp.RX_IQ_PHASE, 0.0) }
+        Text("The HL2 mixes digitally, so it should need none: leave at 0 unless a mirror shows.",
+            color = Dim, fontSize = 10.5.sp)
+    }
+}
+
+// ---------------------------------------------------------------- deskHPSDR's RX menu (rx_menu.c)
+
+/** The RX menu's items that matter on an HL2 (Randal, 2026-11-24); the others are on the "later" list. */
+@Composable
+internal fun RxSheet(st: Status) {
+    val d by Radio.dsp.collectAsState()
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val phone by Radio.phoneAudio.collectAsState()
+    SheetTitle("RX")
+    val rate by Radio.sampleRate.collectAsState()
+    Label("Sample rate: how wide a band the radio hears at once (restarts the stream)")
+    val rates = listOf(96000, 192000, 384000)
+    Seg(rates.map { "${it / 1000} kHz" }, rates.indexOf(rate)) {
+        if (rates[it] != rate) {
+            Radio.setSampleRate(rates[it])
+            if (st.phase == Phase.RUNNING) RadioService.restart(ctx)
+        }
+    }
+    Label("HL2 ADC auto gain: the radio sets its own LNA gain, lowering it when the ADC overloads")
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Toggle("Auto gain RxPGA", on(d, Dsp.AUTOGAIN), Modifier.weight(1f)) { set(Dsp.AUTOGAIN, it) }
+        Toggle("Time-regulated", on(d, Dsp.AUTOGAIN_TIME), Modifier.weight(1f), enabled = on(d, Dsp.AUTOGAIN),
+            sub = "re-checks every 30 s") { set(Dsp.AUTOGAIN_TIME, it) }
+    }
+    Label("Digital modes: dial offset, so the frequency shown is the one in use")
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(Modifier.weight(1f)) {
+            Setting("DIGU offset", d[Dsp.DIGU_OFFSET], 0f..4000f, 10.0, { "%.0f Hz".format(it) }) { Radio.setDsp(Dsp.DIGU_OFFSET, it) }
+        }
+        Box(Modifier.weight(1f)) {
+            Setting("DIGL offset", d[Dsp.DIGL_OFFSET], 0f..4000f, 10.0, { "%.0f Hz".format(it) }) { Radio.setDsp(Dsp.DIGL_OFFSET, it) }
+        }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        SmallButton("Offset RTTY (1500 / 2210)") { Radio.setDsp(Dsp.DIGU_OFFSET, 1500.0); Radio.setDsp(Dsp.DIGL_OFFSET, 2210.0) }
+        SmallButton("Offset off") { Radio.setDsp(Dsp.DIGU_OFFSET, 0.0); Radio.setDsp(Dsp.DIGL_OFFSET, 0.0) }
+    }
+    Label("Audio")
+    Seg(listOf("Stereo", "Left only", "Right only"), i(d, Dsp.AUDIO_CHANNEL)) { Radio.setDsp(Dsp.AUDIO_CHANNEL, it.toDouble()) }
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Toggle("Mute audio", on(d, Dsp.MUTE_RADIO), Modifier.weight(1f), sub = "HL2+ and phone") { set(Dsp.MUTE_RADIO, it) }
+        SmallButton("Test audio", Modifier.weight(1f)) { Radio.setDsp(Dsp.TEST_AUDIO, 1.0) }
+    }
+    if (!phone) Text("Test audio plays on the phone: turn PHONE on first.", color = Dim, fontSize = 10.5.sp)
+    Label("RX audio network reserve: a bigger audio buffer, against dropouts on WiFi")
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Toggle("Reserve", on(d, Dsp.RESERVE_ON), Modifier.width(120.dp)) { set(Dsp.RESERVE_ON, it) }
+        Box(Modifier.weight(1f)) {
+            Setting("Audio reserve", d[Dsp.RESERVE_MS], 5f..500f, 5.0, { "%.0f ms".format(it) }, on(d, Dsp.RESERVE_ON)) {
+                Radio.setDsp(Dsp.RESERVE_MS, it)
+            }
+        }
     }
 }
 

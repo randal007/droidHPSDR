@@ -157,6 +157,11 @@ static void droid_radio_save_now(void) {
   bandSaveState();
   memSaveState();
   vfo_save_state();
+  /* radio.c's own entries for what the RX menu sets globally */
+  SetPropI0("rx_audio_network_reserve_enabled", rx_audio_network_reserve_enabled);
+  SetPropI0("rx_audio_network_reserve_ms", rx_audio_network_reserve_ms);
+  SetPropI0("autogain_enabled", autogain_enabled);
+  SetPropI0("autogain_time_enabled", autogain_time_enabled);
   saveProperties(props_path);
 }
 
@@ -408,7 +413,13 @@ setup:
     snprintf(props_path, sizeof props_path, "%s/%02X-%02X-%02X-%02X-%02X-%02X.props", o->props_dir, m[0], m[1],
              m[2], m[3], m[4], m[5]);
     int have_props = o->props_dir[0] && access(props_path, R_OK) == 0;
-    if (have_props) loadProperties(props_path);
+    if (have_props) {
+      loadProperties(props_path);
+      GetPropI0("rx_audio_network_reserve_enabled", rx_audio_network_reserve_enabled);
+      GetPropI0("rx_audio_network_reserve_ms", rx_audio_network_reserve_ms);
+      GetPropI0("autogain_enabled", autogain_enabled);
+      GetPropI0("autogain_time_enabled", autogain_time_enabled);
+    }
     filterRestoreState();
     bandRestoreState();
     memRestoreState();
@@ -472,11 +483,13 @@ setup:
   }
   atomic_store(&running, 1);
   pthread_create(&loop_thread, NULL, loop, NULL);
+  droid_autogain_run(1);   /* HL2 ADC auto gain, when it is on (RX page) */
   return 0;
 }
 
 void droid_radio_stop(void) {
   if (!atomic_load(&running)) return;
+  droid_autogain_run(0);
   atomic_store(&running, 0);
   pthread_join(loop_thread, NULL);
   if (receiver[0] && receiver[0]->local_audio) {
