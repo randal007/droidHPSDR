@@ -69,12 +69,18 @@ static void on_error(AAudioStream *s, void *user, aaudio_result_t err) {
   (void)s;
   out_t *o = user;
   droid_log("phone audio: stream error %s", AAudio_convertResultToText(err));
-  /* Never close a stream from its own callback: do it on another thread. */
-  if (err == AAUDIO_ERROR_DISCONNECTED && !atomic_load(&o->closing) && !atomic_exchange(&o->reopening, 1)) {
-    pthread_t t;
-    pthread_create(&t, NULL, reopen, o);
-    pthread_detach(t);
+  /* Never close a stream from its own callback: do it on another thread.
+   * Claim `reopening` first, then look at `closing` (close does the two the
+   * other way round), so a close at this moment either waits for us or we
+   * see it and back off. */
+  if (err != AAUDIO_ERROR_DISCONNECTED || atomic_exchange(&o->reopening, 1)) return;
+  if (atomic_load(&o->closing)) {
+    atomic_store(&o->reopening, 0);
+    return;
   }
+  pthread_t t;
+  pthread_create(&t, NULL, reopen, o);
+  pthread_detach(t);
 }
 
 static AAudioStream *open_stream(out_t *o) {
@@ -135,8 +141,9 @@ void audio_backend_output_close(void *handle) {
     o->stream = NULL;
   }
   pthread_mutex_unlock(&o->lock);
-  pthread_mutex_destroy(&o->lock);
-  free(o);
+  /* Not freed: an error callback that started just before closing may still
+   * be about to read o's flags (AAudio doesn't promise close waits for it).
+   * A few dozen bytes each time PHONE is turned off. */
 }
 
 /* A dropped stream is reopened above, so the output only counts as lost when

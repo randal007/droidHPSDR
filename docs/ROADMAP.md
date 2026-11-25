@@ -24,7 +24,15 @@ next, what's waiting on whom. Session history lives in git and in
   mode (USB 100 → CWU 25 → back).
 - **Code review per milestone (Randal 2026-11-25):** tags `m1-done`
   (master tip) and `m3-done` (e580fa6) mark the ends; review = `/code-review
-  <level> <tag>..<tag>`. M4+M5 done; M1 and M3 still to review. Tag
+  <level> <tag>..<tag>`. M4+M5 done; M3 done 2026-11-25 (10 findings,
+  all checked and fixed: CW filter edges and spectrum now shifted by the
+  pitch like deskHPSDR, command queue order, Stop while connecting, phone
+  audio close race, PHONE switch follows the radio, zoom after a
+  sample-rate change, LNA set while connecting, locks released when a
+  start fails, a clear message when the radio's address changes - that one
+  needs a fresh app process, old_protocol.c keeps the address). Radio
+  checks: CW tap-to-tune lands in the passband; drag a CW filter edge.
+  M1 still to review. Tag
   `m5-done` when M5 is accepted.
 - **M5 round 2 pictures sent** (E1-E6, `tools/mockups/layouts6.js`):
   Display tabs + manual levels (E1) or dragging the dB scale (E2),

@@ -109,6 +109,7 @@ void rx_panadapter_update(RECEIVER *rx) {
   double hzpp = (double)rx->sample_rate / (double)rx->pixels;
   /* the frequency of the row's data, not of now: see droid_freq_ago() */
   double fmin = (double)droid_freq_ago(droid_row_delay_us) - (double)rx->sample_rate * 0.5 + (double)start * hzpp;
+  fmin -= droid_cw_shift();   /* rx_panadapter.c: in CW the axis is shifted by the pitch */
 
   droid_rows_push(rx->pixel_samples + start, (float)soffset, width, fmin, hzpp);
 

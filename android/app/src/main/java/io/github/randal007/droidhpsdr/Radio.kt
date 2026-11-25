@@ -325,7 +325,7 @@ object Radio {
     }
 
     fun setSpan(hz: Double) {
-        span.value = hz.coerceIn(1_500.0, status.value.sampleRate * 0.95)
+        span.value = hz.coerceIn(1_500.0, rate() * 0.95)
         prefs.edit().putFloat("span", span.value.toFloat()).apply()
         applyZoom()
     }
@@ -335,9 +335,12 @@ object Radio {
      * the screen (sharp), while display_bridge.c keeps up to 8192 of them per
      * row, so ~4 screens of real data to drag into instead of black.
      */
+    /** The sample rate the stream runs at: just after a restart the poll hasn't caught up yet. */
+    private fun rate() = if (running) sampleRate.value.toDouble() else status.value.sampleRate.toDouble()
+
     fun applyZoom() {
         if (!running) return
-        val z = (status.value.sampleRate / span.value).toInt().coerceIn(1, 16)
+        val z = (rate() / span.value).toInt().coerceIn(1, 16)
         Native.setZoom(z)
     }
 
@@ -395,7 +398,10 @@ object Radio {
         val p = it.split('|'); p[0].toLong() to p[1].toInt()
     }
 
+    @Volatile private var lastPhoneMs = 0L
+
     fun setPhoneAudio(on: Boolean) {
+        lastPhoneMs = System.currentTimeMillis()
         phoneAudio.value = on
         if (running) Native.setPhoneAudio(on)
         prefs.edit().putBoolean("phoneAudio", on).apply()
@@ -493,6 +499,9 @@ object Radio {
                         freq.value = nf
                         prefs.edit().putLong("freq", nf).apply()
                     }
+                    // phone audio can fail to open, or upstream's watchdog turns it off: the switch follows
+                    val pa = a[12] != 0.0
+                    if (pa != phoneAudio.value && System.currentTimeMillis() - lastPhoneMs > 1500) phoneAudio.value = pa
                     // each mode keeps its own step (vfo.c mode_settings): the STEP chip follows
                     val ns = a[20].toInt()
                     if (ns > 0 && ns != step.value && System.currentTimeMillis() - lastStepMs > 400) {

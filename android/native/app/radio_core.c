@@ -58,7 +58,7 @@
 
 enum { CMD_FREQ, CMD_MODE, CMD_FILTER, CMD_VOLUME, CMD_LNA, CMD_PHONE_AUDIO, CMD_ZOOM, CMD_FPS, CMD_WINDOW, CMD_DETECTOR,
        CMD_FILTER_PRESET, CMD_BAND, CMD_BANDSTACK, CMD_VFO_OP, CMD_RIT, CMD_CTUN, CMD_LOCK, CMD_STEP, CMD_MEMORY,
-       CMD_AGC, CMD_SAVE, CMD_DSP };
+       CMD_AGC, CMD_SAVE, CMD_DSP, CMD_NONE };
 typedef struct { int type; long long i; double d; int a, b; } cmd;
 #define CMD_MAX 256
 static cmd cmds[CMD_MAX];
@@ -67,14 +67,22 @@ static pthread_mutex_t cmd_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static void post(cmd c) {
   pthread_mutex_lock(&cmd_lock);
-  /* A newer frequency replaces one still waiting, so a fast drag never lags. */
+  /* A newer frequency replaces one still waiting, so a fast drag never lags.
+   * Only in place when it is the last one queued; otherwise the old one is
+   * dropped and the new one goes to the end, so it never runs before
+   * commands sent after the old one (a filter drag, then a mode change). */
   if (c.type == CMD_FREQ || c.type == CMD_VOLUME || c.type == CMD_LNA || c.type == CMD_FILTER || c.type == CMD_ZOOM ||
       c.type == CMD_DSP) {
+    int last = (cmd_head + CMD_MAX - 1) % CMD_MAX;
     for (int k = cmd_tail; k != cmd_head; k = (k + 1) % CMD_MAX) {
       if (cmds[k].type == c.type && (c.type != CMD_DSP || cmds[k].a == c.a)) {
-        cmds[k] = c;
-        pthread_mutex_unlock(&cmd_lock);
-        return;
+        if (k == last) {
+          cmds[k] = c;
+          pthread_mutex_unlock(&cmd_lock);
+          return;
+        }
+        cmds[k].type = CMD_NONE;
+        break;
       }
     }
   }
@@ -383,7 +391,18 @@ static int radio_start_locked(const droid_start_opts *o, char *msg, int msglen) 
   droid_demo_stop();   /* the demo never feeds the display while the radio does */
 
   /* ---- discovery: deskHPSDR's own; once, like old_protocol_init ---- */
-  if (p1_started) goto setup;
+  if (p1_started) {
+    /* old_protocol.c keeps the radio's address from its one-time init
+     * (static data_addr): a different address can't be picked up without
+     * a fresh process. Say so instead of "running" with no data. */
+    const char *was = inet_ntoa(radio->info.network.address.sin_addr);
+    if (o->radio_ip[0] && strcmp(o->radio_ip, was) != 0) {
+      snprintf(msg, msglen, "The radio address changed (%s to %s): close droidHPSDR "
+               "(swipe it away in Recent apps) and open it again", was, o->radio_ip);
+      return -1;
+    }
+    goto setup;
+  }
   protocol = ORIGINAL_PROTOCOL;
   devices = 0;
   /* A known address (the wired link) uses upstream's targeted discovery:
@@ -527,6 +546,12 @@ void droid_radio_stop(void) {
 
 int droid_radio_running(void) { return atomic_load(&running); }
 
+int droid_cw_shift(void) {
+  if (vfo[0].mode == modeCWU) return cw_keyer_sidetone_frequency;
+  if (vfo[0].mode == modeCWL) return -cw_keyer_sidetone_frequency;
+  return 0;
+}
+
 void droid_get_status(droid_status *s) {
   memset(s, 0, sizeof *s);
   s->running = atomic_load(&running);
@@ -536,8 +561,9 @@ void droid_get_status(droid_status *s) {
   /* the listening frequency; with CTUN the centre (vfo[0].frequency) stays put */
   s->freq = vfo[0].ctun ? vfo[0].ctun_frequency : vfo[0].frequency;
   s->mode = vfo[0].mode;
-  s->filter_low = receiver[0]->filter_low;
-  s->filter_high = receiver[0]->filter_high;
+  /* in CW rx_set_filter() adds the pitch: report the filter's own edges (around the VFO) */
+  s->filter_low = receiver[0]->filter_low - droid_cw_shift();
+  s->filter_high = receiver[0]->filter_high - droid_cw_shift();
   s->sample_rate = receiver[0]->sample_rate;
   s->meter_dbm = droid_meter_dbm();
   s->lost_packets = atomic_load(&droid_sequence_errors);

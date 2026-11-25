@@ -138,6 +138,10 @@ void droid_get_status(droid_status *s);
 /* The VFO frequency the radio was on age_us ago (radio_core.c keeps a short
  * history), for labelling spectrum rows with the frequency of their data. */
 long long droid_freq_ago(int64_t age_us);
+/* CW: deskHPSDR shows the spectrum and filter edges shifted by the sidetone
+ * pitch, so a CW signal you hear at the pitch sits on the VFO line
+ * (rx_panadapter.c, receiver.c rx_set_filter). +pitch in CWU, -pitch in CWL. */
+int droid_cw_shift(void);
 
 /* How old a spectrum row's data is when it is drawn, microseconds. */
 extern int droid_row_delay_us;

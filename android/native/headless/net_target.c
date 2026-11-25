@@ -9,6 +9,9 @@
  * hides interface details), so when the routed local address is not found
  * there, a link-local /16 or a /24 netmask is assumed instead of failing.
  *
+ * discovery.c: Copyright (C) 2015 - John Melton, G0ORX/N6LYT,
+ * 2024-2026 - Heiko Amft, DL1BZ (Project deskHPSDR); GPL-3.0-or-later.
+ *
  * GPL v3 or later, like the rest of droidHPSDR.
  */
 #include <errno.h>

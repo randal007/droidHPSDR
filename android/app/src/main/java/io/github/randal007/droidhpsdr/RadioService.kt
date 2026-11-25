@@ -157,13 +157,19 @@ class RadioService : Service() {
                     Radio.freq.value, s.mode, Radio.lnaDb.value, true,
                     Radio.sampleRate.value, Radio.PIXELS, Radio.FPS, ip, filesDir.absolutePath,
                 )
-                if (err.isEmpty()) {
+                if (err.isEmpty() && !wanted) {
+                    // Stop was pressed while we were looking for the radio (phase isn't RUNNING:
+                    // stopStream() would skip it; the native stop checks for itself)
+                    synchronized(this@RadioService) { Native.stop() }
+                    Radio.setPhase(Phase.IDLE)
+                } else if (err.isEmpty()) {
                     Native.setVolumeDb(Radio.volumeDb.value)
+                    Native.setLnaDb(Radio.lnaDb.value)   // it may have changed while connecting
                     Native.setRowDelayMs(Radio.rowDelayMs.value)
-                    Native.setPhoneAudio(Radio.phoneAudio.value)
                     // no Native.step(): the props file brought back each mode's own step
                     Radio.setPhase(Phase.RUNNING, "", net)
-                    Radio.applyZoom()
+                    Radio.setPhoneAudio(Radio.phoneAudio.value)   // via Radio (needs RUNNING): the poll waits for it
+                    Radio.setSpan(Radio.span.value)   // re-clamped and zoomed for the (new) sample rate
                     Radio.setDisplay()
                     getSystemService(NotificationManager::class.java).notify(1, notification("Receiving on $net"))
                 } else {
@@ -175,6 +181,8 @@ class RadioService : Service() {
                 Radio.setPhase(Phase.ERROR, t.message ?: t.toString())
             } finally {
                 startingFlag.set(false)
+                // not receiving: don't keep the phone awake (the next start takes them again)
+                if (!Radio.running) releaseLocks()
             }
         }
     }
@@ -194,6 +202,11 @@ class RadioService : Service() {
         return name
     }
 
+    private fun releaseLocks() {
+        wifiLock?.takeIf { it.isHeld }?.release()
+        wakeLock?.takeIf { it.isHeld }?.release()
+    }
+
     private fun shutdown() {
         if (wanted) {
             wanted = false
@@ -202,8 +215,7 @@ class RadioService : Service() {
         main.removeCallbacks(replugStart)
         stopStream()   // also writes deskHPSDR's props file
         Radio.setPhase(Phase.IDLE)
-        wifiLock?.takeIf { it.isHeld }?.release()
-        wakeLock?.takeIf { it.isHeld }?.release()
+        releaseLocks()
         stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
