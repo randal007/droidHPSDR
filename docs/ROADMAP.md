@@ -6,20 +6,20 @@ next, what's waiting on whom. Session history lives in git and in
 
 ## Now (in short)
 
-- **M1 done 2026-11-23:** the S26 Ultra streams from the HL2 over USB
-  Ethernet with deskHPSDR's own protocol and receiver code, WDSP on the
-  phone, IO board detected and switching bands, FT8 audio heard on the HL2+
-  speaker. Receive only.
-- **Next: M3, the app and the waterfall**, started in a fresh session.
-  First step: 10-20 generated UI pictures, tweaked with Randal round by
-  round (see "How the look gets decided"), before any app code.
+- **M3 under way (branch `m3-app`, 2026-11-24).** The app runs on the S26
+  Ultra against the HL2: layout 1 ("glass cockpit", Randal's pick from the
+  round-1 pictures), GPU 3D view + waterfall, X6100 band bar and segment
+  tag, touch tuning, HL2+ speaker audio. Details in the M3 section.
+- **Waiting on the radio (Randal):** a test run of the 2026-11-24 evening
+  builds - phone audio, 2D view, peak hold/labels, smooth motion, sharp
+  zoom, hold-to-tune, display settings, screen-off audio.
 - No transmit until Randal asks for it (M7).
 - **Waiting on Randal:** whether to delete the empty leftover repo
   `randal007/DroidHPSDR-scaffold` (README only, from 2026-09-07).
-- **Phone state (2026-11-23):** developer options + USB debugging on; adb
-  over WiFi via `adb tcpip 5555` (gone after a phone restart: plug in USB
-  once and repeat); `m0-probe`, `wdsp-smoke`, `m1-rx` in /data/local/tmp;
-  Ethernet adapter configured static 169.254.1.1/16.
+- **Phone:** adb over **wireless debugging** (paired 2026-11-24; the port
+  changes, find it with `adb mdns services`); Ethernet adapter static
+  169.254.1.1/16. The app asks for *Local network* access (Android 17), which
+  it needs to reach the HL2.
 
 ## Goal
 
@@ -94,23 +94,42 @@ the previous one half-ticked.
 
 ## Sections
 
-### M3 — The app and the waterfall *(next)*
+### M3 — The app and the waterfall *(in progress)*
 
 The first thing that looks like droidHPSDR.
 
-- Android project: Gradle, Kotlin, Jetpack Compose, the native core from
-  `android/native` as a JNI library.
-- Foreground service that owns the radio (stream keeps running with the
-  screen off), Ethernet network binding via `Network.bindSocket` /
-  `android_setprocnetwork`, discovery screen plus "type the IP".
-- WDSP FFT wisdom on first start (11 s on this phone) with a progress note.
-- Spectrum + waterfall on the GPU from WDSP's analyzer (`Spectrum0` /
-  `GetPixels`): 2D first, then 3D with a 2D/3D switch; colour themes; peak
-  hold and peak labels; smooth at the phone's refresh rate.
-- Tuning by touch, Randal's way: drag/scroll the spectrum, fling, pinch
-  zoom (deskHPSDR's zoompan), tap a signal, hold-and-drag the frequency,
-  drag the filter edges for bandwidth. No knob, dial or wheel.
-- FEATURES.md: the display-related parts of Display, FFT and Screen menus.
+**Randal's picks and decisions (2026-11-23/24):**
+- Layout 1 from round 1 (`~/Pictures/droidhpsdr-mockups/round1`), plus the
+  X6100 band bar and segment alert (round 2, picture E for out of band).
+- Keep **all four 3D looks as themes** (X6100 look 3, AetherSDR curtains,
+  lit terrain, neon wire); more may come later.
+- Filter edges limited per mode by deskHPSDR's widest presets; ESSB kept.
+- **Phone audio as well as the HL2+** (CLAUDE.md decision 1 changed).
+
+**Done and checked on the radio:**
+- Android app (Gradle, Kotlin, Compose; native core as one JNI library),
+  foreground service, Ethernet binding, targeted discovery to
+  169.254.19.221, WDSP wisdom on first start.
+- GPU 3D view and waterfall from upstream's own display timer
+  (`rx_panadapter_update` hook), per-row frequency so tuning doesn't smear
+  (WDSP display averaging off; the 3D view averages rows itself).
+- Band bar + segment tag (X6100 `band_plan.c` tables), drag/fling/pinch/tap
+  tuning, drag the filter edges, per-mode filter limits and memory.
+- FT8 audio on the HL2+ speaker; IO board detected.
+
+**Built, not yet run on the radio:** phone audio (upstream
+`buffered_audio.c` + AAudio backend, PHONE chip), 2D view with peak hold,
+six waterfall themes, peak labels, smooth motion between rows, sharp zoom
+(upstream zoom 1-16), hold-and-drag the frequency digits, display settings
+(split, fps, FFT window, detector, 3D depth), radio address fields (WiFi
+needs the IP: an app cannot broadcast), battery-optimisation request,
+demo band (`--ez demo true`) for display work with the radio off.
+
+**Still to do:**
+- Test all of the above on the radio, plus audio with the screen off and
+  Bluetooth headphones; tune the row delay (menu slider, 90 ms now).
+- FEATURES.md: tick the checked display items; propose "not doing" lines
+  for desktop-only ones (CSS, window size) for Randal to agree.
 
 **Done when:** on the radio, the waterfall looks the way Randal picked from
 the mock-ups, tunes by touch, and audio keeps playing with the screen off.
