@@ -88,7 +88,9 @@ object Dsp {
     const val AUTOGAIN = 67; const val AUTOGAIN_TIME = 68; const val DIGU_OFFSET = 69; const val DIGL_OFFSET = 70
     const val AUDIO_CHANNEL = 71; const val TEST_AUDIO = 72; const val RESERVE_ON = 73; const val RESERVE_MS = 74
     const val MUTE_RADIO = 75; const val RX_IQ_GAIN = 76; const val RX_IQ_PHASE = 77; const val LNA = 78
-    const val COUNT = 79
+    // AGC Automatic (agc_menu.c) and the S-meter reading (meter_menu.c: 1 = Peak, 0 = Average)
+    const val AGC_AUTO = 79; const val AGC_AUTO_OFFSET = 80; const val SMETER_PEAK = 81
+    const val COUNT = 82
 
     val NR_NAMES = listOf("Off", "NR", "NR2", "NR3", "NR4", "NNR")
     val NB_NAMES = listOf("Off", "NB", "NB2")
@@ -101,7 +103,7 @@ object Dsp {
         d[NB_SLEW] = 0.01; d[NB_LEAD] = 0.01; d[NB_LAG] = 0.01; d[NB_THRESH] = 30.0
         d[NR4_REDUCTION] = 10.0; d[NR4_RESCALE] = 2.0; d[NR4_THRESHOLD] = -10.0; d[NNR_FLOOR] = -25.0
         d[FIR_SIZE] = 2048.0
-        d[RESERVE_MS] = 100.0; d[LNA] = 20.0
+        d[RESERVE_MS] = 100.0; d[LNA] = 20.0; d[AGC_AUTO_OFFSET] = -25.0
         d[AGC_GAIN] = 80.0; d[AGC_LINE] = -95.0; d[AGC_HANG_LINE] = -105.0   // levels: made up until the radio says
         listOf(0.0, 50.0, 100.0, 200.0, 500.0, 1000.0, 1500.0, 2000.0, 2500.0, 3000.0, 5000.0, 6000.0, 8000.0)
             .forEachIndexed { i, f -> d[EQ_FREQ0 + i] = f }
@@ -195,6 +197,10 @@ object Radio {
         if (running) Native.dspSet(field, v)
     }
 
+    /** deskHPSDR's Meter Type: analog needle instead of the digital bar (M4 pick G). */
+    val analogMeter = MutableStateFlow(false)
+    fun setAnalogMeter(on: Boolean) { analogMeter.value = on; prefs.edit().putBoolean("analogMeter", on).apply() }
+
     /** The bottom row (deskHPSDR's Toolbar menu, the phone's way): chip ids, see ChipSpec. */
     val chips = MutableStateFlow(DEFAULT_CHIPS)
 
@@ -248,6 +254,7 @@ object Radio {
         wiredIp.value = prefs.getString("wiredIp", "169.254.19.221") ?: "169.254.19.221"
         wifiIp.value = prefs.getString("wifiIp", "") ?: ""
         status.value = status.value.copy(mode = prefs.getInt("mode", Modes.DIGU))
+        analogMeter.value = prefs.getBoolean("analogMeter", false)
         prefs.getString("chips", null)?.let { c -> chips.value = c.split(",").filter { it.isNotBlank() } }
     }
 

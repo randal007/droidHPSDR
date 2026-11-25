@@ -8,6 +8,8 @@
  *
  * GPL v3 or later, like the rest of droidHPSDR.
  */
+#include <stdlib.h>
+#include <time.h>
 #include <pthread.h>
 #include <math.h>
 #include <stdlib.h>
@@ -42,6 +44,55 @@ void rx_panadapter_init(RECEIVER *rx, int width, int height) { (void)rx; (void)w
 void waterfall_init(RECEIVER *rx, int width, int height) { (void)rx; (void)width; (void)height; }
 void waterfall_update(RECEIVER *rx) { (void)rx; }   /* the renderer keeps its own history */
 
+static int cmp_double(const void *a, const void *b) {
+  double x = *(const double *)a, y = *(const double *)b;
+  return x < y ? -1 : x > y;
+}
+
+/* AGC auto (agc_menu.c's "AGC Automatic"): rx_panadapter.c measures the noise
+ * floor once a second (60th percentile + 3 dB, smoothed) and every 5 s sets
+ * the AGC gain to -noise floor + offset. rx_panadapter.c is replaced by this
+ * file, so that part is copied here (deskHPSDR rx_panadapter.c, (C) 2015 John
+ * Melton G0ORX/N6LYT, 2024-2026 Heiko Amft DL1BZ, GPL-3.0-or-later). */
+static void agc_auto(RECEIVER *rx, const float *samples, int width, double soffset) {
+  const double ignore_noise_percentile = 60.0;
+  const gint64 noisefloor_measure_interval_us = 1000000;
+  const int noisefloor_update_interval = 5;   /* s */
+  const double noisefloor_ema_alpha = 0.25;
+  const gint64 now_us = g_get_monotonic_time();
+  time_t current_time;
+  int measured = 0;
+  time(&current_time);
+  if (width <= 0) return;
+  if (!rx->panadapter_smoothed_noise_floor_valid || rx->panadapter_last_noisefloor_measure_us == 0 ||
+      now_us - rx->panadapter_last_noisefloor_measure_us >= noisefloor_measure_interval_us) {
+    static double sorted[DROID_ROW_MAX];
+    for (int i = 0; i < width; i++) sorted[i] = (double)samples[i] + soffset;
+    qsort(sorted, width, sizeof(double), cmp_double);
+    double level = sorted[(int)((ignore_noise_percentile / 100.0) * width)] + 3.0;
+    if (!rx->panadapter_smoothed_noise_floor_valid) {
+      rx->panadapter_smoothed_noise_floor = level;
+      rx->panadapter_smoothed_noise_floor_valid = 1;
+    } else {
+      rx->panadapter_smoothed_noise_floor += (level - rx->panadapter_smoothed_noise_floor) * noisefloor_ema_alpha;
+    }
+    rx->panadapter_last_noisefloor_measure_us = now_us;
+    measured = 1;
+  }
+  if (rx->agc_auto && measured &&
+      (rx->panadapter_noisefloor_first_run || rx->panadapter_noisefloor_fast_start_count > 0 ||
+       difftime(current_time, rx->panadapter_last_noisefloor_calc_time) >= noisefloor_update_interval)) {
+    double target_agc = -rx->panadapter_smoothed_noise_floor + rx->agc_auto_offset;
+    if (target_agc < -20.0) target_agc = -20.0;
+    else if (target_agc > 120.0) target_agc = 120.0;
+    rx->agc_gain = target_agc;
+    rx_set_agc_gain(rx);
+    rx->panadapter_last_noisefloor_calc_time = current_time;
+    rx->panadapter_noisefloor_first_run = 0;
+    if (rx->panadapter_noisefloor_fast_start_count > 0) rx->panadapter_noisefloor_fast_start_count--;
+  }
+}
+
 void rx_panadapter_update(RECEIVER *rx) {
   if (rx != receiver[0] || rx->pixel_samples == NULL || rx->pixels <= 0) return;
   /* Not just the zoomed window upstream would draw: as much of the whole
@@ -60,6 +111,8 @@ void rx_panadapter_update(RECEIVER *rx) {
   double fmin = (double)droid_freq_ago(droid_row_delay_us) - (double)rx->sample_rate * 0.5 + (double)start * hzpp;
 
   droid_rows_push(rx->pixel_samples + start, (float)soffset, width, fmin, hzpp);
+
+  agc_auto(rx, rx->pixel_samples + start, width, soffset);
 
   /* rx_panadapter.c clears the protocol's sticky ADC overload flags after a
    * while (1 s with auto gain, 2 s without); the auto gain thread reads them */

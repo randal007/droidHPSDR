@@ -130,6 +130,8 @@ enum {
   /* deskHPSDR's RX menu, the parts that matter on an HL2 */
   F_AUTOGAIN, F_AUTOGAIN_TIME, F_DIGU_OFFSET, F_DIGL_OFFSET, F_AUDIO_CHANNEL, F_TEST_AUDIO,
   F_RESERVE_ON, F_RESERVE_MS, F_MUTE_RADIO, F_RX_IQ_GAIN, F_RX_IQ_PHASE, F_LNA,
+  /* agc_menu.c's AGC Automatic and meter_menu.c's S-meter reading */
+  F_AGC_AUTO, F_AGC_AUTO_OFFSET, F_SMETER_PEAK,
   F_COUNT,
 };
 
@@ -179,6 +181,8 @@ void droid_dsp_get(double *out) {
   out[F_RX_IQ_GAIN] = atomic_load_explicit(&((RECEIVER *)rx)->rx_iq_gain, memory_order_relaxed);
   out[F_RX_IQ_PHASE] = atomic_load_explicit(&((RECEIVER *)rx)->rx_iq_phase, memory_order_relaxed);
   out[F_LNA] = adc[rx->adc].gain;
+  out[F_AGC_AUTO] = rx->agc_auto; out[F_AGC_AUTO_OFFSET] = rx->agc_auto_offset;
+  out[F_SMETER_PEAK] = rx->smetermode == SMETER_PEAK;
 }
 
 /* On the radio's loop thread (radio_core.c CMD_DSP). */
@@ -253,6 +257,12 @@ void droid_dsp_apply(int field, double v) {
   /* fft_menu.c: manual RX I/Q correction, applied by receiver.c */
   case F_RX_IQ_GAIN: atomic_store_explicit(&rx->rx_iq_gain, clampd(v, -5.0, 5.0), memory_order_relaxed); break;
   case F_RX_IQ_PHASE: atomic_store_explicit(&rx->rx_iq_phase, clampd(v, -20.0, 20.0), memory_order_relaxed); break;
+  case F_AGC_AUTO:
+    rx->agc_auto = v != 0;
+    if (rx->agc_auto) rx->panadapter_noisefloor_first_run = 1;
+    break;
+  case F_AGC_AUTO_OFFSET: rx->agc_auto_offset = clampd(v, -35.0, -15.0); break;
+  case F_SMETER_PEAK: rx->smetermode = v != 0 ? SMETER_PEAK : SMETER_AVERAGE; break;
   case F_LOW_LATENCY: rx->low_latency = v != 0; rx_set_fft_latency(rx); break;
   case F_FIR_SIZE: {  /* a power of two, at least the DSP size, 1k..16k (fft_menu.c) */
     int s = clampi(v, 1024, 16384);

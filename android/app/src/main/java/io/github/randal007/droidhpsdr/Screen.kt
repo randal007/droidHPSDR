@@ -107,7 +107,7 @@ internal val Grn = Color(0xFF3EE07A)
 internal val Red = Color(0xFFFF5A50)
 
 
-internal enum class Sheet { BAND, MODE, AF, LNA, FILTER, MENU, DISPLAY, FREQ, VFO, AGC, SDR, DISCOVERY, ABOUT, NOISE, EQ, DSP, TOOLBAR, RX }
+internal enum class Sheet { BAND, MODE, AF, LNA, FILTER, MENU, DISPLAY, FREQ, VFO, AGC, SDR, DISCOVERY, ABOUT, NOISE, EQ, DSP, TOOLBAR, RX, METER }
 
 internal fun Modifier.glass(r: Int = 14) =
     clip(RoundedCornerShape(r.dp)).background(Glass).border(1.dp, Line, RoundedCornerShape(r.dp))
@@ -130,7 +130,11 @@ fun Screen(onStart: () -> Unit, onStop: () -> Unit) {
             AndroidView(factory = { SpectrumView(it) }, modifier = Modifier.fillMaxSize())
             SpectrumOverlay(Modifier.fillMaxSize())
 
-            MeterCard(status.meterDbm, Modifier.align(Alignment.TopStart).padding(10.dp))
+            // hold the meter: deskHPSDR's Meter menu
+            val analog by Radio.analogMeter.collectAsState()
+            val meterMod = Modifier.align(Alignment.TopStart).padding(10.dp)
+            if (analog) AnalogMeter(status.meterDbm, meterMod) { sheet = Sheet.METER; fromMenu = false }
+            else MeterCard(status.meterDbm, meterMod) { sheet = Sheet.METER; fromMenu = false }
             VfoPill(freq, status, { sheet = Sheet.MODE }, { sheet = Sheet.FILTER }, { sheet = Sheet.FREQ }, { sheet = Sheet.VFO },
                 Modifier.align(Alignment.TopCenter).padding(top = 8.dp))
             SegmentTag(freq, Modifier.align(Alignment.TopCenter).padding(top = 76.dp))
@@ -506,10 +510,12 @@ private fun fmtAxis(f: Double, step: Double): String {
 
 // ---------------------------------------------------------------- top widgets
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MeterCard(dbm: Double, modifier: Modifier) {
+private fun MeterCard(dbm: Double, modifier: Modifier, onHold: () -> Unit) {
     val (label, level) = sMeter(dbm)
-    Column(modifier.width(168.dp).glass().padding(horizontal = 11.dp, vertical = 9.dp)) {
+    Column(modifier.width(168.dp).glass().combinedClickable(onClick = {}, onLongClick = onHold)
+        .padding(horizontal = 11.dp, vertical = 9.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text(label, color = Txt, fontSize = 20.sp, fontWeight = FontWeight.Medium)
             Text("%.0f dBm".format(dbm), color = Dim, fontSize = 11.sp)
@@ -537,7 +543,7 @@ private fun MeterCard(dbm: Double, modifier: Modifier) {
 }
 
 /** The label from deskHPSDR's S-unit table (SMeter.kt); the bar: 6 dB per S-unit, then 10 dB segments. */
-private fun sMeter(dbm: Double): Pair<String, Double> {
+internal fun sMeter(dbm: Double): Pair<String, Double> {
     val f = Radio.freq.value
     val s9 = if (f > 30_000_000L) -93.0 else -73.0
     val label = SMeter.label(f, dbm).let { if (it == "no signal") "S0" else if (it == "out of range") "S9+" else it }
@@ -853,6 +859,7 @@ private fun SheetHost(
                 Sheet.ABOUT -> AboutSheet()
                 Sheet.DSP -> DspSheet(st)
                 Sheet.RX -> RxSheet(st)
+                Sheet.METER -> MeterSheet()
                 Sheet.NOISE, Sheet.EQ, Sheet.TOOLBAR -> {}
                 Sheet.DISPLAY -> DisplaySheet()
                 Sheet.FREQ -> FreqSheet(close)
@@ -1017,6 +1024,7 @@ private fun FilterSheet(st: Status, close: () -> Unit) {
 private fun AgcSheet(st: Status, close: () -> Unit) {
     SheetTitle("AGC")
     GridButtons(AGC_NAMES, AGC_NAMES.getOrNull(st.agc), 5) { Radio.agc(it); close() }
+    AgcMore(st)
 }
 
 internal val AGC_NAMES = listOf("Off", "Long", "Slow", "Med", "Fast")
@@ -1123,7 +1131,7 @@ private class MenuItem(val label: String, val sheet: Sheet? = null, val later: S
  */
 private val MENU_COLUMNS = listOf(
     listOf(MenuItem("SDR Device", Sheet.SDR), MenuItem("Screen", later = "M5"), MenuItem("Display", Sheet.DISPLAY),
-        MenuItem("Meter", later = "M4"), MenuItem("XVTR", later = "M6"), MenuItem("Discovery", Sheet.DISCOVERY)),
+        MenuItem("Meter", Sheet.METER), MenuItem("XVTR", later = "M6"), MenuItem("Discovery", Sheet.DISCOVERY)),
     listOf(MenuItem("VFO", Sheet.VFO), MenuItem("Band", Sheet.BAND), MenuItem("BandStack", Sheet.BAND),
         MenuItem("Mode", Sheet.MODE), MenuItem("Memory", Sheet.BAND)),
     listOf(MenuItem("RX", Sheet.RX), MenuItem("RX Filter", Sheet.FILTER), MenuItem("Noise", Sheet.NOISE),

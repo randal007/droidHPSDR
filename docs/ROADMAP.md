@@ -22,8 +22,10 @@ next, what's waiting on whom. Session history lives in git and in
 - **Next with the radio:** the M4 test list (M4 section), then M5: does
   NR2/NR4/NNR sound right on the HL2+ and the phone, notch, squelch, EQ,
   auto gain, AGC line levels against deskHPSDR's.
-- **Still M4:** G (analog meter, peak/average), AGC auto + offset (deskHPSDR
-  runs it in rx_panadapter.c, which the app replaces).
+- **M4 leftovers built too (untested):** G, the analog meter with
+  Peak/Avg and the Meter menu (hold the meter); the AGC menu's rest (AGC
+  Automatic + offset, copied from rx_panadapter.c into display_bridge.c;
+  gain and hang threshold sliders). The whole M4 menu column is now built.
 - **Waiting on Randal:** whether to delete the empty leftover repo
   `randal007/DroidHPSDR-scaffold`.
 - **Phone:** the app (debug build) installed; adb over **wireless
