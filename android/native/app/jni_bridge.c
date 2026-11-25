@@ -116,6 +116,10 @@ JNIEXPORT void JNICALL FN(setVolumeDb)(JNIEnv *env, jobject self, jdouble db) {
   (void)env; (void)self;
   droid_set_volume_db(db);
 }
+JNIEXPORT void JNICALL FN(setRowDelayMs)(JNIEnv *env, jobject self, jint ms) {
+  (void)env; (void)self;
+  droid_row_delay_us = ms * 1000;
+}
 JNIEXPORT void JNICALL FN(setLnaDb)(JNIEnv *env, jobject self, jdouble db) {
   (void)env; (void)self;
   droid_set_lna_db(db);

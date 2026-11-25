@@ -584,7 +584,11 @@ private fun presets(mode: Int): List<Pair<String, Pair<Int, Int>>> {
     fun sym(w: Int) = -w / 2 to w / 2
     return when (mode) {
         Modes.USB, Modes.LSB -> listOf(1800, 2100, 2400, 2700, 2900, 3300, 3800, 4400)
-            .map { widthLabel(it) to ssb(it, mode == Modes.LSB) }
+            .map { widthLabel(it) to ssb(it, mode == Modes.LSB) } +
+            // deskHPSDR's ESSB presets: 50 Hz low edge
+            listOf(2900, 3400).map { w ->
+                "ESSB ${widthLabel(w)}" to if (mode == Modes.LSB) -(50 + w) to -50 else 50 to 50 + w
+            }
         Modes.DIGU, Modes.DIGL -> listOf(500, 1000, 1500, 2000, 2500, 3000, 4000, 5000)
             .map { widthLabel(it) to dig(it, mode == Modes.DIGL) }
         Modes.CWU, Modes.CWL -> listOf(50, 100, 250, 400, 500, 600, 800, 1000).map { widthLabel(it) to sym(it) }
@@ -616,6 +620,15 @@ private fun MenuSheet(st: Status, onStart: () -> Unit, onStop: () -> Unit, close
     )
     Text("Band plan region", color = Dim, fontSize = 11.sp)
     GridButtons(listOf("Region 1", "Region 2", "Region 3"), "Region $region", 3) { Radio.setRegion(it + 1) }
+    val delay by Radio.rowDelayMs.collectAsState()
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text("Tuning delay (test): spectrum rows are this old", color = Dim, fontSize = 11.sp)
+        Text("$delay ms", color = Acc, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+    }
+    Slider(
+        value = delay.toFloat(), onValueChange = { Radio.setRowDelay(it.roundToInt()) }, valueRange = 0f..400f,
+        colors = SliderDefaults.colors(thumbColor = Acc, activeTrackColor = Acc),
+    )
     GridButtons(listOf(if (st.phase == Phase.RUNNING) "Stop radio" else "Start radio"), null, 1) {
         if (st.phase == Phase.RUNNING) onStop() else onStart()
         close()

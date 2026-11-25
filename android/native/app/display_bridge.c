@@ -27,6 +27,12 @@
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 static droid_row queue[DROID_ROW_QUEUE];
 static uint64_t newest;   /* seq of the newest row, 0 = none yet */
+
+/* About half the analyzer's FFT window (16384 points at 192 kHz = 85 ms)
+ * plus the trip through the HL2 and WDSP's input buffer. Set from the UI
+ * while testing; the right value makes a signal stay a straight line while
+ * tuning. */
+int droid_row_delay_us = 90000;
 static double meter_dbm = -140.0;
 static double noise_floor = -125.0;   /* 20th percentile of the newest row, dBm */
 
@@ -45,7 +51,8 @@ void rx_panadapter_update(RECEIVER *rx) {
   const BAND *band = band_get_band(vfo[rx->id].band);
   double soffset = (double)(rx_gain_calibration - band->gain) + (double)adc[rx->adc].attenuation - adc[rx->adc].gain;
   double hzpp = (double)rx->sample_rate / (double)rx->pixels;
-  double fmin = (double)vfo[rx->id].frequency - (double)rx->sample_rate * 0.5 + (double)rx->pan * hzpp;
+  /* the frequency of the row's data, not of now: see droid_freq_ago() */
+  double fmin = (double)droid_freq_ago(droid_row_delay_us) - (double)rx->sample_rate * 0.5 + (double)rx->pan * hzpp;
 
   pthread_mutex_lock(&lock);
   droid_row *r = &queue[(newest + 1) % DROID_ROW_QUEUE];

@@ -77,6 +77,13 @@ typedef struct {
 } droid_status;
 void droid_get_status(droid_status *s);
 
+/* The VFO frequency the radio was on age_us ago (radio_core.c keeps a short
+ * history), for labelling spectrum rows with the frequency of their data. */
+long long droid_freq_ago(int64_t age_us);
+
+/* How old a spectrum row's data is when it is drawn, microseconds. */
+extern int droid_row_delay_us;
+
 /* WDSP's FFT wisdom: slow the first time (about 11 s on the S26 Ultra). */
 int droid_wisdom(const char *dir);
 const char *droid_wisdom_status(void);

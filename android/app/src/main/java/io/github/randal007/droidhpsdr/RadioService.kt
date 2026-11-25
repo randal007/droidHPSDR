@@ -78,7 +78,9 @@ class RadioService : Service() {
                 )
                 if (err.isEmpty()) {
                     Native.setVolumeDb(Radio.volumeDb.value)
+                    Native.setRowDelayMs(Radio.rowDelayMs.value)
                     Radio.setPhase(Phase.RUNNING, "", net)
+                    Radio.applyModeFilter()
                     getSystemService(NotificationManager::class.java).notify(1, notification("Receiving on $net"))
                 } else {
                     Radio.setPhase(Phase.ERROR, err)

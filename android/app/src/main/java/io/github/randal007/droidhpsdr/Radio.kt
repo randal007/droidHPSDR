@@ -32,6 +32,34 @@ object Modes {
 
     /** The modes offered in the picker, in deskHPSDR's order of use. */
     val picker = listOf(USB, LSB, CWU, CWL, DIGU, DIGL, AM, SAM, FM)
+
+    /**
+     * How far the passband edges may go, per mode: deskHPSDR's own filter
+     * tables (src/filter.c) are the yardstick, so no edge goes past the widest
+     * preset upstream has for that mode. SSB keeps a 50 Hz low edge for ESSB.
+     */
+    data class Limits(val minLo: Int, val maxHi: Int, val minWidth: Int)
+
+    fun limits(m: Int): Limits? = when (m) {
+        USB -> Limits(50, 5150, 100)
+        LSB -> Limits(-5150, -50, 100)
+        DIGU -> Limits(0, 5000, 50)
+        DIGL -> Limits(-5000, 0, 50)
+        CWU, CWL -> Limits(-500, 500, 25)
+        AM, SAM, 2 -> Limits(-8000, 8000, 1000)
+        else -> null   // FM (set by deviation) and the rest: no edge dragging
+    }
+
+    /** The filter a mode starts with until the user changes it. */
+    fun defaultFilter(m: Int): Pair<Int, Int>? = when (m) {
+        USB -> 150 to 2850
+        LSB -> -2850 to -150
+        DIGU -> 0 to 3000
+        DIGL -> -3000 to 0
+        CWU, CWL -> -250 to 250
+        AM, SAM, 2 -> -4000 to 4000
+        else -> null
+    }
 }
 
 enum class Phase { IDLE, PREPARING, CONNECTING, RUNNING, ERROR }
@@ -83,6 +111,7 @@ object Radio {
         lnaDb.value = prefs.getFloat("lna", 20f).toDouble()
         step.value = prefs.getInt("step", 10)
         region.value = prefs.getInt("region", 2)
+        rowDelayMs.value = prefs.getInt("rowDelay", 90)
         status.value = status.value.copy(mode = prefs.getInt("mode", Modes.DIGU))
     }
 
@@ -101,12 +130,38 @@ object Radio {
         status.value = status.value.copy(mode = m)
         if (running) Native.setMode(m)
         prefs.edit().putInt("mode", m).apply()
+        applyModeFilter()
     }
 
+    /** The filter this mode had last (deskHPSDR keeps one per mode too), or its default. */
+    fun applyModeFilter() {
+        val m = status.value.mode
+        val saved = prefs.getString("filter.$m", null)?.split(",")?.mapNotNull { it.toIntOrNull() }
+        val f = if (saved != null && saved.size == 2) saved[0] to saved[1] else Modes.defaultFilter(m) ?: return
+        setFilter(f.first, f.second)
+    }
+
+    /** Edges are kept inside the mode's limits (Modes.limits); FM has none to set. */
     fun setFilter(low: Int, high: Int) {
-        val lo = minOf(low, high - 50)
-        status.value = status.value.copy(filterLow = lo, filterHigh = high)
-        if (running) Native.setFilter(lo, high)
+        val m = status.value.mode
+        val lim = Modes.limits(m) ?: return
+        var lo = low.coerceIn(lim.minLo, lim.maxHi - lim.minWidth)
+        var hi = high.coerceIn(lim.minLo + lim.minWidth, lim.maxHi)
+        if (hi - lo < lim.minWidth) {
+            if (low != status.value.filterLow) lo = hi - lim.minWidth else hi = lo + lim.minWidth
+        }
+        status.value = status.value.copy(filterLow = lo, filterHigh = hi)
+        if (running) Native.setFilter(lo, hi)
+        prefs.edit().putString("filter.$m", "$lo,$hi").apply()
+    }
+
+    /** Test setting: how old a spectrum row's data is (ms), so tuning doesn't smear. */
+    val rowDelayMs = MutableStateFlow(90)
+
+    fun setRowDelay(ms: Int) {
+        rowDelayMs.value = ms.coerceIn(0, 400)
+        if (running) Native.setRowDelayMs(rowDelayMs.value)
+        prefs.edit().putInt("rowDelay", rowDelayMs.value).apply()
     }
 
     fun setVolume(db: Double) {

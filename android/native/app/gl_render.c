@@ -131,8 +131,18 @@ static const char *T3_VS =
   "uniform vec2 uRectY;\n"             /* NDC y of the 3D area's top and bottom */
   "uniform float uLineHalf;\n"         /* ridge ribbon half width, px */
   "out float vS, vC, vEdge, vShade, vRib;\n"
+  /* this row and the two before it, averaged as power, each at its own
+   * frequency: smooth like deskHPSDR's averaging, but no smear when tuning */
+  "float smoothDb(float f) {\n"
+  "  float p = 0.0, n = 0.0;\n"
+  "  for (int k = 0; k < 3; k++) {\n"
+  "    float d = rowDb(uAge + k, f);\n"
+  "    if (d > -190.0) { p += exp2(d * 0.33219281); n += 1.0; }\n"
+  "  }\n"
+  "  return n > 0.0 ? log2(p / n) * 3.0103 : -200.0;\n"
+  "}\n"
   "float strength(float fu) {\n"
-  "  float db = rowDb(uAge, uViewLo + fu * uViewSpan);\n"
+  "  float db = smoothDb(uViewLo + fu * uViewSpan);\n"
   "  return clamp((db - uFloor) / uRange, 0.0, 1.0);\n"
   "}\n"
   "vec2 ridge(float mu) {\n"
@@ -146,7 +156,7 @@ static const char *T3_VS =
   "  float du = 1.0 / float(uCols - 1);\n"
   "  float mu = float(c) * du;\n"
   "  float fu = 0.5 + (mu - 0.5) * uSpan;\n"
-  "  float db = rowDb(uAge, uViewLo + fu * uViewSpan);\n"
+  "  float db = smoothDb(uViewLo + fu * uViewSpan);\n"
   "  vS = clamp((db - uFloor) / uRange, 0.0, 1.0);\n"
   "  vC = clamp((db - uFloor) / uCRange, 0.0, 1.0);\n"
   "  vec2 p = ridge(mu);\n"

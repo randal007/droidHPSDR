@@ -23,6 +23,8 @@ object Native {
     external fun setFilter(low: Int, high: Int)
     external fun setVolumeDb(db: Double)
     external fun setLnaDb(db: Double)
+    /** How old a spectrum row's data is, so rows drawn while tuning land at the right frequency. */
+    external fun setRowDelayMs(ms: Int)
 
     /** [running, freq, mode, filterLow, filterHigh, sampleRate, meterDbm, lostPackets, adcOverloads, lna, volume] */
     external fun status(out: DoubleArray)

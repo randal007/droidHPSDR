@@ -80,6 +80,42 @@ void droid_set_filter(int low, int high) { post((cmd){ .type = CMD_FILTER, .a = 
 void droid_set_volume_db(double db) { post((cmd){ .type = CMD_VOLUME, .d = db }); }
 void droid_set_lna_db(double db) { post((cmd){ .type = CMD_LNA, .d = db }); }
 
+/* ---- when the radio was on which frequency ----
+ * A spectrum row describes samples from some time before it is drawn (the
+ * radio's round trip plus the analyzer's FFT window), so display_bridge.c
+ * labels each row with the frequency of that moment, not of now. Without
+ * this, rows drawn while tuning land in the wrong place and smear. */
+#define FHIST 64
+static struct { int64_t t_us; long long f; } fhist[FHIST];
+static int fhist_n;
+static pthread_mutex_t fhist_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static int64_t now_us(void) { return g_get_monotonic_time(); }
+
+static void fhist_add(long long f) {
+  pthread_mutex_lock(&fhist_lock);
+  fhist[fhist_n % FHIST].t_us = now_us();
+  fhist[fhist_n % FHIST].f = f;
+  fhist_n++;
+  pthread_mutex_unlock(&fhist_lock);
+}
+
+long long droid_freq_ago(int64_t age_us) {
+  int64_t t = now_us() - age_us;
+  long long f = vfo[0].frequency;
+  pthread_mutex_lock(&fhist_lock);
+  /* newest entry not after t */
+  for (int k = fhist_n - 1; k >= 0 && k >= fhist_n - FHIST; k--) {
+    if (fhist[k % FHIST].t_us <= t) {
+      f = fhist[k % FHIST].f;
+      break;
+    }
+    if (k == fhist_n - FHIST || k == 0) f = fhist[k % FHIST].f;   /* older than we remember */
+  }
+  pthread_mutex_unlock(&fhist_lock);
+  return f;
+}
+
 static void run(const cmd *c) {
   RECEIVER *rx = receiver[0];
   switch (c->type) {
@@ -87,6 +123,7 @@ static void run(const cmd *c) {
     if (c->i < 100000 || c->i > 61440000) break;   /* HL2 range */
     vfo[0].band = get_band_from_frequency(c->i);
     rx_set_frequency(rx, c->i);
+    fhist_add(c->i);
     break;
   case CMD_MODE:
     if (c->a < 0 || c->a >= MODES) break;
@@ -242,7 +279,12 @@ int droid_radio_start(const droid_start_opts *o, char *msg, int msglen) {
   rx->display_waterfall = 0;
   rx->fps = o->fps;
   rx->displaying = 1;
-  rx_set_framerate(rx);
+  /* No WDSP display averaging: an averaged row blends the old and the new
+   * frequency for a few hundred ms after every retune, which smears the 3D
+   * view while tuning. gl_render.c smooths across rows instead, each row at
+   * its own frequency. */
+  rx->display_average_mode = AVG_NONE;
+  rx_set_framerate(rx);   /* also rx_set_average() */
 
   droid_log("HL2 at %s: %.3f MHz %s, LNA %+.0f dB, HL2+ codec %s, %d Hz, %d px at %d fps",
             inet_ntoa(radio->info.network.address.sin_addr), o->freq / 1e6, mode_string[o->mode], o->lna_db,
@@ -250,6 +292,7 @@ int droid_radio_start(const droid_start_opts *o, char *msg, int msglen) {
   snprintf(msg, msglen, "HL2 at %s, gateware %d.%d", inet_ntoa(radio->info.network.address.sin_addr),
            radio->software_version / 10, radio->software_version % 10);
 
+  fhist_add(vfo[0].frequency);
   old_protocol_init(rx->sample_rate);
   atomic_store(&running, 1);
   pthread_create(&loop_thread, NULL, loop, NULL);
