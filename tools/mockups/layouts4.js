@@ -212,3 +212,37 @@ Object.assign(LAYOUTS, {
     canvases: [['#c', base()]],
   }),
 });
+
+// M4 round 6 (Randal: indicators must not cover the 3D view)
+const pB = () => pillB();
+const tagsHTML = (sz = 10.5) => `<span class="tag amb" style="font-size:${sz}px">RIT +120</span><span class="tag" style="background:rgba(180,140,255,.2);color:#c9a8ff;font-size:${sz}px">SPLIT</span><span class="tag" style="font-size:${sz}px">🔒 LOCK</span>`;
+Object.assign(LAYOUTS, {
+  // 1: one status chip at the end of the bottom row (over the waterfall)
+  Z1: () => ({
+    html: cv('c', 0, 0, 832, 384) + meterCard() + topBtns() + pB() +
+      abs(10, 328, 812, 46, `<div class="row" style="gap:7px">${CHIPS.slice(0, 6).map(([l, v]) => chip(l, v)).join('')}
+        <div class="chip glass" style="min-width:150px;border-color:rgba(255,179,65,.45)"><span>VFO</span><div class="row" style="gap:4px"><b style="color:var(--amb);font-size:13px">RIT+120</b><b style="color:#c9a8ff;font-size:13px">SPL</b><b style="font-size:13px">🔒</b></div></div></div>`),
+    canvases: [['#c', base()]],
+  }),
+  // 2: in the dark frequency strip between 3D and waterfall, right end
+  Z2: () => ({
+    html: cv('c', 0, 0, 832, 384) + meterCard() + topBtns() + pB() + chips(CHIPS) +
+      abs(596, 184, 236, 16, `<div class="row" style="gap:5px;justify-content:flex-end;height:100%;padding-right:8px">${tagsHTML(9)}</div>`, '', 'background:rgba(2,5,12,.95)'),
+    canvases: [['#c', base({ f1: 14.098e6 })]],
+  }),
+  // 3: top-right corner of the waterfall, just under the band bar
+  Z3: () => ({
+    html: cv('c', 0, 0, 832, 384) + meterCard() + topBtns() + pB() + chips(CHIPS) +
+      abs(600, 210, 222, 26, `<div class="row" style="gap:5px;justify-content:flex-end">${tagsHTML()}</div>`),
+    canvases: [['#c', base()]],
+  }),
+  // 4: shown in the waterfall at their frequencies: RIT shifts the passband there, TX on B is a purple line
+  Z4: () => ({
+    html: cv('c', 0, 0, 832, 384) + meterCard() + topBtns() + pB() + chips(CHIPS) +
+      abs(440, 236, 70, 20, `<span class="tag amb">RIT +120</span>`) +
+      abs(Math.round((VB - 14.044e6) / 60e3 * 832) + 6, 262, 60, 20, `<span class="tag" style="background:rgba(180,140,255,.25);color:#d4b8ff">TX · B</span>`) +
+      abs(Math.round((VB - 14.044e6) / 60e3 * 832), 200, 2, 184, '', '', 'background:#b48cff;opacity:.85') +
+      abs(14, 236, 40, 20, `<span style="font-size:14px">🔒</span>`),
+    canvases: [['#c', base()]],
+  }),
+});
