@@ -138,6 +138,22 @@ the mock-ups, tunes by touch, and audio keeps playing with the screen off.
 
 Everything needed to *use* the receiver day to day.
 
+**Inventory:** `docs/M4-INVENTORY.md` (proposed "not doing" lines wait for
+Randal). **Pictures:** `~/Pictures/droidhpsdr-mockups/m4-round1` to `round7`.
+
+**Randal's picks so far (2026-11-24):**
+- VFO: the A+B mix. The top pill shows VFO A big and **VFO B small under
+  it** (no "hold to swap" text; holding B swaps). Tapping the pill opens the
+  full VFO panel (A/B, A>B, B>A, A<>B, split, RIT, RIT 0, CTUN, lock, step;
+  round 2 picture 3).
+- Indicators (RIT, split, lock, ...): a column **inside the pill, on the
+  right**, making it wider, never taller; **only the ones that are on**,
+  and none at all (narrow pill) when nothing is on. Nothing over the 3D
+  view. Pill glass more transparent (round 7; how much: open).
+- Band sheet with the band's stack and memories M0-M9 (round 1, E).
+- Open: F (drag the AGC line), G (analog meter, peak/avg), H (RIT by
+  dragging the passband).
+
 - VFO A/B, split display, step, RIT, CTUN, lock, the VFO bar.
 - Bands, band stacks, transverter bands later (M6), memories (Store).
 - Modes and filters (presets, variable filters, shift/width).
