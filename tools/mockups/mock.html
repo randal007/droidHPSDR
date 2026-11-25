@@ -1,0 +1,18 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link rel="stylesheet" href="style.css">
+<script src="render.js"></script>
+<script src="layouts.js"></script>
+<script src="layouts2.js"></script>
+<script src="layouts3.js"></script>
+<script src="layouts4.js"></script>
+<script src="layouts5.js"></script>
+<script src="layouts6.js"></script>
+</head><body><div id="screen"></div>
+<script>
+  const id = new URLSearchParams(location.search).get('l') || 'L1';
+  const L = LAYOUTS[id]();
+  document.getElementById('screen').innerHTML = L.html;
+  for (const [sel, spec] of L.canvases) R.paint(document.querySelector(sel), spec);
+  document.title = 'done';
+</script></body></html>
