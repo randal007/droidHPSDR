@@ -62,18 +62,20 @@ project exists to fill.
 
 ## Non-negotiable design decisions
 
-### 1. Audio goes through the radio, never through Android
+### 1. Audio goes through the radio first
 
 Mic and speaker audio ride inside the Protocol 1 frames — mic samples up in the
 EP6 stream, demodulated audio down in the EP2 stream, to and from the AK4951 on
 the companion board.
 
-**Do not add Oboe, AAudio, or any Android audio dependency.** If a task seems to
-need one, the design is being misread. A local Android audio path is a distant
-secondary feature for plain-HL2 users and is not in scope now.
-
-piHPSDR/deskHPSDR already have a LOCAL vs RADIO audio routing concept. Find and
-adapt it rather than writing new.
+**Changed by Randal 2026-11-24: phone audio as well.** The HL2+ speaker stays
+the main path and always plays. A PHONE switch also plays the receiver on the
+phone (and so on Bluetooth headphones). It is deskHPSDR's own "local audio":
+upstream `src/buffered_audio.c` compiled unchanged, with
+`android/native/app/audio_aaudio.c` as its backend on Android's built-in
+AAudio. Still no Oboe or other audio library, and the microphone stays the
+HL2+'s. "Phone only" (HL2+ speaker muted) is not built: there is no clean
+upstream way to mute only the AK4951 speaker; ask before adding one.
 
 ### 2. WDSP stays
 
@@ -283,7 +285,7 @@ every step, then report. Nothing may live only in this conversation.
 - Don't add dependencies without asking. Every one has to cross-compile.
 - Don't reformat upstream files (see git strategy).
 - Don't write network interface configuration code — it needs root.
-- Don't add Android audio (see decision 1).
+- Phone audio only through upstream's local-audio path and AAudio (decision 1); no audio libraries.
 - Preserve per-file GPL copyright headers when moving or copying code.
 - Don't edit `vendor/` — patch via build scripts.
 
