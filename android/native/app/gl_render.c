@@ -36,7 +36,7 @@
 
 #include "droid_app.h"
 
-#define TEXW 4096          /* = DROID_ROW_MAX */
+#define TEXW 8192          /* = DROID_ROW_MAX */
 #define NR 1024            /* rows of history (~34 s at 30 rows/s) */
 #define WF_THEMES 6        /* waterfall colour themes, see the palettes */
 
@@ -118,7 +118,7 @@ static GLuint make_palette(const char **stops) {
   "  highp vec4 m = texelFetch(uMeta, ivec2(r, 0), 0);\n" \
   "  highp float px = (f - m.x) / m.y;\n" \
   "  if (px < 0.5 || px > m.z - 0.5) return -200.0;\n" \
-  "  return texture(uHeight, vec2(px / 4096.0, (float(r) + 0.5) / 1024.0)).r;\n" \
+  "  return texture(uHeight, vec2(px / 8192.0, (float(r) + 0.5) / 1024.0)).r;\n" \
   "}\n" \
   /* a row and the two before it, averaged as power, each at its own \
    * frequency: smooth like deskHPSDR's averaging, but no smear when tuning */ \
@@ -187,7 +187,7 @@ static const char *SP_FS =
   "  if (uPeakOn == 1) {\n"
   "    float pp = (uViewLo + vUv.x * uViewSpan - uPeakMeta.x) / uPeakMeta.y;\n"
   "    if (pp > 0.5 && pp < uPeakMeta.z - 0.5) {\n"
-  "      float yp = yOf(texture(uPeak, vec2(pp / 4096.0, 0.5)).r);\n"
+  "      float yp = yOf(texture(uPeak, vec2(pp / 8192.0, 0.5)).r);\n"
   "      c = mix(c, vec3(0.85, 0.9, 1.0), 0.45 * (1.0 - smoothstep(0.6, 1.6, abs(vUv.y - yp) / px.y)));\n"
   "    }\n"
   "  }\n"

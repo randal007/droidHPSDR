@@ -15,7 +15,7 @@
 
 /* ---- spectrum rows: display_bridge.c fills, the renderer drains ---- */
 
-#define DROID_ROW_MAX 4096   /* most pixels per row */
+#define DROID_ROW_MAX 8192   /* most pixels per row: zoomed rows keep ~4 screens of data */
 #define DROID_ROW_QUEUE 64   /* rows kept for a renderer that fell behind */
 
 typedef struct {

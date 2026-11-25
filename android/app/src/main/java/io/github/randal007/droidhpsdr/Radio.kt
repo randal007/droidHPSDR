@@ -217,10 +217,14 @@ object Radio {
         applyZoom()
     }
 
-    /** Upstream's zoom to match the span: the spectrum row stays a bit wider than the view. */
+    /**
+     * Upstream's zoom to match the span: about PIXELS analyzer points across
+     * the screen (sharp), while display_bridge.c keeps up to 8192 of them per
+     * row, so ~4 screens of real data to drag into instead of black.
+     */
     fun applyZoom() {
         if (!running) return
-        val z = (status.value.sampleRate * 0.9 / span.value).toInt().coerceIn(1, 16)
+        val z = (status.value.sampleRate / span.value).toInt().coerceIn(1, 16)
         Native.setZoom(z)
     }
 

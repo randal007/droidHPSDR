@@ -43,19 +43,22 @@ void waterfall_update(RECEIVER *rx) { (void)rx; }   /* the renderer keeps its ow
 
 void rx_panadapter_update(RECEIVER *rx) {
   if (rx != receiver[0] || rx->pixel_samples == NULL || rx->pixels <= 0) return;
-  int width = rx->width;
-  if (width > DROID_ROW_MAX) width = DROID_ROW_MAX;
-  if (rx->pan + width > rx->pixels) width = rx->pixels - rx->pan;
-  if (width <= 0) return;
+  /* Not just the zoomed window upstream would draw: as much of the whole
+   * (zoomed) analyzer row as fits, centred on the VFO, so dragging a zoomed
+   * view finds real data instead of black (Randal, 2026-11-24). */
+  int width = rx->pixels < DROID_ROW_MAX ? rx->pixels : DROID_ROW_MAX;
+  int start = rx->pixels / 2 - width / 2;
+  if (start < 0) start = 0;
+  if (start + width > rx->pixels) start = rx->pixels - width;
 
-  /* rx_panadapter.c: soffset and min_display */
+  /* rx_panadapter.c: soffset and min_display (from our start, not upstream's pan) */
   const BAND *band = band_get_band(vfo[rx->id].band);
   double soffset = (double)(rx_gain_calibration - band->gain) + (double)adc[rx->adc].attenuation - adc[rx->adc].gain;
   double hzpp = (double)rx->sample_rate / (double)rx->pixels;
   /* the frequency of the row's data, not of now: see droid_freq_ago() */
-  double fmin = (double)droid_freq_ago(droid_row_delay_us) - (double)rx->sample_rate * 0.5 + (double)rx->pan * hzpp;
+  double fmin = (double)droid_freq_ago(droid_row_delay_us) - (double)rx->sample_rate * 0.5 + (double)start * hzpp;
 
-  droid_rows_push(rx->pixel_samples + rx->pan, (float)soffset, width, fmin, hzpp);
+  droid_rows_push(rx->pixel_samples + start, (float)soffset, width, fmin, hzpp);
 }
 
 void droid_rows_push(const float *db, float offset, int width, double fmin, double hzpp) {
