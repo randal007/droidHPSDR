@@ -7,9 +7,10 @@
  * nearly as it is: on ADC overloads it lowers the gain 3 dB every 0.5 s;
  * once clear it raises it 1 dB at a time until the ADC overloads, then backs
  * off 3 dB. Time-regulated: it does that again every 30 s.
- * The one change: set_rf_gain() (sliders.c, GTK) becomes a plain write of
+ * Changes: set_rf_gain() (sliders.c, GTK) becomes a plain write of
  * adc[].gain, which is all it does apart from moving the slider; old_protocol.c
- * sends it to the radio.
+ * sends it to the radio. And its sleeps are cut into 50 ms slices (nap()),
+ * so stopping the thread doesn't hold up the radio loop for a second.
  *
  * Copied from deskHPSDR rigctl.c: (C) 2016 Steve Wilson, 2024-2026 Heiko Amft
  * DL1BZ (Project deskHPSDR), time-controlled adjustment by DH0DM;
@@ -37,6 +38,16 @@ static pthread_t autogain_thread;
 static pthread_mutex_t autogain_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t autogain_lifecycle_mutex = PTHREAD_MUTEX_INITIALIZER;
 static gint autogain_thread_running = 0;
+
+/* g_usleep in 50 ms slices, so droid_autogain_run() (on the radio loop
+ * thread) never waits long for the thread to notice it should stop */
+static void nap(gulong us) {
+  while (us > 0 && g_atomic_int_get(&autogain_thread_running)) {
+    gulong d = us < 50000 ? us : 50000;
+    g_usleep(d);
+    us -= d;
+  }
+}
 
 static void set_gain(double value) {
   adc[active_receiver->adc].gain = value;
@@ -86,7 +97,7 @@ static void *autogain_thread_function(void *arg) {
           pthread_mutex_lock(&autogain_mutex);
           set_gain(gain);
           pthread_mutex_unlock(&autogain_mutex);
-          g_usleep(500000);
+          nap(500000);
         }
         droid_log("autogain: RxPGA re-adjusted, now %+d dB", (int)gain);
       }
@@ -98,7 +109,7 @@ static void *autogain_thread_function(void *arg) {
           pthread_mutex_lock(&autogain_mutex);
           set_gain(gain);
           pthread_mutex_unlock(&autogain_mutex);
-          g_usleep(500000);
+          nap(500000);
         }
       }
       if (!adc0_p_ovl && !autogain_is_adjusted && !autogain_first_run) {
@@ -108,7 +119,7 @@ static void *autogain_thread_function(void *arg) {
           pthread_mutex_lock(&autogain_mutex);
           set_gain(gain);
           pthread_mutex_unlock(&autogain_mutex);
-          g_usleep(500000);
+          nap(500000);
         }
         pthread_mutex_lock(&autogain_mutex);
         set_gain(gain - 3.0);
@@ -126,7 +137,7 @@ static void *autogain_thread_function(void *arg) {
         pthread_mutex_unlock(&autogain_mutex);
       }
     }
-    g_usleep(1000000);
+    nap(1000000);
   }
   return NULL;
 }

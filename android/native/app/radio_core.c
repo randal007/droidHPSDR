@@ -173,7 +173,8 @@ static void run(const cmd *c) {
      * frequency, leaves the band stacks alone. Like vfo_move(), not when locked. */
     if (c->i < 100000 || c->i > 61440000 || locked) break;   /* HL2 range */
     vfo_set_frequency(VFO_A, c->i);
-    fhist_add(c->i);
+    /* the rows' centre: with CTUN only ctun_frequency moves (receiver.c) */
+    fhist_add(vfo[0].frequency);
     break;
   case CMD_MODE:
     if (c->a < 0 || c->a >= MODES) break;
@@ -197,6 +198,8 @@ static void run(const cmd *c) {
     fhist_add(vfo[0].frequency);
     break;
   case CMD_BANDSTACK:
+    /* the UI picked from the list of the band it showed; vfo.c checks nothing */
+    if (c->a < 0 || c->a >= bandstack_get_bandstack(vfo[0].band)->entries) break;
     vfo_bandstack_changed(c->a);
     fhist_add(vfo[0].frequency);
     break;
@@ -212,12 +215,17 @@ static void run(const cmd *c) {
     break;
   case CMD_CTUN:
     vfo_ctun_update(0, c->a);
+    fhist_add(vfo[0].frequency);   /* CTUN off moves the centre to the listening frequency */
     break;
   case CMD_LOCK:
     locked = c->a ? 1 : 0;
     break;
   case CMD_STEP:
-    if (c->a > 0) vfo[0].step = c->a;
+    /* vfo.c vfo_set_step_from_index(): the step is kept per mode */
+    if (c->a <= 0) break;
+    vfo[0].step = c->a;
+    mode_settings[vfo[0].mode].step = c->a;
+    copy_mode_settings(vfo[0].mode);
     break;
   case CMD_MEMORY:
     if (c->b < 0 || c->b >= NUM_OF_MEMORYS) break;
@@ -358,7 +366,19 @@ static void relink_protocol_socket(void) {
   }
 }
 
+/* Start and stop come from several Android threads (start thread, watchdog,
+ * network callback, the service): one at a time. */
+static pthread_mutex_t life_lock = PTHREAD_MUTEX_INITIALIZER;
+static int radio_start_locked(const droid_start_opts *o, char *msg, int msglen);
+
 int droid_radio_start(const droid_start_opts *o, char *msg, int msglen) {
+  pthread_mutex_lock(&life_lock);
+  int r = radio_start_locked(o, msg, msglen);
+  pthread_mutex_unlock(&life_lock);
+  return r;
+}
+
+static int radio_start_locked(const droid_start_opts *o, char *msg, int msglen) {
   if (atomic_load(&running)) return 0;
   droid_demo_stop();   /* the demo never feeds the display while the radio does */
 
@@ -488,7 +508,8 @@ setup:
 }
 
 void droid_radio_stop(void) {
-  if (!atomic_load(&running)) return;
+  pthread_mutex_lock(&life_lock);
+  if (!atomic_load(&running)) { pthread_mutex_unlock(&life_lock); return; }
   droid_autogain_run(0);
   atomic_store(&running, 0);
   pthread_join(loop_thread, NULL);
@@ -499,6 +520,7 @@ void droid_radio_stop(void) {
   droid_radio_save_now();   /* the loop thread has stopped: safe here */
   old_protocol_stop();
   droid_log("stream stopped");
+  pthread_mutex_unlock(&life_lock);
   /* The receivers stay allocated: WDSP channels cannot be reopened cleanly in
    * the same process, so the service keeps the process for the next start. */
 }
@@ -511,7 +533,8 @@ void droid_get_status(droid_status *s) {
   s->meter_dbm = droid_meter_dbm();      /* also fed by the demo */
   s->noise_floor = droid_noise_floor();
   if (!s->running || receiver[0] == NULL) return;
-  s->freq = vfo[0].frequency;
+  /* the listening frequency; with CTUN the centre (vfo[0].frequency) stays put */
+  s->freq = vfo[0].ctun ? vfo[0].ctun_frequency : vfo[0].frequency;
   s->mode = vfo[0].mode;
   s->filter_low = receiver[0]->filter_low;
   s->filter_high = receiver[0]->filter_high;

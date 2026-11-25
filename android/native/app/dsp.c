@@ -246,7 +246,7 @@ void droid_dsp_apply(int field, double v) {
   case F_AGC_HANG_TH: rx->agc_hang_threshold = clampi(v, 0, 100); rx_set_agc(rx); break;
   /* rx_menu.c */
   case F_AUTOGAIN: autogain_enabled = v != 0; droid_autogain_run(1); g_idle_add(ext_vfo_update, NULL); break;
-  case F_AUTOGAIN_TIME: autogain_time_enabled = v != 0; droid_autogain_run(1); break;
+  case F_AUTOGAIN_TIME: autogain_time_enabled = v != 0; break;   /* the thread reads it each second */
   case F_DIGU_OFFSET: rx->digi_offset_u = clampi(v, 0, 4000); rx_frequency_changed(rx); g_idle_add(ext_vfo_update, NULL); break;
   case F_DIGL_OFFSET: rx->digi_offset_l = clampi(v, 0, 4000); rx_frequency_changed(rx); g_idle_add(ext_vfo_update, NULL); break;
   case F_AUDIO_CHANNEL: rx->audio_channel = clampi(v, STEREO, RIGHT); break;

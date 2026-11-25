@@ -346,7 +346,10 @@ object Radio {
         prefs.edit().putInt("style", style.value).apply()
     }
 
+    @Volatile private var lastStepMs = 0L
+
     fun setStep(s: Int) {
+        lastStepMs = System.currentTimeMillis()
         step.value = s
         if (running) Native.step(s)
         prefs.edit().putInt("step", s).apply()
@@ -489,6 +492,12 @@ object Radio {
                     if (nf != freq.value && System.currentTimeMillis() - lastTuneMs > 400) {
                         freq.value = nf
                         prefs.edit().putLong("freq", nf).apply()
+                    }
+                    // each mode keeps its own step (vfo.c mode_settings): the STEP chip follows
+                    val ns = a[20].toInt()
+                    if (ns > 0 && ns != step.value && System.currentTimeMillis() - lastStepMs > 400) {
+                        step.value = ns
+                        prefs.edit().putInt("step", ns).apply()
                     }
                 }
                 if (++tick % 4 == 0) pollPeaks(pk)

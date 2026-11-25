@@ -32,7 +32,9 @@ import kotlin.concurrent.thread
 class RadioService : Service() {
     private var wifiLock: WifiManager.WifiLock? = null
     private var wakeLock: PowerManager.WakeLock? = null
-    @Volatile private var starting = false
+    private val startingFlag = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val starting get() = startingFlag.get()
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
     @Volatile private var wanted = false          // the user wants the radio on
     @Volatile private var boundNet: Network? = null
     private var watchdog: Thread? = null
@@ -46,7 +48,7 @@ class RadioService : Service() {
         override fun onLost(network: Network) {
             if (network != boundNet) return
             Log.i("droidHPSDR", "Ethernet lost")
-            if (Radio.running) Native.stop()
+            stopStream()
             boundNet = null
             Radio.setPhase(Phase.ERROR, "Ethernet unplugged: plug the adapter back in")
         }
@@ -54,10 +56,17 @@ class RadioService : Service() {
         override fun onAvailable(network: Network) {
             if (!wanted || Radio.running || starting) return
             Log.i("droidHPSDR", "Ethernet back")
-            Thread.sleep(1500)   // let the static address settle
-            startRadio()
+            // let the static address settle; a Stop meanwhile cancels this (shutdown)
+            main.removeCallbacks(replugStart)
+            main.postDelayed(replugStart, 1500)
         }
     }
+
+    /** The start after the adapter comes back: only if still wanted and nobody started meanwhile. */
+    private val replugStart = Runnable { if (wanted && !Radio.running && !starting) startRadio() }
+
+    /** Native.stop from any thread; the native side also serialises start and stop. */
+    private fun stopStream() = synchronized(this) { if (Radio.running) Native.stop() }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -70,7 +79,7 @@ class RadioService : Service() {
         }
         if (intent?.action == ACTION_RESTART && Radio.running && !starting) {
             // new sample rate: stop the stream and start it again, keeping the service
-            Native.stop()
+            stopStream()
             Radio.setPhase(Phase.CONNECTING, "Restarting at ${Radio.sampleRate.value / 1000} kHz")
             startRadio()
             return START_STICKY
@@ -89,6 +98,8 @@ class RadioService : Service() {
 
     /** No spectrum rows for 3 s while "running" (radio power-cycled, link gone quiet): start again. */
     private fun startWatchdog() {
+        // a Stop then Start within its 1 s sleep: the old one sees wanted again and carries on
+        if (watchdog?.isAlive == true) return
         watchdog = thread(name = "radio-watchdog", isDaemon = true) {
             var lastRows = -1L
             var quietSince = 0L
@@ -100,7 +111,7 @@ class RadioService : Service() {
                 if (st.rows != lastRows) { lastRows = st.rows; quietSince = now; continue }
                 if (now - quietSince > 3000) {
                     Log.i("droidHPSDR", "no data for 3 s: restarting the stream")
-                    Native.stop()
+                    stopStream()
                     Radio.setPhase(Phase.CONNECTING, "No data from the radio: trying again")
                     lastRows = -1
                     startRadio()
@@ -110,14 +121,15 @@ class RadioService : Service() {
     }
 
     private fun startRadio() {
-        starting = true
+        if (!startingFlag.compareAndSet(false, true)) return   // one start at a time
         Radio.stopDemo()
-        wakeLock = getSystemService(PowerManager::class.java)
+        // one wake lock for the service's life (restarts used to stack new ones)
+        if (wakeLock?.isHeld != true) wakeLock = getSystemService(PowerManager::class.java)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "droidHPSDR:radio").apply { acquire() }
         thread(name = "radio-start") {
             try {
                 val net = bindNetwork()
-                if (net == "WiFi") {
+                if (net == "WiFi" && wifiLock?.isHeld != true) {
                     wifiLock = getSystemService(WifiManager::class.java)
                         .createWifiLock(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "droidHPSDR").apply { acquire() }
                 }
@@ -149,7 +161,7 @@ class RadioService : Service() {
                     Native.setVolumeDb(Radio.volumeDb.value)
                     Native.setRowDelayMs(Radio.rowDelayMs.value)
                     Native.setPhoneAudio(Radio.phoneAudio.value)
-                    Native.step(Radio.step.value)
+                    // no Native.step(): the props file brought back each mode's own step
                     Radio.setPhase(Phase.RUNNING, "", net)
                     Radio.applyZoom()
                     Radio.setDisplay()
@@ -162,7 +174,7 @@ class RadioService : Service() {
                 Log.e("droidHPSDR", "start failed", t)
                 Radio.setPhase(Phase.ERROR, t.message ?: t.toString())
             } finally {
-                starting = false
+                startingFlag.set(false)
             }
         }
     }
@@ -187,7 +199,8 @@ class RadioService : Service() {
             wanted = false
             runCatching { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(ethernet) }
         }
-        if (Radio.running) Native.stop()   // also writes deskHPSDR's props file
+        main.removeCallbacks(replugStart)
+        stopStream()   // also writes deskHPSDR's props file
         Radio.setPhase(Phase.IDLE)
         wifiLock?.takeIf { it.isHeld }?.release()
         wakeLock?.takeIf { it.isHeld }?.release()

@@ -213,10 +213,10 @@ private fun SpectrumOverlay(modifier: Modifier) {
     }
     /** Squelch: in AM a real level (dBm); in the other modes upstream's 0..100 as a height. */
     fun sqlLineY(mode: Int, v: Double, splitY: Float, top: Float, gap: Float, nf: Double): Float =
-        if (mode == Modes.AM || mode == Modes.SAM) levelY(splitY, top, gap, nf, sqlDbm(v))
+        if (sqlIsLevel(mode)) levelY(splitY, top, gap, nf, sqlDbm(v))
         else top + (1 - v / 100.0).toFloat() * (splitY - gap - top)
     fun sqlAt(mode: Int, y: Float, splitY: Float, top: Float, gap: Float, nf: Double): Double =
-        if (mode == Modes.AM || mode == Modes.SAM) ((dbmAt(splitY, top, gap, nf, y) + 160.0) / 160.0 * 100.0).coerceIn(0.0, 100.0)
+        if (sqlIsLevel(mode)) ((dbmAt(splitY, top, gap, nf, y) + 160.0) / 160.0 * 100.0).coerceIn(0.0, 100.0)
         else ((1 - (y - top) / (splitY - gap - top)) * 100.0).coerceIn(0.0, 100.0)
 
     Canvas(

@@ -41,6 +41,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -149,11 +150,12 @@ private fun i(d: DoubleArray, f: Int) = d[f].roundToInt()
 /** Puts the named fields back to receiver.c's defaults. */
 private fun defaults(vararg fields: Int) = fields.forEach { Radio.setDsp(it, Dsp.DEFAULTS[it]) }
 
-/** Upstream's squelch is 0..100; in AM it is a level, -160..0 dBm (receiver.c rx_set_squelch). */
+/** Upstream's squelch is 0..100; in AM, SAM and CW it is AM squelch, a level -160..0 dBm (receiver.c rx_set_squelch). */
 internal fun sqlDbm(v: Double) = v / 100.0 * 160.0 - 160.0
-internal fun sqlLabel(mode: Int, v: Double) = when (mode) {
-    Modes.AM, Modes.SAM -> "%.0f dBm".format(sqlDbm(v))
-    Modes.FM -> "%.0f (FM)".format(v)
+internal fun sqlIsLevel(mode: Int) = mode == Modes.AM || mode == Modes.SAM || mode == Modes.CWU || mode == Modes.CWL
+internal fun sqlLabel(mode: Int, v: Double) = when {
+    sqlIsLevel(mode) -> "%.0f dBm".format(sqlDbm(v))
+    mode == Modes.FM -> "%.0f (FM)".format(v)
     else -> "%.0f (voice)".format(v)
 }
 
@@ -612,7 +614,7 @@ internal fun ToolbarEditor(st: Status, close: () -> Unit) {
         // the row itself, in edit mode, where it always is
         Row(Modifier.align(Alignment.BottomStart).padding(10.dp).clickable(enabled = false) {},
             horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            ids.forEachIndexed { idx, id ->
+            ids.forEach { id -> key(id) {   // state and gesture follow the chip as it moves
                 var dx by remember(id) { mutableStateOf(0f) }
                 Box(
                     Modifier.offset { IntOffset(dx.roundToInt(), 0) }.pointerInput(id) {
@@ -633,11 +635,11 @@ internal fun ToolbarEditor(st: Status, close: () -> Unit) {
                     Chip(ALL_CHIPS.firstOrNull { it.first == id }?.second ?: id, "", onClick = {})
                     Box(
                         Modifier.align(Alignment.TopEnd).offset(x = 5.dp, y = (-6).dp).size(18.dp).clip(CircleShape)
-                            .background(Color(0xFFFF4D4D)).clickable { Radio.setChips(ids.filterIndexed { j, _ -> j != idx }) },
+                            .background(Color(0xFFFF4D4D)).clickable { Radio.setChips(Radio.chips.value.filter { it != id }) },
                         contentAlignment = Alignment.Center,
                     ) { Text("×", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
                 }
-            }
+            } }
         }
     }
 }

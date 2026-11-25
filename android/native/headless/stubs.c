@@ -138,7 +138,8 @@ void keyer_event(int left, int state) { (void)left; (void)state; }
 
 /* ---- vfo.c: compiled unchanged since M4. What it calls elsewhere: ---- */
 
-/* radio.c, copied unchanged: split only takes effect when the radio can
+/* radio.c ((C) 2015 John Melton G0ORX/N6LYT, 2024-2026 Heiko Amft DL1BZ
+ * (Project deskHPSDR); GPL-3.0-or-later), copied unchanged: split only takes effect when the radio can
  * transmit, so in this RECEIVE ONLY build it does nothing (until M7). */
 void radio_set_split(int val) {
   if (can_transmit) {
