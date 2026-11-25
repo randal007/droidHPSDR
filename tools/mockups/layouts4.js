@@ -156,3 +156,18 @@ Object.assign(LAYOUTS, {
     canvases: [['#c', base({ labels: [{ f: VB, y: 0.08, t: 'B / TX', c: '#c9a8ff' }] })]],
   }),
 });
+
+// M4 round 4 (Randal: "put VFO B under VFO A, small; the pill is too big because of it")
+Object.assign(LAYOUTS, {
+  X5: () => ({
+    html: cv('c', 0, 0, 832, 384) + meterCard() + topBtns() + chips(CHIPS) +
+      abs(286, 8, 260, 74, `<div class="row" style="gap:10px;justify-content:center;height:100%">
+        <div class="col" style="gap:3px;align-items:flex-start">
+          <div class="row" style="gap:8px"><span class="tag vfoA">A</span>${fq(VFO, 32)}</div>
+          <div class="row dim" style="gap:6px;padding-left:2px"><span style="font-size:10px;font-weight:700;color:var(--dim);width:24px;text-align:center">B</span>${fq(VB, 13, 'dim')}</div>
+        </div>
+        <div class="col" style="gap:3px"><span class="tag acc">USB-D</span><span class="tag">3.0k</span></div></div>`, 'glass') +
+      abs(246, 86, 340, 26, `<div class="row" style="gap:6px;justify-content:center"><span class="tag amb">RIT +120</span><span class="tag" style="background:rgba(180,140,255,.18);color:#c9a8ff">SPLIT · TX B</span></div>`),
+    canvases: [['#c', base({ labels: [{ f: VB, y: 0.08, t: 'B / TX', c: '#c9a8ff' }] })]],
+  }),
+});
