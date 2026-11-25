@@ -22,6 +22,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Going to the background: write deskHPSDR's props file now (the stream keeps running). */
+    override fun onStop() {
+        super.onStop()
+        Radio.save()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Radio.init(this)

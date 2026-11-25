@@ -43,6 +43,7 @@ void droid_demo_set_frequency(long long hz);
 
 /* S-meter in dBm, corrected like upstream's (rx_update_display). */
 double droid_meter_dbm(void);
+unsigned long long droid_rows_count(void);
 
 /* Peak labels, upstream's way (display_bridge.c); returns how many. */
 int droid_peaks(double view_lo, double view_hi, double pb_lo, double pb_hi, int num, int divider, int hide_noise,
@@ -62,6 +63,7 @@ typedef struct {
   int pixels;          /* spectrum pixels per row */
   int fps;             /* spectrum rows per second */
   char radio_ip[64];   /* empty: broadcast discovery */
+  char props_dir[256]; /* where deskHPSDR's <MAC>.props file lives */
 } droid_start_opts;
 
 /* Discovery, receiver set-up as radio.c does for an HL2, stream start.
@@ -83,6 +85,25 @@ void droid_set_fps(int fps);           /* spectrum rows per second */
 void droid_set_window(int type);       /* FFT window, Screen menu order */
 void droid_set_detector(int det);      /* 0 Peak, 1 Average, 2 Rosenfell, 3 Sample */
 
+/* M4, receive operating: each runs deskHPSDR's own vfo.c / store.c call */
+void droid_filter_preset(int index);   /* vfo_filter_changed(): 0..9 presets, 10/11 Var1/Var2 */
+void droid_band(int band);             /* vfo_band_changed(): same band again = next stack entry */
+void droid_bandstack(int entry);       /* vfo_bandstack_changed() */
+void droid_vfo_op(int op);             /* 0 A>B, 1 B>A, 2 A<>B */
+void droid_rit(int on, long long hz);  /* vfo_rit_onoff() / vfo_rit_value() */
+void droid_ctun(int on);               /* vfo_ctun_update() */
+void droid_lock(int on);               /* vfo.c's 'locked' */
+void droid_step(int hz);               /* VFO A's tuning step */
+void droid_memory(int store, int slot);/* store_memory_slot() / recall_memory_slot() */
+void droid_agc(int agc);               /* rx->agc + rx_set_agc() */
+void droid_save(void);                 /* write the props file (radio.c's save order) */
+
+/* lists for the UI: deskHPSDR's tables, read on the loop thread's data */
+int droid_filters(int mode, char titles[][16], int *lo, int *hi, int max);
+int droid_bands(char titles[][16], long long *fmin, long long *fmax, int max);
+int droid_bandstack_entries(int band, long long *freq, int *mode, int *filter, int max, int *current);
+int droid_memories(long long *freq, int *mode, int max);
+
 typedef struct {
   long long freq;
   int mode;
@@ -95,6 +116,11 @@ typedef struct {
   double noise_floor;
   int phone_audio;
   int zoom;
+  long long freq_b;
+  int mode_b;
+  int rit_on, ctun, locked, split, step, band, bandstack, filter, agc;
+  long long rit;
+  unsigned long long rows;   /* spectrum rows so far: data is arriving while this grows */
   int running;
 } droid_status;
 void droid_get_status(droid_status *s);

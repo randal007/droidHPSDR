@@ -32,6 +32,19 @@ typedef struct _GtkAdjustment GtkAdjustment;
 #define GTK_LABEL(w) ((GtkLabel *)(w))
 #define GTK_BUTTON(w) ((GtkButton *)(w))
 
+/* signals: no widget exists, so nothing is ever connected */
+typedef void (*GCallback)(void);
+#define G_CALLBACK(f) ((GCallback)(f))
+#define g_signal_connect(instance, signal, handler, data) ((gulong)0)
+
+/* vfo.c's VFO bar drawing area: never created (Compose draws the VFO) */
+static inline GtkWidget *gtk_drawing_area_new(void) { return NULL; }
+static inline GdkWindow *gtk_widget_get_window(GtkWidget *w) { (void)w; return NULL; }
+static inline int gtk_widget_get_allocated_width(GtkWidget *w) { (void)w; return 0; }
+static inline int gtk_widget_get_allocated_height(GtkWidget *w) { (void)w; return 0; }
+static inline gint gtk_widget_get_events(GtkWidget *w) { (void)w; return 0; }
+static inline void gtk_widget_set_events(GtkWidget *w, gint events) { (void)w; (void)events; }
+
 GtkWidget *gtk_fixed_new(void);
 void gtk_fixed_put(GtkFixed *fixed, GtkWidget *widget, gint x, gint y);
 void gtk_fixed_move(GtkFixed *fixed, GtkWidget *widget, gint x, gint y);

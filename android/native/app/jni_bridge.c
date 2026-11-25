@@ -83,10 +83,15 @@ JNIEXPORT jstring JNICALL FN(wisdomStatus)(JNIEnv *env, jobject self) {
 
 /* Returns "" when streaming, else why not. */
 JNIEXPORT jstring JNICALL FN(start)(JNIEnv *env, jobject self, jlong freq, jint mode, jdouble lna, jboolean codec,
-                                    jint sample_rate, jint pixels, jint fps, jstring ip) {
+                                    jint sample_rate, jint pixels, jint fps, jstring ip, jstring props_dir) {
   (void)self;
   droid_start_opts o = { .freq = freq, .mode = mode, .lna_db = lna, .codec = codec, .sample_rate = sample_rate,
                          .pixels = pixels, .fps = fps };
+  if (props_dir) {
+    const char *s = (*env)->GetStringUTFChars(env, props_dir, NULL);
+    snprintf(o.props_dir, sizeof o.props_dir, "%s", s);
+    (*env)->ReleaseStringUTFChars(env, props_dir, s);
+  }
   if (ip) {
     const char *s = (*env)->GetStringUTFChars(env, ip, NULL);
     snprintf(o.radio_ip, sizeof o.radio_ip, "%s", s);
@@ -140,15 +145,98 @@ JNIEXPORT void JNICALL FN(setLnaDb)(JNIEnv *env, jobject self, jdouble db) {
 }
 
 /* [running, freq, mode, filterLow, filterHigh, sampleRate, meterDbm, lostPackets, adcOverloads, lna, volume,
- *  noiseFloor, phoneAudio] */
+ *  noiseFloor, phoneAudio, freqB, modeB, ritOn, rit, ctun, locked, split, step, band, bandstack, filter, agc,
+ *  rows] */
+#define STATUS_N 26
 JNIEXPORT void JNICALL FN(status)(JNIEnv *env, jobject self, jdoubleArray out) {
   (void)self;
   droid_status s;
   droid_get_status(&s);
-  jdouble v[13] = { s.running, (double)s.freq, s.mode, s.filter_low, s.filter_high, s.sample_rate,
-                    s.meter_dbm, s.lost_packets, s.adc_overloads, s.lna_db, s.volume_db, s.noise_floor,
-                    s.phone_audio };
-  (*env)->SetDoubleArrayRegion(env, out, 0, 13, v);
+  jdouble v[STATUS_N] = { s.running, (double)s.freq, s.mode, s.filter_low, s.filter_high, s.sample_rate,
+                          s.meter_dbm, s.lost_packets, s.adc_overloads, s.lna_db, s.volume_db, s.noise_floor,
+                          s.phone_audio, (double)s.freq_b, s.mode_b, s.rit_on, (double)s.rit, s.ctun, s.locked,
+                          s.split, s.step, s.band, s.bandstack, s.filter, s.agc, (double)s.rows };
+  (*env)->SetDoubleArrayRegion(env, out, 0, STATUS_N, v);
+}
+
+/* ---- M4: deskHPSDR's VFO, band stack and memory calls ---- */
+#define CALL1(name, fn, T) \
+  JNIEXPORT void JNICALL FN(name)(JNIEnv *env, jobject self, T a) { (void)env; (void)self; fn(a); }
+CALL1(filterPreset, droid_filter_preset, jint)
+CALL1(band, droid_band, jint)
+CALL1(bandstack, droid_bandstack, jint)
+CALL1(vfoOp, droid_vfo_op, jint)
+CALL1(ctun, droid_ctun, jboolean)
+CALL1(lock, droid_lock, jboolean)
+CALL1(step, droid_step, jint)
+CALL1(agc, droid_agc, jint)
+JNIEXPORT void JNICALL FN(rit)(JNIEnv *env, jobject self, jboolean on, jlong hz) {
+  (void)env; (void)self;
+  droid_rit(on, hz);
+}
+JNIEXPORT void JNICALL FN(memory)(JNIEnv *env, jobject self, jboolean store, jint slot) {
+  (void)env; (void)self;
+  droid_memory(store, slot);
+}
+JNIEXPORT void JNICALL FN(save)(JNIEnv *env, jobject self) { (void)env; (void)self; droid_save(); }
+
+/* Lists as text, one entry per line, fields split by '|'. */
+static jstring text(JNIEnv *env, const char *s) { return (*env)->NewStringUTF(env, s); }
+
+JNIEXPORT jstring JNICALL FN(filters)(JNIEnv *env, jobject self, jint mode) {
+  (void)self;
+  char t[16][16], out[1024] = "";
+  int lo[16], hi[16];
+  int n = droid_filters(mode, t, lo, hi, 16);
+  for (int i = 0; i < n; i++) {
+    char line[64];
+    snprintf(line, sizeof line, "%s|%d|%d\n", t[i], lo[i], hi[i]);
+    strncat(out, line, sizeof out - strlen(out) - 1);
+  }
+  return text(env, out);
+}
+
+JNIEXPORT jstring JNICALL FN(bands)(JNIEnv *env, jobject self) {
+  (void)self;
+  char t[64][16], out[4096] = "";
+  long long a[64], b[64];
+  int n = droid_bands(t, a, b, 64);
+  for (int i = 0; i < n; i++) {
+    char line[96];
+    snprintf(line, sizeof line, "%s|%lld|%lld\n", t[i], a[i], b[i]);
+    strncat(out, line, sizeof out - strlen(out) - 1);
+  }
+  return text(env, out);
+}
+
+/* first line: current entry; then freq|mode|filter */
+JNIEXPORT jstring JNICALL FN(bandstackEntries)(JNIEnv *env, jobject self, jint band) {
+  (void)self;
+  long long f[16];
+  int m[16], fl[16], cur = 0;
+  int n = droid_bandstack_entries(band, f, m, fl, 16, &cur);
+  char out[1024];
+  snprintf(out, sizeof out, "%d\n", cur);
+  for (int i = 0; i < n; i++) {
+    char line[64];
+    snprintf(line, sizeof line, "%lld|%d|%d\n", f[i], m[i], fl[i]);
+    strncat(out, line, sizeof out - strlen(out) - 1);
+  }
+  return text(env, out);
+}
+
+JNIEXPORT jstring JNICALL FN(memories)(JNIEnv *env, jobject self) {
+  (void)self;
+  long long f[16];
+  int m[16];
+  int n = droid_memories(f, m, 16);
+  char out[1024] = "";
+  for (int i = 0; i < n; i++) {
+    char line[64];
+    snprintf(line, sizeof line, "%lld|%d\n", f[i], m[i]);
+    strncat(out, line, sizeof out - strlen(out) - 1);
+  }
+  return text(env, out);
 }
 
 /* out = [f0, dB0, f1, dB1, ...]; returns how many peaks */

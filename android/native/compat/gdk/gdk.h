@@ -45,6 +45,20 @@ typedef struct { int type; GdkWindow *window; guint state; guint keyval; } GdkEv
 typedef union { int type; GdkEventButton button; GdkEventMotion motion; GdkEventScroll scroll;
                 GdkEventKey key; } GdkEvent;
 
+typedef struct { int type; GdkWindow *window; gint x, y, width, height; } GdkEventConfigure;
+#define GDK_BUTTON_PRESS_MASK (1 << 8)
+#define GDK_BUTTON_RELEASE_MASK (1 << 9)
+#define GDK_SCROLL_MASK (1 << 21)
+#define GDK_POINTER_MOTION_MASK (1 << 2)
+
+/* vfo.c's VFO bar backing surface: there is no window, so no surface */
+struct _cairo_surface;
+static inline struct _cairo_surface *gdk_window_create_similar_surface(GdkWindow *w, int content, int width,
+                                                                       int height) {
+  (void)w; (void)content; (void)width; (void)height;
+  return NULL;
+}
+
 guint gdk_threads_add_timeout_full(gint priority, guint interval_ms, GSourceFunc function,
                                    gpointer data, GDestroyNotify notify);
 guint gdk_threads_add_idle(GSourceFunc function, gpointer data);

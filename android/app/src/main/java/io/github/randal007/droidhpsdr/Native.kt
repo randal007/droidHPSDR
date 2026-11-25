@@ -14,7 +14,7 @@ object Native {
     /** Discovery and stream start. Returns "" when streaming, else the reason. */
     external fun start(
         freq: Long, mode: Int, lnaDb: Double, codec: Boolean,
-        sampleRate: Int, pixels: Int, fps: Int, ip: String?,
+        sampleRate: Int, pixels: Int, fps: Int, ip: String?, propsDir: String,
     ): String
 
     external fun stop()
@@ -32,8 +32,27 @@ object Native {
     /** How old a spectrum row's data is, so rows drawn while tuning land at the right frequency. */
     external fun setRowDelayMs(ms: Int)
 
-    /** [running, freq, mode, filterLow, filterHigh, sampleRate, meterDbm, lostPackets, adcOverloads, lna, volume] */
+    /** See jni_bridge.c FN(status) for the order; STATUS_N values. */
     external fun status(out: DoubleArray)
+
+    // M4: deskHPSDR's own vfo.c / store.c calls (radio_core.c)
+    external fun filterPreset(index: Int)       // 0..9 presets, 10 Var1, 11 Var2
+    external fun band(band: Int)                // same band again = next band-stack entry
+    external fun bandstack(entry: Int)
+    external fun vfoOp(op: Int)                 // 0 A>B, 1 B>A, 2 A<>B
+    external fun rit(on: Boolean, hz: Long)
+    external fun ctun(on: Boolean)
+    external fun lock(on: Boolean)
+    external fun step(hz: Int)
+    external fun agc(agc: Int)                  // 0 Off, 1 Long, 2 Slow, 3 Medium, 4 Fast
+    external fun memory(store: Boolean, slot: Int)
+    external fun save()                         // write deskHPSDR's props file
+
+    // deskHPSDR's tables, one entry per line, fields split by '|'
+    external fun filters(mode: Int): String     // title|low|high
+    external fun bands(): String                // title|fmin|fmax (index = band number)
+    external fun bandstackEntries(band: Int): String   // first line current; freq|mode|filter
+    external fun memories(): String             // freq|mode
 
     /** The made-up 20 m band (demo.c), for the display without a radio. */
     external fun demoStart()

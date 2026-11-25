@@ -21,7 +21,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include <unistd.h>
+#include <netinet/ip.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <sys/stat.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <gtk/gtk.h>
@@ -41,6 +46,9 @@
 #include "receiver.h"
 #include "transmitter.h"
 #include "vfo.h"
+#include "store.h"
+#include "store_menu.h"
+#include "property.h"
 #include <wdsp.h>
 
 #include "droid_app.h"
@@ -48,7 +56,9 @@
 
 /* ---- requests from the UI, run on the loop thread ---- */
 
-enum { CMD_FREQ, CMD_MODE, CMD_FILTER, CMD_VOLUME, CMD_LNA, CMD_PHONE_AUDIO, CMD_ZOOM, CMD_FPS, CMD_WINDOW, CMD_DETECTOR };
+enum { CMD_FREQ, CMD_MODE, CMD_FILTER, CMD_VOLUME, CMD_LNA, CMD_PHONE_AUDIO, CMD_ZOOM, CMD_FPS, CMD_WINDOW, CMD_DETECTOR,
+       CMD_FILTER_PRESET, CMD_BAND, CMD_BANDSTACK, CMD_VFO_OP, CMD_RIT, CMD_CTUN, CMD_LOCK, CMD_STEP, CMD_MEMORY,
+       CMD_AGC, CMD_SAVE };
 typedef struct { int type; long long i; double d; int a, b; } cmd;
 #define CMD_MAX 256
 static cmd cmds[CMD_MAX];
@@ -85,6 +95,17 @@ void droid_set_zoom(int zoom) { post((cmd){ .type = CMD_ZOOM, .a = zoom }); }
 void droid_set_fps(int fps) { post((cmd){ .type = CMD_FPS, .a = fps }); }
 void droid_set_window(int type) { post((cmd){ .type = CMD_WINDOW, .a = type }); }
 void droid_set_detector(int det) { post((cmd){ .type = CMD_DETECTOR, .a = det }); }
+void droid_filter_preset(int index) { post((cmd){ .type = CMD_FILTER_PRESET, .a = index }); }
+void droid_band(int band) { post((cmd){ .type = CMD_BAND, .a = band }); }
+void droid_bandstack(int entry) { post((cmd){ .type = CMD_BANDSTACK, .a = entry }); }
+void droid_vfo_op(int op) { post((cmd){ .type = CMD_VFO_OP, .a = op }); }
+void droid_rit(int on, long long hz) { post((cmd){ .type = CMD_RIT, .a = on, .i = hz }); }
+void droid_ctun(int on) { post((cmd){ .type = CMD_CTUN, .a = on }); }
+void droid_lock(int on) { post((cmd){ .type = CMD_LOCK, .a = on }); }
+void droid_step(int hz) { post((cmd){ .type = CMD_STEP, .a = hz }); }
+void droid_memory(int store, int slot) { post((cmd){ .type = CMD_MEMORY, .a = store, .b = slot }); }
+void droid_agc(int agc) { post((cmd){ .type = CMD_AGC, .a = agc }); }
+void droid_save(void) { post((cmd){ .type = CMD_SAVE }); }
 
 /* ---- when the radio was on which frequency ----
  * A spectrum row describes samples from some time before it is drawn (the
@@ -122,30 +143,88 @@ long long droid_freq_ago(int64_t age_us) {
   return f;
 }
 
+/* ---- deskHPSDR's props file: radio.c's save and restore order ---- */
+
+static char props_path[400];
+
+static void droid_radio_save_now(void) {
+  if (!props_path[0] || receiver[0] == NULL) return;
+  clearProperties();
+  for (int i = 0; i < 2; i++) rx_save_state(receiver[i]);
+  filterSaveState();
+  bandSaveState();
+  memSaveState();
+  vfo_save_state();
+  saveProperties(props_path);
+}
+
 static void run(const cmd *c) {
   RECEIVER *rx = receiver[0];
   switch (c->type) {
   case CMD_FREQ:
-    if (c->i < 100000 || c->i > 61440000) break;   /* HL2 range */
-    vfo[0].band = get_band_from_frequency(c->i);
-    rx_set_frequency(rx, c->i);
+    /* vfo.c's frequency set (the one CAT uses): moves the band with the
+     * frequency, leaves the band stacks alone. Like vfo_move(), not when locked. */
+    if (c->i < 100000 || c->i > 61440000 || locked) break;   /* HL2 range */
+    vfo_set_frequency(VFO_A, c->i);
     fhist_add(c->i);
     break;
   case CMD_MODE:
     if (c->a < 0 || c->a >= MODES) break;
-    vfo[0].mode = c->a;
-    vfo[0].filter = mode_settings[c->a].filter;
-    rx_mode_changed(rx);
+    vfo_id_mode_changed(0, c->a);   /* with the mode's own settings (filter, AGC, NR, step) */
     break;
   case CMD_FILTER: {
-    /* a variable filter, as deskHPSDR's filter menu sets one */
+    /* dragging the passband edges: the Var1 filter, as deskHPSDR's filter menu sets it */
     FILTER *f = &filters[vfo[0].mode][filterVar1];
     f->low = c->a;
     f->high = c->b;
-    vfo[0].filter = filterVar1;
-    rx_filter_changed(rx);
+    vfo_filter_changed(filterVar1);
     break;
   }
+  case CMD_FILTER_PRESET:
+    if (c->a < 0 || c->a >= FILTERS) break;
+    vfo_filter_changed(c->a);
+    break;
+  case CMD_BAND:
+    if (c->a < 0 || c->a >= BANDS) break;
+    vfo_band_changed(0, c->a);
+    fhist_add(vfo[0].frequency);
+    break;
+  case CMD_BANDSTACK:
+    vfo_bandstack_changed(c->a);
+    fhist_add(vfo[0].frequency);
+    break;
+  case CMD_VFO_OP:
+    if (c->a == 0) vfo_a_to_b();
+    else if (c->a == 1) vfo_b_to_a();
+    else vfo_a_swap_b();
+    fhist_add(vfo[0].frequency);
+    break;
+  case CMD_RIT:
+    vfo_rit_value(0, c->i);
+    vfo_rit_onoff(0, c->a);
+    break;
+  case CMD_CTUN:
+    vfo_ctun_update(0, c->a);
+    break;
+  case CMD_LOCK:
+    locked = c->a ? 1 : 0;
+    break;
+  case CMD_STEP:
+    if (c->a > 0) vfo[0].step = c->a;
+    break;
+  case CMD_MEMORY:
+    if (c->b < 0 || c->b >= NUM_OF_MEMORYS) break;
+    if (c->a) store_memory_slot(c->b);
+    else { recall_memory_slot(c->b); fhist_add(vfo[0].frequency); }
+    break;
+  case CMD_AGC:
+    if (c->a < AGC_OFF || c->a > AGC_FAST) break;
+    rx->agc = c->a;
+    rx_set_agc(rx);
+    break;
+  case CMD_SAVE:
+    droid_radio_save_now();
+    break;
   case CMD_VOLUME:
     rx->volume = c->d;
     rx_set_af_gain(rx);
@@ -223,32 +302,49 @@ static void *loop(void *arg) {
   return NULL;
 }
 
-/* vfo.c's modesettingsRestoreState() defaults, as m1_main.c sets them. */
-static void mode_settings_defaults(void) {
-  for (int i = 0; i < MODES; i++) {
-    switch (i) {
-    case modeLSB: case modeUSB: case modeDSB:
-      mode_settings[i].agc = AGC_MEDIUM; mode_settings[i].filter = filterF5;
-      mode_settings[i].step = 100; mode_settings[i].rit_step = 100;
-      break;
-    case modeDIGL: case modeDIGU:
-      mode_settings[i].agc = AGC_FAST; mode_settings[i].filter = filterF6;
-      mode_settings[i].step = 50; mode_settings[i].rit_step = 100;
-      break;
-    case modeCWL: case modeCWU:
-      mode_settings[i].agc = AGC_FAST; mode_settings[i].filter = filterF4;
-      mode_settings[i].step = 25; mode_settings[i].rit_step = 10;
-      break;
-    default:
-      mode_settings[i].agc = AGC_MEDIUM; mode_settings[i].filter = filterF3;
-      mode_settings[i].step = 100; mode_settings[i].rit_step = 100;
-      break;
+/* ---- a new network under old_protocol.c's socket ----
+ * old_protocol.c opens its UDP socket once ("once opened is never closed")
+ * in a static function: on a desktop the network never changes. On the phone
+ * unplugging the USB Ethernet adapter makes a new Android network, and the old
+ * socket stays tied to the gone one ("Network is unreachable"). Without
+ * editing upstream: find that socket (UDP, bound to our interface address),
+ * make a new one on the current network with the same options, and put it
+ * under the same descriptor number with dup2(). The receive thread's 100 ms
+ * timeout lets it pick up the new socket on its next read. */
+static void relink_protocol_socket(void) {
+  const struct sockaddr_in *ia = &radio->info.network.interface_address;
+  for (int fd = 3; fd < 1024; fd++) {
+    int type;
+    socklen_t l = sizeof type;
+    if (getsockopt(fd, SOL_SOCKET, SO_TYPE, &type, &l) < 0 || type != SOCK_DGRAM) continue;
+    struct sockaddr_in a;
+    socklen_t al = sizeof a;
+    if (getsockname(fd, (struct sockaddr *)&a, &al) < 0 || a.sin_family != AF_INET ||
+        a.sin_addr.s_addr != ia->sin_addr.s_addr) continue;
+    int nfd = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (nfd < 0) return;
+    int one = 1, v;
+    socklen_t vl = sizeof v;
+    setsockopt(nfd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
+    setsockopt(nfd, SOL_SOCKET, SO_REUSEPORT, &one, sizeof one);
+    /* the kernel reports buffer sizes doubled: set half of what it reports */
+    if (getsockopt(fd, SOL_SOCKET, SO_RCVBUF, &v, &vl) == 0) { v /= 2; setsockopt(nfd, SOL_SOCKET, SO_RCVBUF, &v, sizeof v); }
+    vl = sizeof v;
+    if (getsockopt(fd, SOL_SOCKET, SO_SNDBUF, &v, &vl) == 0) { v /= 2; setsockopt(nfd, SOL_SOCKET, SO_SNDBUF, &v, sizeof v); }
+    vl = sizeof v;
+    if (getsockopt(fd, IPPROTO_IP, IP_TOS, &v, &vl) == 0) setsockopt(nfd, IPPROTO_IP, IP_TOS, &v, sizeof v);
+    struct timeval tv;
+    socklen_t tl = sizeof tv;
+    if (getsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, &tl) == 0) setsockopt(nfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
+    if (bind(nfd, (const struct sockaddr *)ia, radio->info.network.interface_length) < 0) {
+      droid_log("relink: bind failed: %s", strerror(errno));
+      close(nfd);
+      return;
     }
-    mode_settings[i].nb_tau = 0.00001;
-    mode_settings[i].nb_advtime = 0.00001;
-    mode_settings[i].nb_hang = 0.00001;
-    mode_settings[i].nb_thresh = 4.95;
-    mode_settings[i].nr2_ae = 1;
+    dup2(nfd, fd);
+    close(nfd);
+    droid_log("protocol socket %d moved to the current network", fd);
+    return;
   }
 }
 
@@ -298,19 +394,30 @@ setup:
   adc[0].min_gain = -12.0;
   adc[0].max_gain = 48.0;
 
-  mode_settings_defaults();
-  for (int i = 0; i < MAX_VFOS; i++) {
-    vfo[i].band = get_band_from_frequency(o->freq);
-    vfo[i].frequency = o->freq;
-    vfo[i].mode = o->mode;
-    vfo[i].filter = mode_settings[o->mode].filter;
-    vfo[i].deviation = 2500;
-    vfo[i].step = 10;
-    vfo[i].rit_step = 10;
-  }
-
   /* WDSP channels are opened once per process; a restart reuses them. */
   if (receiver[0] == NULL) {
+    /* radio.c's radio_restore_state(): the props file is named after the
+     * radio's MAC, as deskHPSDR names it, so a desktop profile can be copied
+     * over. Then the receivers restore their own settings as they are made. */
+    const unsigned char *m = radio->info.network.mac_address;
+    snprintf(props_path, sizeof props_path, "%s/%02X-%02X-%02X-%02X-%02X-%02X.props", o->props_dir, m[0], m[1],
+             m[2], m[3], m[4], m[5]);
+    int have_props = o->props_dir[0] && access(props_path, R_OK) == 0;
+    if (have_props) loadProperties(props_path);
+    filterRestoreState();
+    bandRestoreState();
+    memRestoreState();
+    vfo_restore_state();
+    if (!have_props) {
+      /* first start: no deskHPSDR settings yet, start where the app was */
+      for (int i = 0; i < MAX_VFOS; i++) {
+        vfo[i].band = get_band_from_frequency(o->freq);
+        vfo[i].frequency = o->freq;
+        vfo[i].mode = o->mode;
+        vfo[i].filter = mode_settings[o->mode].filter;
+      }
+    }
+    droid_log("settings: %s (%s)", props_path, have_props ? "loaded" : "new");
     for (int i = 0; i < 2; i++) {
       receiver[i] = rx_create_receiver(CHANNEL_RX0 + i, o->pixels, o->pixels, 200);
       receiver[i]->displaying = 0;
@@ -324,6 +431,7 @@ setup:
     rx_change_sample_rate(receiver[0], o->sample_rate);
     if (p1_started) old_protocol_set_mic_sample_rate(o->sample_rate);
   }
+  vfo_apply_mode_settings(receiver[0]);
   rx_mode_changed(receiver[0]);
   for (int i = 0; i < 2; i++) rx_frequency_changed(receiver[i]);
 
@@ -341,7 +449,7 @@ setup:
   rx_set_framerate(rx);   /* also rx_set_average() */
 
   droid_log("HL2 at %s: %.3f MHz %s, LNA %+.0f dB, HL2+ codec %s, %d Hz, %d px at %d fps",
-            inet_ntoa(radio->info.network.address.sin_addr), o->freq / 1e6, mode_string[o->mode], o->lna_db,
+            inet_ntoa(radio->info.network.address.sin_addr), vfo[0].frequency / 1e6, mode_string[vfo[0].mode], o->lna_db,
             o->codec ? "on" : "off", rx->sample_rate, rx->pixels, rx->fps);
   snprintf(msg, msglen, "HL2 at %s, gateware %d.%d", inet_ntoa(radio->info.network.address.sin_addr),
            radio->software_version / 10, radio->software_version % 10);
@@ -351,6 +459,7 @@ setup:
    * and old_protocol_run just send start/stop packets" - so a restart (new
    * sample rate, Stop then Start) only runs it again. */
   if (p1_started) {
+    relink_protocol_socket();   /* the network may have changed since (adapter unplugged) */
     old_protocol_run();
   } else {
     old_protocol_init(rx->sample_rate);
@@ -369,6 +478,7 @@ void droid_radio_stop(void) {
     receiver[0]->local_audio = 0;
     audio_close_output(receiver[0]);
   }
+  droid_radio_save_now();   /* the loop thread has stopped: safe here */
   old_protocol_stop();
   droid_log("stream stopped");
   /* The receivers stay allocated: WDSP channels cannot be reopened cleanly in
@@ -396,6 +506,67 @@ void droid_get_status(droid_status *s) {
   s->noise_floor = droid_noise_floor();
   s->phone_audio = receiver[0]->local_audio;
   s->zoom = receiver[0]->zoom;
+  s->freq_b = vfo[1].frequency;
+  s->mode_b = vfo[1].mode;
+  s->rit_on = vfo[0].rit_enabled;
+  s->rit = vfo[0].rit;
+  s->ctun = vfo[0].ctun;
+  s->locked = locked;
+  s->split = split;
+  s->step = vfo[0].step;
+  s->band = vfo[0].band;
+  s->bandstack = vfo[0].bandstack;
+  s->filter = vfo[0].filter;
+  s->agc = receiver[0]->agc;
+  s->rows = droid_rows_count();
+}
+
+/* ---- deskHPSDR's tables for the UI (read-only; small races are harmless) ---- */
+
+int droid_filters(int mode, char titles[][16], int *lo, int *hi, int max) {
+  if (mode < 0 || mode >= MODES) return 0;
+  int n = 0;
+  for (int i = 0; i < FILTERS && n < max; i++, n++) {
+    const FILTER *f = &filters[mode][i];
+    snprintf(titles[n], 16, "%s", f->title);
+    lo[n] = f->low;
+    hi[n] = f->high;
+  }
+  return n;
+}
+
+int droid_bands(char titles[][16], long long *fmin, long long *fmax, int max) {
+  int n = 0;
+  for (int i = 0; i < BANDS && n < max; i++, n++) {
+    const BAND *b = band_get_band(i);
+    snprintf(titles[n], 16, "%s", b->title);
+    fmin[n] = b->frequencyMin;
+    fmax[n] = b->frequencyMax;
+  }
+  return n;
+}
+
+int droid_bandstack_entries(int band, long long *freq, int *mode, int *filter, int max, int *current) {
+  if (band < 0 || band >= BANDS) return 0;
+  const BANDSTACK *bs = bandstack_get_bandstack(band);
+  if (!bs) return 0;
+  int n = 0;
+  for (int i = 0; i < bs->entries && n < max; i++, n++) {
+    freq[n] = bs->entry[i].frequency;
+    mode[n] = bs->entry[i].mode;
+    filter[n] = bs->entry[i].filter;
+  }
+  *current = bs->current_entry;
+  return n;
+}
+
+int droid_memories(long long *freq, int *mode, int max) {
+  int n = 0;
+  for (int i = 0; i < NUM_OF_MEMORYS && n < max; i++, n++) {
+    freq[n] = mem[i].frequency;
+    mode[n] = mem[i].mode;
+  }
+  return n;
 }
 
 int droid_wisdom(const char *dir) { return WDSPwisdom((char *)dir); }

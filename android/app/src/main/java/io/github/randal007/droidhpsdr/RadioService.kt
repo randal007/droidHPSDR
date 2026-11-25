@@ -12,6 +12,7 @@ import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.wifi.WifiManager
 import android.os.IBinder
 import android.os.PowerManager
@@ -32,6 +33,31 @@ class RadioService : Service() {
     private var wifiLock: WifiManager.WifiLock? = null
     private var wakeLock: PowerManager.WakeLock? = null
     @Volatile private var starting = false
+    @Volatile private var wanted = false          // the user wants the radio on
+    @Volatile private var boundNet: Network? = null
+    private var watchdog: Thread? = null
+
+    /**
+     * The USB Ethernet adapter can be unplugged and plugged in again: Android
+     * then makes a new network. Stop cleanly when ours goes, start again when
+     * an Ethernet network comes back (radio_core.c moves the protocol socket).
+     */
+    private val ethernet = object : ConnectivityManager.NetworkCallback() {
+        override fun onLost(network: Network) {
+            if (network != boundNet) return
+            Log.i("droidHPSDR", "Ethernet lost")
+            if (Radio.running) Native.stop()
+            boundNet = null
+            Radio.setPhase(Phase.ERROR, "Ethernet unplugged: plug the adapter back in")
+        }
+
+        override fun onAvailable(network: Network) {
+            if (!wanted || Radio.running || starting) return
+            Log.i("droidHPSDR", "Ethernet back")
+            Thread.sleep(1500)   // let the static address settle
+            startRadio()
+        }
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -50,8 +76,37 @@ class RadioService : Service() {
             return START_STICKY
         }
         startForeground(1, notification("Starting"), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+        if (!wanted) {
+            wanted = true
+            getSystemService(ConnectivityManager::class.java).registerNetworkCallback(
+                NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_ETHERNET).build(), ethernet,
+            )
+            startWatchdog()
+        }
         if (!Radio.running && !starting) startRadio()
         return START_STICKY
+    }
+
+    /** No spectrum rows for 3 s while "running" (radio power-cycled, link gone quiet): start again. */
+    private fun startWatchdog() {
+        watchdog = thread(name = "radio-watchdog", isDaemon = true) {
+            var lastRows = -1L
+            var quietSince = 0L
+            while (wanted) {
+                Thread.sleep(1000)
+                val st = Radio.status.value
+                if (!Radio.running || starting) { lastRows = -1; continue }
+                val now = System.currentTimeMillis()
+                if (st.rows != lastRows) { lastRows = st.rows; quietSince = now; continue }
+                if (now - quietSince > 3000) {
+                    Log.i("droidHPSDR", "no data for 3 s: restarting the stream")
+                    Native.stop()
+                    Radio.setPhase(Phase.CONNECTING, "No data from the radio: trying again")
+                    lastRows = -1
+                    startRadio()
+                }
+            }
+        }
     }
 
     private fun startRadio() {
@@ -88,14 +143,14 @@ class RadioService : Service() {
                 val s = Radio.status.value
                 val err = Native.start(
                     Radio.freq.value, s.mode, Radio.lnaDb.value, true,
-                    Radio.sampleRate.value, Radio.PIXELS, Radio.FPS, ip,
+                    Radio.sampleRate.value, Radio.PIXELS, Radio.FPS, ip, filesDir.absolutePath,
                 )
                 if (err.isEmpty()) {
                     Native.setVolumeDb(Radio.volumeDb.value)
                     Native.setRowDelayMs(Radio.rowDelayMs.value)
                     Native.setPhoneAudio(Radio.phoneAudio.value)
+                    Native.step(Radio.step.value)
                     Radio.setPhase(Phase.RUNNING, "", net)
-                    Radio.applyModeFilter()
                     Radio.applyZoom()
                     Radio.setDisplay()
                     getSystemService(NotificationManager::class.java).notify(1, notification("Receiving on $net"))
@@ -121,13 +176,18 @@ class RadioService : Service() {
         val eth = find(NetworkCapabilities.TRANSPORT_ETHERNET)
         val net = eth ?: find(NetworkCapabilities.TRANSPORT_WIFI)
         cm.bindProcessToNetwork(net)
+        boundNet = net
         val name = if (eth != null) "Ethernet" else if (net != null) "WiFi" else "no network"
         Log.i("droidHPSDR", "bound to $name ($net)")
         return name
     }
 
     private fun shutdown() {
-        if (Radio.running) Native.stop()
+        if (wanted) {
+            wanted = false
+            runCatching { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(ethernet) }
+        }
+        if (Radio.running) Native.stop()   // also writes deskHPSDR's props file
         Radio.setPhase(Phase.IDLE)
         wifiLock?.takeIf { it.isHeld }?.release()
         wakeLock?.takeIf { it.isHeld }?.release()

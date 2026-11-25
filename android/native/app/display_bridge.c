@@ -99,6 +99,13 @@ void meter_update(RECEIVER *rx, int meter_type, double value, double alc, double
   }
 }
 
+unsigned long long droid_rows_count(void) {
+  pthread_mutex_lock(&lock);
+  unsigned long long n = newest;
+  pthread_mutex_unlock(&lock);
+  return n;
+}
+
 double droid_meter_dbm(void) {
   pthread_mutex_lock(&lock);
   double v = meter_dbm;

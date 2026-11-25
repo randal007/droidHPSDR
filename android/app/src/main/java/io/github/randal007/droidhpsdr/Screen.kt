@@ -80,6 +80,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -90,6 +91,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 
 private val Bg = Color(0xFF05070D)
 private val Glass = Color(0xA80A101E)
@@ -102,7 +104,7 @@ private val Grn = Color(0xFF3EE07A)
 private val Red = Color(0xFFFF5A50)
 
 
-private enum class Sheet { BAND, MODE, AF, LNA, FILTER, MENU, DISPLAY, FREQ }
+private enum class Sheet { BAND, MODE, AF, LNA, FILTER, MENU, DISPLAY, FREQ, VFO, AGC }
 
 private fun Modifier.glass(r: Int = 14) =
     clip(RoundedCornerShape(r.dp)).background(Glass).border(1.dp, Line, RoundedCornerShape(r.dp))
@@ -121,7 +123,7 @@ fun Screen(onStart: () -> Unit, onStop: () -> Unit) {
             SpectrumOverlay(Modifier.fillMaxSize())
 
             MeterCard(status.meterDbm, Modifier.align(Alignment.TopStart).padding(10.dp))
-            VfoPill(freq, status, { sheet = Sheet.MODE }, { sheet = Sheet.FILTER }, { sheet = Sheet.FREQ },
+            VfoPill(freq, status, { sheet = Sheet.MODE }, { sheet = Sheet.FILTER }, { sheet = Sheet.FREQ }, { sheet = Sheet.VFO },
                 Modifier.align(Alignment.TopCenter).padding(top = 8.dp))
             SegmentTag(freq, Modifier.align(Alignment.TopCenter).padding(top = 76.dp))
             Flash(flash, Modifier.align(Alignment.TopEnd).padding(top = 66.dp, end = 12.dp))
@@ -145,7 +147,11 @@ fun Screen(onStart: () -> Unit, onStop: () -> Unit) {
             } else if (status.phase != Phase.RUNNING) {
                 StatusCard(status, onStart, Modifier.align(Alignment.Center))
             }
-            sheet?.let { SheetHost(it, status, onStart, onStop) { sheet = null } }
+            when (sheet) {
+                Sheet.VFO -> VfoPanel(freq, status) { sheet = null }
+                null -> {}
+                else -> SheetHost(sheet!!, status, onStart, onStop) { sheet = null }
+            }
         }
     }
 }
@@ -180,15 +186,16 @@ private fun SpectrumOverlay(modifier: Modifier) {
                 val f0 = Radio.freq.value.toDouble()
                 val st = Radio.status.value
                 val lo = f0 - sp0 / 2
-                val xa = ((f0 + st.filterLow - lo) / hzpx).toFloat()
-                val xb = ((f0 + st.filterHigh - lo) / hzpx).toFloat()
+                val ritHz = if (st.ritOn) st.rit else 0L
+                val xa = ((f0 + ritHz + st.filterLow - lo) / hzpx).toFloat()
+                val xb = ((f0 + ritHz + st.filterHigh - lo) / hzpx).toFloat()
                 val dA = abs(down.position.x - xa)
                 val dB = abs(down.position.x - xb)
-                // 0 = tune, 1 = low edge, 2 = high edge
+                // 0 = tune, 1 = low edge, 2 = high edge, 3 = RIT (RIT on: drag the middle of the passband)
                 val edge = when {
-                    minOf(dA, dB) > edgeTol -> 0
-                    dA < dB -> 1
-                    else -> 2
+                    minOf(dA, dB) <= edgeTol -> if (dA < dB) 1 else 2
+                    st.ritOn && down.position.x > xa && down.position.x < xb -> 3
+                    else -> 0
                 }
                 val vt = VelocityTracker()
                 vt.addPosition(down.uptimeMillis, down.position)
@@ -219,6 +226,7 @@ private fun SpectrumOverlay(modifier: Modifier) {
                         when (edge) {
                             1 -> Radio.setFilter((st.filterLow + dx * hzpx).roundToInt(), st.filterHigh)
                             2 -> Radio.setFilter(st.filterLow, (st.filterHigh + dx * hzpx).roundToInt())
+                            3 -> Radio.rit(true, ((st.rit + dx * hzpx) / 10).roundToLong() * 10)
                             else -> Radio.tune(f0 - dx * hzpx)
                         }
                         c.consume()
@@ -253,8 +261,9 @@ private fun SpectrumOverlay(modifier: Modifier) {
         fun x(f: Double) = ((f - lo) / hzpx).toFloat()
 
         // passband and VFO line
-        val pa = x(freq + status.filterLow.toDouble())
-        val pb = x(freq + status.filterHigh.toDouble())
+        val rit = if (status.ritOn) status.rit.toDouble() else 0.0   // RIT moves what you hear
+        val pa = x(freq + rit + status.filterLow.toDouble())
+        val pb = x(freq + rit + status.filterHigh.toDouble())
         drawRect(Color(0x2078C8FF), Offset(pa, 0f), Size(pb - pa, h))
         drawLine(Color(0x668CD2FF), Offset(pa, 0f), Offset(pa, h), 1.dp.toPx())
         drawLine(Color(0x668CD2FF), Offset(pb, 0f), Offset(pb, h), 1.dp.toPx())
@@ -291,14 +300,17 @@ private fun SpectrumOverlay(modifier: Modifier) {
                 val s = ((pdb - SpectrumView.floor3d(style, nf)) / SpectrumView.RANGE_3D).coerceIn(0.0, 1.0)
                 splitY * (1 - SpectrumView.ridge3d(style, s)).toFloat()
             }
+            // below S1 deskHPSDR's table says "no signal": not worth a label
+            if (Radio.labelsSmeter.value && SMeter.index(freq, pdb) == 0) continue
             val text = if (Radio.labelsSmeter.value) SMeter.label(freq, pdb) else "%.0f dBm".format(pdb)
             val t = measurer.measure(text, ls)
             val w = t.size.width + 10.dp.toPx()
             val h = t.size.height + 3.dp.toPx()
             val y = (top - h - 6.dp.toPx()).coerceAtLeast(70.dp.toPx())
-            drawRoundRect(Color(0xCC08101E), Offset(px - w / 2, y), Size(w, h), CornerRadius(h / 2))
+            val cx = px.coerceIn(w / 2 + 2.dp.toPx(), size.width - w / 2 - 2.dp.toPx())   // keep it on screen
+            drawRoundRect(Color(0xCC08101E), Offset(cx - w / 2, y), Size(w, h), CornerRadius(h / 2))
             drawLine(Color(0x66FFFFFF), Offset(px, y + h), Offset(px, top - 2.dp.toPx()), 1.dp.toPx())
-            drawText(t, topLeft = Offset(px - t.size.width / 2, y + 1.5.dp.toPx()))
+            drawText(t, topLeft = Offset(cx - t.size.width / 2, y + 1.5.dp.toPx()))
         }
     }
 }
@@ -379,54 +391,152 @@ private fun sMeter(dbm: Double): Pair<String, Double> {
     return label to level
 }
 
+/**
+ * The main VFO pill (M4 picks): VFO A big, VFO B small under it; on the right
+ * the mode and filter, then a column with only the switches that are on (RIT,
+ * split, lock, CTUN) - it makes the pill wider, never taller. Tap the pill for
+ * the VFO panel, tap the digits to type a frequency, hold them and slide to tune.
+ */
 @Composable
-private fun VfoPill(freq: Long, st: Status, onMode: () -> Unit, onFilter: () -> Unit, onFreq: () -> Unit, modifier: Modifier) {
+private fun VfoPill(
+    freq: Long, st: Status, onMode: () -> Unit, onFilter: () -> Unit, onFreq: () -> Unit, onPanel: () -> Unit,
+    modifier: Modifier,
+) {
     Row(
-        modifier.height(62.dp).glass().padding(horizontal = 18.dp),
+        modifier.height(74.dp).glass().clickable(onClick = onPanel).padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Box(Modifier.clip(RoundedCornerShape(6.dp)).background(Amb).padding(horizontal = 7.dp, vertical = 1.dp)) {
-            Text("A", color = Color(0xFF1A1000), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-        }
-        val haptic = LocalHapticFeedback.current
-        Box(
-            Modifier.pointerInput(Unit) {
-                // tap: type a frequency (deskHPSDR's VFO number pad)
-                detectTapGestures(onTap = { onFreq() })
-            }.pointerInput(Unit) {
-                // hold, then drag sideways: one step per 8 dp
-                val px = 8.dp.toPx()
-                var start = 0L
-                var acc = 0f
-                detectDragGesturesAfterLongPress(
-                    onDragStart = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        start = Radio.freq.value
-                        acc = 0f
-                    },
-                ) { change, drag ->
-                    change.consume()
-                    acc += drag.x
-                    Radio.tune(start + (acc / px).toInt() * Radio.step.value.toDouble())
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.clip(RoundedCornerShape(6.dp)).background(Amb).padding(horizontal = 7.dp, vertical = 1.dp)) {
+                    Text("A", color = Color(0xFF1A1000), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
-            },
-        ) { FreqText(freq, 34) }
+                val haptic = LocalHapticFeedback.current
+                Box(
+                    Modifier.pointerInput(Unit) {
+                        // tap: type a frequency (deskHPSDR's VFO number pad)
+                        detectTapGestures(onTap = { onFreq() })
+                    }.pointerInput(Unit) {
+                        // hold, then drag sideways: one step per 8 dp
+                        val px = 8.dp.toPx()
+                        var start = 0L
+                        var acc = 0f
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                start = Radio.freq.value
+                                acc = 0f
+                            },
+                        ) { change, drag ->
+                            change.consume()
+                            acc += drag.x
+                            Radio.tune(start + (acc / px).toInt() * Radio.step.value.toDouble())
+                        }
+                    },
+                ) { FreqText(freq, 32) }
+            }
+            if (st.freqB > 0) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("B", color = Dim, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.width(24.dp), textAlign = TextAlign.Center)
+                    FreqText(st.freqB, 13, dim = true)
+                }
+            }
+        }
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Tag(Modes.name(st.mode), Acc, Color(0x293FD0FF), onMode)
             Tag(widthLabel(st.filterHigh - st.filterLow), Txt, Color(0x14FFFFFF), onFilter)
+        }
+        val on = buildList {
+            if (st.ritOn) add("RIT %+d".format(st.rit) to Amb)
+            if (st.split) add("SPLIT · TX B" to Color(0xFFC9A8FF))
+            if (st.ctun) add("CTUN" to Acc)
+            if (st.locked) add("🔒 LOCK" to Dim)
+        }
+        if (on.isNotEmpty()) {
+            Box(Modifier.width(1.dp).height(46.dp).background(Line))
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                on.forEach { (t, c) -> Text(t, color = c, fontSize = 10.sp, fontWeight = FontWeight.Bold) }
+            }
+        }
+    }
+}
+
+/** Tap the pill: the VFO panel drops open under it (round 2, picture 3). */
+@Composable
+private fun VfoPanel(freq: Long, st: Status, close: () -> Unit) {
+    Box(Modifier.fillMaxSize().background(Color(0x55000000)).clickable(onClick = close)) {
+        Column(
+            Modifier.align(Alignment.TopCenter).padding(top = 8.dp).width(440.dp).glass(18)
+                .background(Color(0xE6090D18)).clickable(enabled = false) {}.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(Modifier.clip(RoundedCornerShape(6.dp)).background(Amb).padding(horizontal = 7.dp, vertical = 1.dp)) {
+                    Text("A", color = Color(0xFF1A1000), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+                FreqText(freq, 30)
+                Tag(Modes.name(st.mode), Acc, Color(0x293FD0FF)) {}
+            }
+            Row(
+                Modifier.clip(RoundedCornerShape(8.dp)).clickable { Radio.vfoOp(2) }.padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text("B", color = Dim, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(26.dp),
+                    textAlign = TextAlign.Center)
+                FreqText(st.freqB, 20, dim = true)
+                Tag(Modes.name(st.modeB), Txt, Color(0x14FFFFFF)) { Radio.vfoOp(2) }
+                Text("tap B to make it active", color = Dim, fontSize = 10.sp)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                PanelButton("A›B", modifier = Modifier.weight(1f)) { Radio.vfoOp(0) }
+                PanelButton("B›A", modifier = Modifier.weight(1f)) { Radio.vfoOp(1) }
+                PanelButton("A⇄B", modifier = Modifier.weight(1f)) { Radio.vfoOp(2) }
+                PanelButton("SPLIT", st.split, "with transmit (M7)", Modifier.weight(1f), enabled = false) {}
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                PanelButton("RIT", st.ritOn, "%+d Hz".format(st.rit), Modifier.weight(1f)) { Radio.rit(!st.ritOn) }
+                PanelButton("RIT 0", modifier = Modifier.weight(1f)) { Radio.rit(st.ritOn, 0) }
+                PanelButton("CTUN", st.ctun, modifier = Modifier.weight(1f)) { Radio.ctun(!st.ctun) }
+                PanelButton("LOCK", st.locked, modifier = Modifier.weight(1f)) { Radio.lock(!st.locked) }
+                val step by Radio.step.collectAsState()
+                PanelButton("STEP", false, if (step >= 1000) "${step / 1000} kHz" else "$step Hz", Modifier.weight(1f)) {
+                    val steps = listOf(1, 10, 50, 100, 500, 1000)
+                    Radio.setStep(steps[(steps.indexOf(step) + 1) % steps.size])
+                }
+            }
+            Text("RIT on: drag the middle of the passband · tap outside to close", color = Dim, fontSize = 10.sp,
+                modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
         }
     }
 }
 
 @Composable
-private fun FreqText(freq: Long, size: Int) {
+private fun PanelButton(
+    label: String, on: Boolean = false, sub: String? = null, modifier: Modifier = Modifier, enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier.height(42.dp).clip(RoundedCornerShape(12.dp))
+            .background(if (on) Color(0x293FD0FF) else Color(0xFF0F1624))
+            .border(1.dp, if (on) Acc.copy(alpha = 0.5f) else Line, RoundedCornerShape(12.dp))
+            .clickable(enabled = enabled, onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+    ) {
+        Text(label, color = if (!enabled) Dim else if (on) Acc else Txt, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        if (sub != null) Text(sub, color = Dim, fontSize = 9.5.sp)
+    }
+}
+
+@Composable
+private fun FreqText(freq: Long, size: Int, dim: Boolean = false) {
     val mhz = freq / 1_000_000
     val khz = (freq / 1000) % 1000
     val hz = freq % 1000
     Text(
         buildAnnotatedString {
-            withStyle(SpanStyle(color = Txt, fontSize = size.sp, fontWeight = FontWeight.Medium)) {
+            withStyle(SpanStyle(color = if (dim) Dim else Txt, fontSize = size.sp, fontWeight = FontWeight.Medium)) {
                 append("%d.%03d".format(mhz, khz))
             }
             withStyle(SpanStyle(color = Dim, fontSize = (size * 0.6).sp)) { append(".%03d".format(hz)) }
@@ -514,6 +624,7 @@ private fun ChipRow(st: Status, open: (Sheet) -> Unit, modifier: Modifier) {
         val phone by Radio.phoneAudio.collectAsState()
         Chip("PHONE", if (phone) "On" else "Off", on = phone) { Radio.setPhoneAudio(!phone) }
         Chip("FILTER", widthLabel(st.filterHigh - st.filterLow)) { open(Sheet.FILTER) }
+        Chip("AGC", AGC_NAMES.getOrElse(st.agc) { "?" }) { open(Sheet.AGC) }
         Chip("STEP", if (step >= 1000) "${step / 1000} kHz" else "$step Hz") {
             val steps = listOf(1, 10, 50, 100, 500, 1000)
             Radio.setStep(steps[(steps.indexOf(step) + 1) % steps.size])
@@ -598,6 +709,8 @@ private fun SheetHost(which: Sheet, st: Status, onStart: () -> Unit, onStop: () 
                 Sheet.MENU -> MenuSheet(st, onStart, onStop, close)
                 Sheet.DISPLAY -> DisplaySheet()
                 Sheet.FREQ -> FreqSheet(close)
+                Sheet.AGC -> AgcSheet(st, close)
+                Sheet.VFO -> {}
             }
         }
     }
@@ -648,20 +761,67 @@ private fun GridButtons(items: List<String>, selected: String?, cols: Int, onCli
     }
 }
 
+/** Band sheet (M4 pick E): deskHPSDR's bands, this band's stack, memories M0-M9. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BandSheet(close: () -> Unit) {
-    val freq by Radio.freq.collectAsState()
-    val region by Radio.region.collectAsState()
+    val st by Radio.status.collectAsState()
+    var refresh by remember { mutableStateOf(0) }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         SheetTitle("Band")
-        Text("IARU Region $region", color = Dim, fontSize = 11.sp)
+        Text("tap the band again for its next stack entry", color = Dim, fontSize = 11.sp)
     }
-    val bands = BandPlan.bands
-    GridButtons(bands.map { it.name }, BandPlan.band(freq)?.name, 6) {
-        Radio.tune(bands[it].home.toDouble())
-        close()
+    if (!Radio.running) {
+        Text("Bands, band stacks and memories come from the radio: start it first.", color = Dim, fontSize = 12.sp)
+        return
+    }
+    val bands = remember(refresh) { Radio.bands() }
+    val sel = bands.firstOrNull { it.index == st.band }?.title
+    GridButtons(bands.map { it.title }, sel, 7) { Radio.band(bands[it].index) }
+    val (cur, stack) = remember(st.band, st.bandstack, st.freq_dummy(), refresh) { Radio.bandstackEntries(st.band) }
+    if (stack.isNotEmpty()) {
+        Label("${sel ?: ""} band stack")
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            stack.forEachIndexed { i, e ->
+                val on = i == cur
+                Column(
+                    Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(12.dp))
+                        .background(if (on) Color(0x293FD0FF) else Color(0xFF0F1624))
+                        .border(1.dp, if (on) Acc.copy(alpha = 0.5f) else Line, RoundedCornerShape(12.dp))
+                        .clickable { Radio.bandstack(i); refresh++ },
+                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+                ) {
+                    FreqText(e.freq, 13)
+                    Text(Modes.name(e.mode), color = Dim, fontSize = 9.5.sp)
+                }
+            }
+        }
+    }
+    Label("Memories · tap to recall, hold to store the current frequency")
+    val mems = remember(refresh) { Radio.memories() }
+    val haptic = LocalHapticFeedback.current
+    Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+        mems.forEachIndexed { i, (f, _) ->
+            Column(
+                Modifier.weight(1f).height(42.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF0F1624))
+                    .border(1.dp, Line, RoundedCornerShape(10.dp))
+                    .combinedClickable(
+                        onClick = { Radio.memory(false, i); close() },
+                        onLongClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            Radio.memory(true, i); refresh++
+                        },
+                    ),
+                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+            ) {
+                Text("M$i", color = Dim, fontSize = 9.sp)
+                Text(if (f > 0) "%.3f".format(f / 1e6) else "—", color = Txt, fontSize = 11.sp)
+            }
+        }
     }
 }
+
+private fun Status.freq_dummy() = rows / 30   // re-read the stack about once a second
 
 @Composable
 private fun ModeSheet(st: Status, close: () -> Unit) {
@@ -685,35 +845,34 @@ private fun SliderSheet(title: String, value: Double, range: ClosedFloatingPoint
     )
 }
 
-/** deskHPSDR's filter presets for the mode, as low/high edges. Dragging the passband edges also works. */
-private fun presets(mode: Int): List<Pair<String, Pair<Int, Int>>> {
-    fun ssb(w: Int, lsb: Boolean) = if (lsb) -(150 + w) to -150 else 150 to 150 + w
-    fun dig(w: Int, lsb: Boolean) = if (lsb) -w to 0 else 0 to w
-    fun sym(w: Int) = -w / 2 to w / 2
-    return when (mode) {
-        Modes.USB, Modes.LSB -> listOf(1800, 2100, 2400, 2700, 2900, 3300, 3800, 4400)
-            .map { widthLabel(it) to ssb(it, mode == Modes.LSB) } +
-            // deskHPSDR's ESSB presets: 50 Hz low edge
-            listOf(2900, 3400).map { w ->
-                "ESSB ${widthLabel(w)}" to if (mode == Modes.LSB) -(50 + w) to -50 else 50 to 50 + w
-            }
-        Modes.DIGU, Modes.DIGL -> listOf(500, 1000, 1500, 2000, 2500, 3000, 4000, 5000)
-            .map { widthLabel(it) to dig(it, mode == Modes.DIGL) }
-        Modes.CWU, Modes.CWL -> listOf(50, 100, 250, 400, 500, 600, 800, 1000).map { widthLabel(it) to sym(it) }
-        else -> listOf(4000, 5200, 6600, 8000, 10000, 12000, 16000).map { widthLabel(it) to sym(it) }
-    }
-}
-
+/** deskHPSDR's own filter table for the mode (filter.c): its presets, then Var1/Var2. */
 @Composable
 private fun FilterSheet(st: Status, close: () -> Unit) {
     SheetTitle("Filter · ${Modes.name(st.mode)}")
-    val p = presets(st.mode)
-    GridButtons(p.map { it.first }, widthLabel(st.filterHigh - st.filterLow), 4) {
-        Radio.setFilter(p[it].second.first, p[it].second.second)
+    if (!Radio.running) {
+        Text("Start the radio first.", color = Dim, fontSize = 12.sp)
+        return
+    }
+    val list = remember(st.mode) { Radio.filters(st.mode) }
+    val shown = list.withIndex().filter { it.value.first.isNotBlank() }
+    val label = { t: Triple<String, Int, Int> ->
+        if (t.first.startsWith("Var")) "${t.first} ${widthLabel(t.third - t.second)}" else t.first
+    }
+    GridButtons(shown.map { label(it.value) }, list.getOrNull(st.filter)?.let(label), 4) {
+        Radio.filterPreset(shown[it].index)
         close()
     }
-    Text("Or drag the passband edges on the spectrum.", color = Dim, fontSize = 11.sp)
+    Text("Or drag the passband edges on the spectrum (that sets Var1).", color = Dim, fontSize = 11.sp)
 }
+
+/** AGC (deskHPSDR's AGC menu: the modes; gain and hang threshold come with the AGC line). */
+@Composable
+private fun AgcSheet(st: Status, close: () -> Unit) {
+    SheetTitle("AGC")
+    GridButtons(AGC_NAMES, AGC_NAMES.getOrNull(st.agc), 5) { Radio.agc(it); close() }
+}
+
+private val AGC_NAMES = listOf("Off", "Long", "Slow", "Med", "Fast")
 
 /** deskHPSDR's VFO number pad: type a frequency, finish with MHz or kHz. */
 @Composable

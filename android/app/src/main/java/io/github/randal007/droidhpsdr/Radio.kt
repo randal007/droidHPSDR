@@ -76,6 +76,19 @@ data class Status(
     val lostPackets: Long = 0,
     val adcOverloads: Int = 0,
     val noiseFloor: Double = -125.0,
+    // M4: VFO state from deskHPSDR's vfo.c
+    val freqB: Long = 0,
+    val modeB: Int = Modes.USB,
+    val ritOn: Boolean = false,
+    val rit: Long = 0,
+    val ctun: Boolean = false,
+    val locked: Boolean = false,
+    val split: Boolean = false,
+    val band: Int = -1,
+    val bandstack: Int = 0,
+    val filter: Int = 0,
+    val agc: Int = 3,
+    val rows: Long = 0,
 )
 
 /**
@@ -167,21 +180,25 @@ object Radio {
 
     val running get() = status.value.phase == Phase.RUNNING
 
+    @Volatile private var lastTuneMs = 0L
+
     fun tune(hz: Double, exact: Boolean = false) {
+        if (status.value.locked) return   // deskHPSDR's Lock: no tuning
         val st = if (exact) 1 else step.value.coerceAtLeast(1)
         val f = ((hz / st).roundToLong() * st).coerceIn(100_000L, 61_440_000L)
         if (f == freq.value) return
+        lastTuneMs = System.currentTimeMillis()
         freq.value = f
         if (running) Native.setFrequency(f)
         if (status.value.phase == Phase.DEMO) Native.demoSetFrequency(f)
         prefs.edit().putLong("freq", f).apply()
     }
 
+    /** deskHPSDR's mode change: the mode brings back its own filter, AGC and step (vfo.c). */
     fun setMode(m: Int) {
         status.value = status.value.copy(mode = m)
-        if (running) Native.setMode(m)
+        if (running) Native.setMode(m) else applyModeFilter()
         prefs.edit().putInt("mode", m).apply()
-        applyModeFilter()
     }
 
     /** The filter this mode had last (deskHPSDR keeps one per mode too), or its default. */
@@ -251,7 +268,48 @@ object Radio {
 
     fun setStep(s: Int) {
         step.value = s
+        if (running) Native.step(s)
         prefs.edit().putInt("step", s).apply()
+    }
+
+    // ---- M4: deskHPSDR's VFO, band and memory operations (vfo.c, store.c) ----
+    fun filterPreset(i: Int) { if (running) Native.filterPreset(i) }
+    fun band(b: Int) { if (running) { lastTuneMs = 0; Native.band(b) } }
+    fun bandstack(i: Int) { if (running) { lastTuneMs = 0; Native.bandstack(i) } }
+    fun vfoOp(op: Int) { if (running) { lastTuneMs = 0; Native.vfoOp(op) } }
+    fun rit(on: Boolean, hz: Long = status.value.rit) {
+        status.value = status.value.copy(ritOn = on, rit = hz)
+        if (running) Native.rit(on, hz)
+    }
+    fun ctun(on: Boolean) { if (running) Native.ctun(on) }
+    fun lock(on: Boolean) { status.value = status.value.copy(locked = on); if (running) Native.lock(on) }
+    fun agc(a: Int) { status.value = status.value.copy(agc = a); if (running) Native.agc(a) }
+    fun memory(store: Boolean, slot: Int) { if (running) { lastTuneMs = 0; Native.memory(store, slot) } }
+    fun save() { if (running) Native.save() }
+
+    /** deskHPSDR's filter table for a mode: (title, low, high); index = filter number. */
+    fun filters(mode: Int): List<Triple<String, Int, Int>> =
+        Native.filters(mode).lines().filter { it.isNotBlank() }.map {
+            val p = it.split('|'); Triple(p[0], p[1].toInt(), p[2].toInt())
+        }
+
+    data class UpBand(val index: Int, val title: String, val fmin: Long, val fmax: Long)
+
+    /** deskHPSDR's bands the HL2 can tune (index = upstream band number). */
+    fun bands(): List<UpBand> = Native.bands().lines().filter { it.isNotBlank() }.mapIndexed { i, l ->
+        val p = l.split('|'); UpBand(i, p[0], p[1].toLong(), p[2].toLong())
+    }.filter { it.fmin in 1..61_440_000L && it.title.isNotBlank() }
+
+    data class StackEntry(val freq: Long, val mode: Int, val filter: Int)
+
+    fun bandstackEntries(band: Int): Pair<Int, List<StackEntry>> {
+        val l = Native.bandstackEntries(band).lines().filter { it.isNotBlank() }
+        if (l.isEmpty()) return 0 to emptyList()
+        return l[0].toInt() to l.drop(1).map { val p = it.split('|'); StackEntry(p[0].toLong(), p[1].toInt(), p[2].toInt()) }
+    }
+
+    fun memories(): List<Pair<Long, Int>> = Native.memories().lines().filter { it.isNotBlank() }.map {
+        val p = it.split('|'); p[0].toLong() to p[1].toInt()
     }
 
     fun setPhoneAudio(on: Boolean) {
@@ -328,7 +386,7 @@ object Radio {
     private fun startPolling() {
         poll?.cancel()
         poll = scope.launch {
-            val a = DoubleArray(13)
+            val a = DoubleArray(26)
             val pk = DoubleArray(64)
             var tick = 0
             while (isActive) {
@@ -340,7 +398,17 @@ object Radio {
                         mode = a[2].toInt(), filterLow = a[3].toInt(), filterHigh = a[4].toInt(),
                         sampleRate = a[5].toInt(), meterDbm = a[6], lostPackets = a[7].toLong(),
                         adcOverloads = a[8].toInt(), noiseFloor = a[11],
+                        freqB = a[13].toLong(), modeB = a[14].toInt(), ritOn = a[15] != 0.0, rit = a[16].toLong(),
+                        ctun = a[17] != 0.0, locked = a[18] != 0.0, split = a[19] != 0.0, band = a[21].toInt(),
+                        bandstack = a[22].toInt(), filter = a[23].toInt(), agc = a[24].toInt(), rows = a[25].toLong(),
                     )
+                    // The radio moves the frequency itself on band changes, A/B swaps and memory
+                    // recalls: follow it, unless the user is tuning right now.
+                    val nf = a[1].toLong()
+                    if (nf != freq.value && System.currentTimeMillis() - lastTuneMs > 400) {
+                        freq.value = nf
+                        prefs.edit().putLong("freq", nf).apply()
+                    }
                 }
                 if (++tick % 4 == 0) pollPeaks(pk)
                 delay(50)

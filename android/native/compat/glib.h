@@ -98,6 +98,15 @@ static inline gpointer g_malloc0_n(gsize n, gsize size) { return calloc(n, size)
 #define g_new(type, n) ((type *)g_malloc_n((n), sizeof(type)))
 #define g_new0(type, n) ((type *)g_malloc0_n((n), sizeof(type)))
 static inline gchar *g_strdup(const gchar *s) { return s ? strdup(s) : NULL; }
+/* property.c: the backup file name */
+__attribute__((format(printf, 1, 2))) static inline gchar *g_strdup_printf(const gchar *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  char *out = NULL;
+  if (vasprintf(&out, fmt, ap) < 0) out = NULL;
+  va_end(ap);
+  return out;
+}
 gsize g_strlcpy(gchar *dest, const gchar *src, gsize dest_size);
 
 /* ---- locks ---- */
@@ -154,6 +163,36 @@ static inline void g_object_weak_ref(GObject *o, GWeakNotify n, gpointer d) { (v
 
 /* ---- printing ---- */
 void g_print(const gchar *format, ...) G_GNUC_PRINTF(1, 2);
+
+/* GString, as property.c uses it (reading the props file line by line). */
+typedef struct { gchar *str; gsize len; gsize allocated_len; } GString;
+static inline GString *g_string_new(const gchar *init) {
+  GString *s = (GString *)malloc(sizeof *s);
+  s->len = init ? strlen(init) : 0;
+  s->allocated_len = s->len + 64;
+  s->str = (gchar *)malloc(s->allocated_len);
+  if (s->len) memcpy(s->str, init, s->len);
+  s->str[s->len] = 0;
+  return s;
+}
+static inline GString *g_string_append_c(GString *s, gchar c) {
+  if (s->len + 2 > s->allocated_len) {
+    s->allocated_len *= 2;
+    s->str = (gchar *)realloc(s->str, s->allocated_len);
+  }
+  s->str[s->len++] = c;
+  s->str[s->len] = 0;
+  return s;
+}
+static inline GString *g_string_truncate(GString *s, gsize len) {
+  if (len < s->len) { s->len = len; s->str[len] = 0; }
+  return s;
+}
+static inline gchar *g_string_free(GString *s, gboolean free_segment) {
+  gchar *r = free_segment ? (free(s->str), (gchar *)NULL) : s->str;
+  free(s);
+  return r;
+}
 
 /* One-time initialisation (buffered_audio.c). enter() returns TRUE to the
  * one caller that must initialise, holding a lock until leave(). */

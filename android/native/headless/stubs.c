@@ -86,6 +86,7 @@ int ext_vfo_update(void *data) { (void)data; return G_SOURCE_REMOVE; }
 int ext_mox_update(void *data) { (void)data; return G_SOURCE_REMOVE; }
 int ext_start_rx(void *data) { (void)data; return G_SOURCE_REMOVE; }
 int ext_start_noise(void *data) { (void)data; return G_SOURCE_REMOVE; }
+int ext_set_duplex(void *data) { (void)data; return G_SOURCE_REMOVE; }   /* TX display (M7) */
 int menu_active_receiver_changed(void *data) { (void)data; return G_SOURCE_REMOVE; }
 int sliders_active_receiver_changed(void *data) { (void)data; return G_SOURCE_REMOVE; }
 int zoompan_active_receiver_changed(void *data) { (void)data; return G_SOURCE_REMOVE; }
@@ -102,14 +103,7 @@ gboolean rigctl_debug = FALSE;
 
 /* ---- display: headless/display_null.c (m1-rx) or app/display_bridge.c (the app) ---- */
 
-/* ---- properties: no props file in M1, so every setting keeps its default ---- */
-
-void loadProperties(const char *filename) { (void)filename; }
-void saveProperties(const char *filename) { (void)filename; }
-void clearProperties(void) {}
-char *getProperty(const char *name) { (void)name; return NULL; }
-void setProperty(const char *name, const char *value) { (void)name; (void)value; }
-double myatof(const char *string) { return string ? strtod(string, NULL) : 0.0; }
+/* ---- properties: upstream property.c, compiled unchanged since M4 ---- */
 
 /* ---- local audio: headless/audio_null.c (m1-rx) or upstream buffered_audio.c
  *      with app/audio_aaudio.c (the app's phone audio) ---- */
@@ -142,25 +136,73 @@ void tx_set_filter(TRANSMITTER *tx) { (void)tx; }
 void tx_off_cancel(void) {}
 void keyer_event(int left, int state) { (void)left; (void)state; }
 
-/* ---- vfo.c: the TX-VFO helpers copied from upstream, the rest no-ops ---- */
+/* ---- vfo.c: compiled unchanged since M4. What it calls elsewhere: ---- */
 
-int vfo_get_tx_vfo(void) {
-  int txvfo = active_receiver->id;
-  if (split) { txvfo = 1 - txvfo; }
-  return txvfo;
+/* radio.c, copied unchanged: split only takes effect when the radio can
+ * transmit, so in this RECEIVE ONLY build it does nothing (until M7). */
+void radio_set_split(int val) {
+  if (can_transmit) {
+    split = val;
+    vfo_apply_ps_tx_att();
+    radio_tx_vfo_changed();
+    radio_set_alex_antennas();
+    if (!tci_is_applying()) {
+      tci_split_changed();
+      tci_tx_frequency_changed();
+    }
+    g_idle_add(ext_vfo_update, NULL);
+    update_slider_split_btn();
+  }
 }
-int vfo_get_tx_mode(void) {
-  return vfo[vfo_get_tx_vfo()].mode;
+
+/* transmit side: RX ONLY */
+void set_drive(double drive) { (void)drive; }
+void tx_set_analyzer(TRANSMITTER *tx) { (void)tx; }
+void tx_set_compressor(TRANSMITTER *tx) { (void)tx; }
+void tx_set_ctcss(const TRANSMITTER *tx) { (void)tx; }
+void tx_set_dexp(const TRANSMITTER *tx) { (void)tx; }
+void tx_set_mode(TRANSMITTER *tx, int m) { (void)tx; (void)m; }
+void sort_cfc_profile(double *freq, double *level, double *post, double *comp_weight, double *post_weight) {
+  (void)freq; (void)level; (void)post; (void)comp_weight; (void)post_weight;
 }
-long long vfo_get_tx_freq(void) {
-  int txvfo = vfo_get_tx_vfo();
-  return vfo[txvfo].ctun ? vfo[txvfo].ctun_frequency : vfo[txvfo].frequency;
-}
-void copy_mode_settings(int mode) { (void)mode; }
-void vfo_band_changed(int id, int b) { (void)id; (void)b; }
-void vfo_move(long long hz, int round) { (void)hz; (void)round; }
-void vfo_move_to(long long hz) { (void)hz; }
-void vfo_step(int steps) { (void)steps; }
+void sort_eq_profile(double *freq, double *gain, double *weight) { (void)freq; (void)gain; (void)weight; }
+
+/* Protocol 2 scheduling: P1 sends everything in every frame */
+void schedule_general(void) {}
+void schedule_transmit_specific(void) {}
+
+/* TCI (M8) */
+int tci_is_applying(void) { return 0; }
+void tci_mode_changed(int id) { (void)id; }
+void tci_rit_enable_changed(int receiver_id) { (void)receiver_id; }
+void tci_rit_offset_changed(int receiver_id) { (void)receiver_id; }
+void tci_tune_drive_changed(void) {}
+void tci_tx_frequency_changed(void) {}
+void tci_vfo_changed(int id) { (void)id; }
+void tci_vfos_changed(void) {}
+void tci_xit_enable_changed(void) {}
+void tci_xit_offset_changed(void) {}
+void tci_split_changed(void) {}
+
+/* actions.c: the multifunction encoder shown in the VFO bar (no encoder here) */
+int GetMultifunctionStatus(void) { return 0; }
+void GetMultifunctionString(char *str, size_t len) { if (len) str[0] = 0; }
+
+/* desktop UI refreshes: Compose reads the state itself */
+gboolean band_menu_update(gpointer data) { (void)data; return G_SOURCE_REMOVE; }
+void update_eq(void) {}
+void update_noise(void) {}
+void update_slider_agc_btn(void) {}
+void update_slider_bbcompr_button(gboolean show_widget) { (void)show_widget; }
+void update_slider_bbcompr_scale(gboolean show_widget) { (void)show_widget; }
+void update_slider_lev_button(gboolean show_widget) { (void)show_widget; }
+void update_slider_lev_scale(gboolean show_widget) { (void)show_widget; }
+void update_slider_local_mic_input(int src) { (void)src; }
+void update_slider_preamp_button(gboolean show_widget) { (void)show_widget; }
+void update_slider_tune_drive_scale(gboolean show_widget) { (void)show_widget; }
+void update_slider_split_btn(void) {}
+void update_zoompan_ant_labels(void) {}
+int update_zoompan_ant_labels_idle(void *data) { (void)data; return G_SOURCE_REMOVE; }
 
 /* ---- toolset.c ---- */
 

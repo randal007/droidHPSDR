@@ -125,6 +125,22 @@ int tx_out_of_band_allowed = 0;
 
 int split = 0;   /* from src/radio.c (used by the TX-VFO helpers in stubs.c) */
 int tci_audio_monitor = 0;   /* from src/radio.c (buffered_audio.c) */
+/* from src/radio.c, used by vfo.c */
+int sat_mode;
+int display_sliders = 0;
+int locked = 0;
+int disable_split_on_band_change = 0;
+int vox_enabled = 0;
+
+/* ---- from src/main.c, src/rigctl.c, src/transmitter.c (read by vfo.c's VFO bar) ---- */
+int freq_bgcolor_alter = 0;
+int cat_control = 0;
+double ctcss_frequencies[CTCSS_FREQUENCIES] = {
+  67.0,  71.9,  74.4,  77.0,  79.7,  82.5,  85.4,  88.5,  91.5,  94.8,
+  97.4, 100.0, 103.5, 107.2, 110.9, 114.8, 118.8, 123.0, 127.3, 131.8,
+  136.5, 141.3, 146.2, 151.4, 156.7, 162.2, 167.9, 173.8, 179.9, 186.2,
+  192.8, 203.5, 210.7, 218.1, 225.7, 233.6, 241.8, 250.3
+};
 /* from src/radio.c: the local-audio ring's latency settings (buffered_audio.c) */
 int rx_audio_network_reserve_enabled = 0;
 int rx_audio_network_reserve_ms = 100;
@@ -143,6 +159,4 @@ int log_debug = 0;
 int mouse_wheel_mode = 1;
 int ui_debug = 0;
 
-/* ---- from src/vfo.c ---- */
-struct _mode_settings mode_settings[MODES];
-struct _vfo vfo[MAX_VFOS];
+/* ---- src/vfo.c: compiled unchanged since M4 (vfo[], mode_settings[]) ---- */

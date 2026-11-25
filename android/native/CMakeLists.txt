@@ -23,7 +23,8 @@ set(UPSTREAM ${REPO}/src)
 # deskHPSDR files compiled unchanged (see docs/PORTING-NOTES.md).
 set(UPSTREAM_SOURCES
   old_protocol.c old_discovery.c discovered.c message.c nw_toolset.c
-  band.c mode.c filter.c receiver.c)
+  band.c mode.c filter.c receiver.c
+  vfo.c store.c property.c appearance.c)   # M4: VFO A/B, band stacks, RIT/CTUN, steps, memories, deskHPSDR's props file
 list(TRANSFORM UPSTREAM_SOURCES PREPEND ${UPSTREAM}/)
 
 add_library(droidcore STATIC
