@@ -10,8 +10,7 @@ next, what's waiting on whom. Session history lives in git and in
   HL2 at 384 kHz over USB Ethernet - layout 1, GPU 3D view (four looks) or
   2D, waterfall, band bar, touch tuning, HL2+ and phone audio, screen-off
   audio. Details in the M3 section.
-- **M4 under way:** design picks in the M4 section; next is code. One open
-  design question: VFO pill glass 40 % or 28 % (round 9 pictures).
+- **M4 under way:** design settled (M4 section); building it.
 - Not installed yet: the type-a-frequency keypad (adb dropped).
 - No transmit until Randal asks for it (M7). One receiver; RX2 later.
 - **Waiting on Randal:** whether to delete the empty leftover repo
@@ -150,12 +149,10 @@ Randal). **Pictures:** `~/Pictures/droidhpsdr-mockups/m4-round1` to `round7`.
 - Indicators (RIT, split, lock, ...): a column **inside the pill, on the
   right**, making it wider, never taller; **only the ones that are on**,
   and none at all (narrow pill) when nothing is on. Nothing over the 3D
-  view. Pill glass more transparent (round 7; how much: open).
+  view. Glass transparency **unchanged** (58 %, Randal: "it's perfect").
 - Band sheet with the band's stack and memories M0-M9 (round 1, E).
 - Keep F (drag the AGC line on the spectrum), G (analog meter option with
   peak/avg) and H (RIT by dragging the passband; TX-B marker for split).
-- Open: glass transparency for pill, meter card and buttons (round 8:
-  58 % now, 40 %, 28 %).
 
 - VFO A/B, split display, step, RIT, CTUN, lock, the VFO bar.
 - Bands, band stacks, transverter bands later (M6), memories (Store).
