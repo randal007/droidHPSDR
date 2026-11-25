@@ -100,3 +100,26 @@ conflict risk from us. Everything droidHPSDR-specific lives outside `src/`
 (compat headers, state file, stubs, main), so a `src/` cherry-pick only breaks
 the build when upstream adds a new global or call that the stubs lack, which
 the linker reports by name.
+
+## Since M1: more upstream files compiled unchanged (M3, M4; 2026-11-24)
+
+| File | Since | Why it matters | What the compat layer / stubs needed |
+|---|---|---|---|
+| `buffered_audio.c` | M3 | deskHPSDR's local audio (ring, latency control) for **phone audio** | backend `app/audio_aaudio.c` (AAudio) for `audio_backend.h`; `g_once_init_*`; radio.c's audio latency defaults |
+| `vfo.c` | M4 | VFO A/B, band changes with band stacks, mode settings, RIT/XIT, CTUN, steps | no-op cairo in `compat/cairo.h`; GDK/GTK drawing-area and signal stand-ins; radio.c's `locked`, `sat_mode`, `vox_enabled`, ...; `radio_set_split()` copied (acts only with `can_transmit`) |
+| `store.c` | M4 | memories M0-M9 | `ext_set_duplex` no-op |
+| `property.c` | M4 | deskHPSDR's props file (`<MAC>.props`), so desktop profiles copy over | `GString` and `g_strdup_printf` in `compat/glib.h` |
+| `appearance.c` | M4 | VFO-bar layout table vfo.c reads | nothing |
+
+The display hooks (`rx_panadapter_update` etc.) and the audio stubs moved
+out of `stubs.c` into `headless/display_null.c` and `headless/audio_null.c`,
+so `m1-rx` keeps no-ops while the app links `app/display_bridge.c` and the
+real audio engine. `discovery_resolve_target()` is copied from discovery.c
+into `headless/net_target.c` (targeted discovery; a fallback for the app
+sandbox that hides interfaces).
+
+Not compiled, logic copied where needed: `noise_menu.c`'s per-mode update
+(M5 plan), radio.c's save/restore order (`radio_core.c`), zoompan.c's
+`set_zoom()` steps. Everything else upstream calls from these files is a
+no-op in `stubs.c`, grouped by reason (transmit: RX only; TCI: M8; desktop
+UI refreshes: Compose reads the state itself).

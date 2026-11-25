@@ -185,12 +185,18 @@ wdsp-2.11/        upstream WDSP, never edited
 android/
   deps/           build-deps.sh (FFTW, rnnoise, libspecbleach, WDSP), wdsp-smoke.c
   native/         CMakeLists.txt; compat/ (stand-in glib/gtk/gdk/cairo headers);
-                  headless/ (radio_state.c, stubs.c, m1_main.c); run-m1.sh
-  (app/ arrives in M3: Gradle, Kotlin, Compose, JNI)
+                  headless/ (radio_state.c, stubs.c, m1_main.c, display_null.c,
+                  audio_null.c, net_target.c); run-m1.sh;
+                  app/ (the app's native side: radio_core.c, display_bridge.c,
+                  gl_render.c, audio_aaudio.c, demo.c, jni_bridge.c)
+  app/            the Android app: Gradle module, Kotlin + Compose
+                  (Screen.kt, Radio.kt, RadioService.kt, SpectrumView.kt, ...)
+  build-app.sh    build (and `install`) the app
 tools/m0-probe/   P1 discovery check
 tools/features/   gen_features.py -> docs/FEATURES.md
+tools/mockups/    the UI pictures (HTML/canvas; shoot.sh renders at 3120x1440)
 docs/             ROADMAP.md (status), FEATURES.md, PORTING-NOTES.md,
-                  HARDWARE.md, M1-PLAN.md (history)
+                  HARDWARE.md, M4-INVENTORY.md, M1-PLAN.md (history)
 build-android/    build output, ignored
 ```
 
@@ -231,13 +237,45 @@ Decided; don't widen these without a reason.
 ## Building and running (today)
 
 ```
-android/deps/build-deps.sh            # FFTW, rnnoise, libspecbleach, WDSP -> build-android/arm64-v8a
+android/deps/build-deps.sh            # once: FFTW, rnnoise, libspecbleach, WDSP -> build-android/arm64-v8a
+ADB_SERIAL=<ip:port> android/build-app.sh install   # the app (Gradle builds the native part too)
+# headless test, still works:
 cmake -S android/native -B build-android/cmake -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE=$HOME/Android/Sdk/ndk/27.3.13750724/build/cmake/android.toolchain.cmake \
   -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=31 -DCMAKE_BUILD_TYPE=Release
 cmake --build build-android/cmake
-ADB_SERIAL=<phone-wifi-ip>:5555 android/native/run-m1.sh -f 7074000 -t 30
+ADB_SERIAL=<ip:port> android/native/run-m1.sh -f 7074000 -t 30
 ```
+
+Toolchain (installed 2026-11-24, user space): JDK 21 via mise
+(`java@temurin-21`, build-app.sh finds it; system Java 27 is too new for
+AGP), Gradle wrapper 9.9.2, Android SDK in ~/Android/Sdk with
+`platforms;android-37.2` (Compose 1.13 needs compileSdk 37.1+),
+`build-tools;37.0.0`, `cmake;4.1.2`, NDK 27.3.
+
+**Traps (each cost time once):**
+- **Android 17 local network permission.** Without `ACCESS_LOCAL_NETWORK`
+  (requested at first start) every send to the HL2 fails with EPERM, while
+  `m1-rx` as the shell user works. The app asks before starting the radio.
+- **An app cannot broadcast-discover**: Android hides interface details, so
+  upstream's discovery skips eth0. The wired path uses targeted discovery
+  to 169.254.19.221 (headless/net_target.c); on WiFi the user types the IP.
+- **old_protocol_init() runs once per process** (upstream says so). A
+  restart only does old_protocol_run(); radio_core.c moves the protocol's
+  UDP socket to a new Android network with dup2 (adapter replugged).
+- **adb**: wireless debugging (pair with the code, `adb mdns services` for
+  the ports); it switches itself off, and the phone's WiFi address changes.
+- **WDSP display averaging is off** on purpose (it smeared the 3D view when
+  tuning); the renderer averages rows itself (2D Av. Time setting).
+- The Gradle build is Debug: it keeps code the release build drops, so a
+  missing upstream symbol may only show there (vfo.c's VFO bar did).
+- **Demo band**: `adb shell am start -n io.github.randal007.droidhpsdr/.MainActivity --ez demo true`
+  (or ☰ → Demo band) feeds a made-up 20 m band through the real renderer:
+  display work with the radio off. Don't launch it while Randal is using
+  the phone: it restarts the app on his screen.
+- Screenshots: `adb exec-out screencap -p`; screen video:
+  `adb shell screenrecord --time-limit 40 /sdcard/Download/x.mp4`.
+  Randal on Remote Control: send pictures with SendUserFile as JPEG.
 
 How the native build works and why: `docs/PORTING-NOTES.md`. Hardware
 (HL2+ codec, IO board): `docs/HARDWARE.md`.

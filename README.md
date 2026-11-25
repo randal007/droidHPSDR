@@ -8,7 +8,14 @@ Forked from [deskHPSDR](https://github.com/dl1bz/deskhpsdr) by DL1BZ, which was 
 
 ## Status
 
-**Pre-alpha.** Milestone 1 works: on a Galaxy S26 Ultra, deskHPSDR's own protocol and receiver code plus WDSP receive from a Hermes Lite 2 over USB Ethernet, with the IO board and the HL2+ speaker working. Receive only, no app yet: a command-line test run over adb. No APK yet.
+**Pre-alpha, receive only.** There is an app (no release APK yet): on a Galaxy S26 Ultra it runs a Hermes Lite 2 with the HL2+ and the IO board over USB Ethernet at up to 384 kHz, using deskHPSDR's own protocol, receiver, VFO and settings code with WDSP on the phone.
+
+- A GPU 3D spectrum (four looks: X6100, AetherSDR-style curtains, lit terrain, neon wire) or a 2D spectrum, over a waterfall; a colour band-plan bar with a segment alert; peak labels in S-units.
+- Tuning by touch: drag, fling, pinch to zoom, tap a signal, drag the filter edges, hold the frequency and slide, or tap it and type one.
+- Audio on the HL2+ speaker, and optionally on the phone (or Bluetooth headphones) as well; it keeps playing with the screen off.
+- VFO A/B, band stacks, memories, filters, RIT, CTUN, lock and AGC, saved in deskHPSDR's own props file.
+
+Transmit is not built yet. Status and plan: [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ---
 
@@ -162,17 +169,21 @@ makes every future cherry-pick conflict.
 Linux desktop with the Android NDK (r27), CMake and Ninja. Targets arm64-v8a
 only, minSdk 31.
 
+Also JDK 21 and the Android SDK (platform 37.2, build-tools 37.0.0, CMake 4.1.2).
+
 ```
-android/deps/build-deps.sh     # FFTW 3.3.11, rnnoise, libspecbleach, WDSP 2.11
-cmake -S android/native -B build-android/cmake -G Ninja \
-  -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
-  -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=31 -DCMAKE_BUILD_TYPE=Release
-cmake --build build-android/cmake
-android/native/run-m1.sh -f 7074000 -t 30   # receive test on the phone via adb
+android/deps/build-deps.sh             # once: FFTW 3.3.11, rnnoise, libspecbleach, WDSP 2.11
+android/build-app.sh                   # the app: android/app/build/outputs/apk/debug/app-debug.apk
+ADB_SERIAL=<ip:port> android/build-app.sh install
 ```
 
-deskHPSDR's own files compile unchanged from `src/`; how that works is in
-[docs/PORTING-NOTES.md](docs/PORTING-NOTES.md). The app (Gradle) arrives with M3.
+The headless receive test from milestone 1 still builds with CMake alone
+(`android/native/run-m1.sh`). deskHPSDR's own files compile unchanged from
+`src/`; how that works is in [docs/PORTING-NOTES.md](docs/PORTING-NOTES.md).
+
+On first start the app asks for *Local network* access (Android 17): it
+needs it to reach the radio. On a USB Ethernet adapter give the phone a
+static 169.254.1.1/16 in Settings (see CLAUDE.md, "Network setup").
 
 ---
 
