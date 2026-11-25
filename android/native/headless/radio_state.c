@@ -124,6 +124,11 @@ int tx_fifo_underrun = 0;
 int tx_out_of_band_allowed = 0;
 
 int split = 0;   /* from src/radio.c (used by the TX-VFO helpers in stubs.c) */
+int tci_audio_monitor = 0;   /* from src/radio.c (buffered_audio.c) */
+/* from src/radio.c: the local-audio ring's latency settings (buffered_audio.c) */
+int rx_audio_network_reserve_enabled = 0;
+int rx_audio_network_reserve_ms = 100;
+int audio_rx_latency_correction_enabled = 1;
 
 /* ---- from src/discovery.c ---- */
 int discover_only_stemlab = 0;

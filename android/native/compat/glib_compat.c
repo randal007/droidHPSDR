@@ -199,6 +199,23 @@ gboolean g_main_context_iteration(GMainContext *context, gboolean may_block) {
   return FALSE;
 }
 
+static pthread_mutex_t once_lock = PTHREAD_MUTEX_INITIALIZER;
+
+gboolean g_once_init_enter(volatile void *location) {
+  if (__atomic_load_n((volatile gsize *)location, __ATOMIC_ACQUIRE) != 0) return FALSE;
+  pthread_mutex_lock(&once_lock);
+  if (*(volatile gsize *)location != 0) {
+    pthread_mutex_unlock(&once_lock);
+    return FALSE;
+  }
+  return TRUE;
+}
+
+void g_once_init_leave(volatile void *location, gsize result) {
+  __atomic_store_n((volatile gsize *)location, result, __ATOMIC_RELEASE);
+  pthread_mutex_unlock(&once_lock);
+}
+
 void droid_compat_run_pending(void) {
   gint64 now = g_get_monotonic_time();
   for (int i = 0; i < MAX_SOURCES; i++) {

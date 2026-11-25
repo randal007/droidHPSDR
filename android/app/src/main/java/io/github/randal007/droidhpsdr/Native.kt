@@ -23,11 +23,18 @@ object Native {
     external fun setFilter(low: Int, high: Int)
     external fun setVolumeDb(db: Double)
     external fun setLnaDb(db: Double)
+    /** Also play the receiver on the phone (deskHPSDR's local audio); the HL2+ speaker keeps playing. */
+    external fun setPhoneAudio(on: Boolean)
     /** How old a spectrum row's data is, so rows drawn while tuning land at the right frequency. */
     external fun setRowDelayMs(ms: Int)
 
     /** [running, freq, mode, filterLow, filterHigh, sampleRate, meterDbm, lostPackets, adcOverloads, lna, volume] */
     external fun status(out: DoubleArray)
+
+    /** The made-up 20 m band (demo.c), for the display without a radio. */
+    external fun demoStart()
+    external fun demoStop()
+    external fun demoSetFrequency(hz: Long)
 
     // GL thread only
     external fun glInit()

@@ -28,6 +28,7 @@
 
 #include "adc.h"
 #include "agc.h"
+#include "audio.h"
 #include "band.h"
 #include "channel.h"
 #include "discovered.h"
@@ -47,7 +48,7 @@
 
 /* ---- requests from the UI, run on the loop thread ---- */
 
-enum { CMD_FREQ, CMD_MODE, CMD_FILTER, CMD_VOLUME, CMD_LNA };
+enum { CMD_FREQ, CMD_MODE, CMD_FILTER, CMD_VOLUME, CMD_LNA, CMD_PHONE_AUDIO };
 typedef struct { int type; long long i; double d; int a, b; } cmd;
 #define CMD_MAX 256
 static cmd cmds[CMD_MAX];
@@ -79,6 +80,7 @@ void droid_set_mode(int mode) { post((cmd){ .type = CMD_MODE, .a = mode }); }
 void droid_set_filter(int low, int high) { post((cmd){ .type = CMD_FILTER, .a = low, .b = high }); }
 void droid_set_volume_db(double db) { post((cmd){ .type = CMD_VOLUME, .d = db }); }
 void droid_set_lna_db(double db) { post((cmd){ .type = CMD_LNA, .d = db }); }
+void droid_set_phone_audio(int on) { post((cmd){ .type = CMD_PHONE_AUDIO, .a = on }); }
 
 /* ---- when the radio was on which frequency ----
  * A spectrum row describes samples from some time before it is drawn (the
@@ -147,6 +149,20 @@ static void run(const cmd *c) {
   case CMD_LNA:
     adc[0].gain = c->d < -12 ? -12 : c->d > 48 ? 48 : c->d;   /* old_protocol.c sends it */
     break;
+  case CMD_PHONE_AUDIO:
+    /* deskHPSDR's "local audio": receiver.c then also hands every audio
+     * sample to buffered_audio.c, which plays it through audio_aaudio.c.
+     * The HL2+ speaker keeps playing. */
+    if (c->a && !rx->local_audio) {
+      snprintf(rx->audio_name, sizeof rx->audio_name, "phone");
+      if (audio_open_output(rx) == 0) rx->local_audio = 1;
+      droid_log("phone audio %s", rx->local_audio ? "on" : "could not start");
+    } else if (!c->a && rx->local_audio) {
+      rx->local_audio = 0;
+      audio_close_output(rx);
+      droid_log("phone audio off");
+    }
+    break;
   }
 }
 
@@ -207,6 +223,7 @@ static void mode_settings_defaults(void) {
 
 int droid_radio_start(const droid_start_opts *o, char *msg, int msglen) {
   if (atomic_load(&running)) return 0;
+  droid_demo_stop();   /* the demo never feeds the display while the radio does */
 
   /* ---- discovery: deskHPSDR's own ---- */
   protocol = ORIGINAL_PROTOCOL;
@@ -303,6 +320,10 @@ void droid_radio_stop(void) {
   if (!atomic_load(&running)) return;
   atomic_store(&running, 0);
   pthread_join(loop_thread, NULL);
+  if (receiver[0] && receiver[0]->local_audio) {
+    receiver[0]->local_audio = 0;
+    audio_close_output(receiver[0]);
+  }
   old_protocol_stop();
   droid_log("stream stopped");
   /* The receivers stay allocated: WDSP channels cannot be reopened cleanly in
@@ -314,6 +335,8 @@ int droid_radio_running(void) { return atomic_load(&running); }
 void droid_get_status(droid_status *s) {
   memset(s, 0, sizeof *s);
   s->running = atomic_load(&running);
+  s->meter_dbm = droid_meter_dbm();      /* also fed by the demo */
+  s->noise_floor = droid_noise_floor();
   if (!s->running || receiver[0] == NULL) return;
   s->freq = vfo[0].frequency;
   s->mode = vfo[0].mode;
@@ -326,6 +349,7 @@ void droid_get_status(droid_status *s) {
   s->lna_db = adc[0].gain;
   s->volume_db = receiver[0]->volume;
   s->noise_floor = droid_noise_floor();
+  s->phone_audio = receiver[0]->local_audio;
 }
 
 int droid_wisdom(const char *dir) { return WDSPwisdom((char *)dir); }

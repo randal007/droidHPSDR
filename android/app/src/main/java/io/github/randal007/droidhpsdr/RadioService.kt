@@ -49,6 +49,7 @@ class RadioService : Service() {
 
     private fun startRadio() {
         starting = true
+        Radio.stopDemo()
         wakeLock = getSystemService(PowerManager::class.java)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "droidHPSDR:radio").apply { acquire() }
         thread(name = "radio-start") {
@@ -79,6 +80,7 @@ class RadioService : Service() {
                 if (err.isEmpty()) {
                     Native.setVolumeDb(Radio.volumeDb.value)
                     Native.setRowDelayMs(Radio.rowDelayMs.value)
+                    Native.setPhoneAudio(Radio.phoneAudio.value)
                     Radio.setPhase(Phase.RUNNING, "", net)
                     Radio.applyModeFilter()
                     getSystemService(NotificationManager::class.java).notify(1, notification("Receiving on $net"))

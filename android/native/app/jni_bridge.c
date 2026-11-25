@@ -120,20 +120,32 @@ JNIEXPORT void JNICALL FN(setRowDelayMs)(JNIEnv *env, jobject self, jint ms) {
   (void)env; (void)self;
   droid_row_delay_us = ms * 1000;
 }
+JNIEXPORT void JNICALL FN(setPhoneAudio)(JNIEnv *env, jobject self, jboolean on) {
+  (void)env; (void)self;
+  droid_set_phone_audio(on);
+}
 JNIEXPORT void JNICALL FN(setLnaDb)(JNIEnv *env, jobject self, jdouble db) {
   (void)env; (void)self;
   droid_set_lna_db(db);
 }
 
 /* [running, freq, mode, filterLow, filterHigh, sampleRate, meterDbm, lostPackets, adcOverloads, lna, volume,
- *  noiseFloor] */
+ *  noiseFloor, phoneAudio] */
 JNIEXPORT void JNICALL FN(status)(JNIEnv *env, jobject self, jdoubleArray out) {
   (void)self;
   droid_status s;
   droid_get_status(&s);
-  jdouble v[12] = { s.running, (double)s.freq, s.mode, s.filter_low, s.filter_high, s.sample_rate,
-                    s.meter_dbm, s.lost_packets, s.adc_overloads, s.lna_db, s.volume_db, s.noise_floor };
-  (*env)->SetDoubleArrayRegion(env, out, 0, 12, v);
+  jdouble v[13] = { s.running, (double)s.freq, s.mode, s.filter_low, s.filter_high, s.sample_rate,
+                    s.meter_dbm, s.lost_packets, s.adc_overloads, s.lna_db, s.volume_db, s.noise_floor,
+                    s.phone_audio };
+  (*env)->SetDoubleArrayRegion(env, out, 0, 13, v);
+}
+
+JNIEXPORT void JNICALL FN(demoStart)(JNIEnv *env, jobject self) { (void)env; (void)self; droid_demo_start(); }
+JNIEXPORT void JNICALL FN(demoStop)(JNIEnv *env, jobject self) { (void)env; (void)self; droid_demo_stop(); }
+JNIEXPORT void JNICALL FN(demoSetFrequency)(JNIEnv *env, jobject self, jlong hz) {
+  (void)env; (void)self;
+  droid_demo_set_frequency(hz);
 }
 
 JNIEXPORT void JNICALL FN(glInit)(JNIEnv *env, jobject self) { (void)env; (void)self; droid_gl_init(); }

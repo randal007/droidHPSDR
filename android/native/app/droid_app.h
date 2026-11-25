@@ -30,6 +30,17 @@ typedef struct {
  * Rows older than the queue are skipped. Returns how many rows it passed. */
 int droid_rows_pull(uint64_t *seq, void (*fn)(const droid_row *row, void *ctx), void *ctx);
 
+/* Queues one spectrum row (db[i] + offset) for the renderer: from
+ * rx_panadapter_update(), or from the demo (demo.c). */
+void droid_rows_push(const float *db, float offset, int width, double fmin, double hzpp);
+void droid_meter_set(double dbm);
+
+/* Demo band (demo.c): a made-up 20 m band fed to the renderer while there is
+ * no radio, for working on the display. Never runs while the radio does. */
+void droid_demo_start(void);
+void droid_demo_stop(void);
+void droid_demo_set_frequency(long long hz);
+
 /* S-meter in dBm, corrected like upstream's (rx_update_display). */
 double droid_meter_dbm(void);
 
@@ -62,6 +73,7 @@ void droid_set_mode(int mode);
 void droid_set_filter(int low, int high);
 void droid_set_volume_db(double db);   /* -40..0 */
 void droid_set_lna_db(double db);      /* -12..48 */
+void droid_set_phone_audio(int on);    /* also play on the phone (deskHPSDR's local audio) */
 
 typedef struct {
   long long freq;
@@ -73,6 +85,7 @@ typedef struct {
   int adc_overloads;
   double lna_db, volume_db;
   double noise_floor;
+  int phone_audio;
   int running;
 } droid_status;
 void droid_get_status(droid_status *s);

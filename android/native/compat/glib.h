@@ -155,6 +155,11 @@ static inline void g_object_weak_ref(GObject *o, GWeakNotify n, gpointer d) { (v
 /* ---- printing ---- */
 void g_print(const gchar *format, ...) G_GNUC_PRINTF(1, 2);
 
+/* One-time initialisation (buffered_audio.c). enter() returns TRUE to the
+ * one caller that must initialise, holding a lock until leave(). */
+gboolean g_once_init_enter(volatile void *location);
+void g_once_init_leave(volatile void *location, gsize result);
+
 /* Hook for the host program: runs queued g_idle_add/g_timeout_add callbacks
  * that are due. Call it regularly from one thread (the "UI" thread). */
 void droid_compat_run_pending(void);

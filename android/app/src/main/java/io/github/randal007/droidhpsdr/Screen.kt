@@ -118,7 +118,11 @@ fun Screen(onStart: () -> Unit, onStop: () -> Unit) {
 
             ChipRow(status, { sheet = it }, Modifier.align(Alignment.BottomStart).padding(10.dp))
 
-            if (status.phase != Phase.RUNNING) {
+            if (status.phase == Phase.DEMO) {
+                Text("DEMO · no radio", color = Amb, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 112.dp)
+                        .glass(8).padding(horizontal = 8.dp, vertical = 3.dp))
+            } else if (status.phase != Phase.RUNNING) {
                 StatusCard(status, onStart, Modifier.align(Alignment.Center))
             }
             sheet?.let { SheetHost(it, status, onStart, onStop) { sheet = null } }
@@ -437,6 +441,8 @@ private fun ChipRow(st: Status, open: (Sheet) -> Unit, modifier: Modifier) {
         Chip("BAND", BandPlan.band(freq)?.name ?: "GEN") { open(Sheet.BAND) }
         Chip("AF", "${((vol + 40) / 40 * 100).roundToInt()}") { open(Sheet.AF) }
         Chip("LNA", "%+.0f dB".format(lna)) { open(Sheet.LNA) }
+        val phone by Radio.phoneAudio.collectAsState()
+        Chip("PHONE", if (phone) "On" else "Off", on = phone) { Radio.setPhoneAudio(!phone) }
         Chip("FILTER", widthLabel(st.filterHigh - st.filterLow)) { open(Sheet.FILTER) }
         Chip("STEP", if (step >= 1000) "${step / 1000} kHz" else "$step Hz") {
             val steps = listOf(1, 10, 50, 100, 500, 1000)
@@ -477,19 +483,26 @@ private fun StatusCard(st: Status, onStart: () -> Unit, modifier: Modifier) {
             Phase.PREPARING -> "Getting ready"
             Phase.CONNECTING -> "Connecting"
             Phase.ERROR -> "Not connected"
-            Phase.RUNNING -> ""
+            Phase.RUNNING, Phase.DEMO -> ""
         }
         Text(title, color = if (st.phase == Phase.ERROR) Red else Txt, fontSize = 17.sp, fontWeight = FontWeight.Medium)
         if (st.message.isNotEmpty()) Text(st.message, color = Dim, fontSize = 12.sp)
         if (st.phase == Phase.ERROR || st.phase == Phase.IDLE) {
-            Text(
-                if (st.phase == Phase.ERROR) "Try again" else "Start",
-                color = Acc, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(Color(0x293FD0FF))
-                    .clickable(onClick = onStart).padding(horizontal = 18.dp, vertical = 8.dp),
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                CardButton(if (st.phase == Phase.ERROR) "Try again" else "Start", Acc, onStart)
+                CardButton("Demo band", Amb) { Radio.startDemo() }
+            }
         }
     }
+}
+
+@Composable
+private fun CardButton(text: String, color: Color, onClick: () -> Unit) {
+    Text(
+        text, color = color, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(color.copy(alpha = 0.16f))
+            .clickable(onClick = onClick).padding(horizontal = 18.dp, vertical = 8.dp),
+    )
 }
 
 @Composable
@@ -629,8 +642,14 @@ private fun MenuSheet(st: Status, onStart: () -> Unit, onStop: () -> Unit, close
         value = delay.toFloat(), onValueChange = { Radio.setRowDelay(it.roundToInt()) }, valueRange = 0f..400f,
         colors = SliderDefaults.colors(thumbColor = Acc, activeTrackColor = Acc),
     )
-    GridButtons(listOf(if (st.phase == Phase.RUNNING) "Stop radio" else "Start radio"), null, 1) {
-        if (st.phase == Phase.RUNNING) onStop() else onStart()
+    GridButtons(
+        listOf(if (st.phase == Phase.RUNNING) "Stop radio" else "Start radio",
+            if (st.phase == Phase.DEMO) "Stop demo" else "Demo band"), null, 2,
+    ) {
+        when (it) {
+            0 -> if (st.phase == Phase.RUNNING) onStop() else onStart()
+            else -> if (st.phase == Phase.DEMO) Radio.stopDemo() else Radio.startDemo()
+        }
         close()
     }
     Text("Receive only: transmit is not built yet (M7).", color = Dim, fontSize = 11.sp)

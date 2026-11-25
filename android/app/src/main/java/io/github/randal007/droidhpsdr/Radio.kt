@@ -62,7 +62,7 @@ object Modes {
     }
 }
 
-enum class Phase { IDLE, PREPARING, CONNECTING, RUNNING, ERROR }
+enum class Phase { IDLE, PREPARING, CONNECTING, RUNNING, ERROR, DEMO }
 
 data class Status(
     val phase: Phase = Phase.IDLE,
@@ -96,6 +96,7 @@ object Radio {
     val lnaDb = MutableStateFlow(20.0)           // -12..48
     val step = MutableStateFlow(10)              // Hz
     val region = MutableStateFlow(2)             // IARU region for the band bar
+    val phoneAudio = MutableStateFlow(false)     // also play on the phone
 
     private lateinit var prefs: SharedPreferences
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -112,6 +113,7 @@ object Radio {
         step.value = prefs.getInt("step", 10)
         region.value = prefs.getInt("region", 2)
         rowDelayMs.value = prefs.getInt("rowDelay", 90)
+        phoneAudio.value = prefs.getBoolean("phoneAudio", false)
         status.value = status.value.copy(mode = prefs.getInt("mode", Modes.DIGU))
     }
 
@@ -123,6 +125,7 @@ object Radio {
         if (f == freq.value) return
         freq.value = f
         if (running) Native.setFrequency(f)
+        if (status.value.phase == Phase.DEMO) Native.demoSetFrequency(f)
         prefs.edit().putLong("freq", f).apply()
     }
 
@@ -191,23 +194,45 @@ object Radio {
         prefs.edit().putInt("step", s).apply()
     }
 
+    fun setPhoneAudio(on: Boolean) {
+        phoneAudio.value = on
+        if (running) Native.setPhoneAudio(on)
+        prefs.edit().putBoolean("phoneAudio", on).apply()
+    }
+
     fun setRegion(r: Int) {
         region.value = r
         prefs.edit().putInt("region", r).apply()
     }
 
     fun setPhase(p: Phase, msg: String = "", network: String? = null) {
+        if (p != Phase.DEMO && status.value.phase == Phase.DEMO) Native.demoStop()
         status.value = status.value.copy(phase = p, message = msg, network = network ?: status.value.network)
-        if (p == Phase.RUNNING) startPolling() else poll?.cancel()
+        if (p == Phase.RUNNING || p == Phase.DEMO) startPolling() else poll?.cancel()
+    }
+
+    /** The made-up band, so the display can be worked on with the radio off. */
+    fun startDemo() {
+        if (running) return
+        Native.demoSetFrequency(freq.value)
+        Native.demoStart()
+        setPhase(Phase.DEMO, "made-up 20 m band, no radio")
+        applyModeFilter()
+    }
+
+    fun stopDemo() {
+        if (status.value.phase == Phase.DEMO) setPhase(Phase.IDLE)
     }
 
     private fun startPolling() {
         poll?.cancel()
         poll = scope.launch {
-            val a = DoubleArray(12)
+            val a = DoubleArray(13)
             while (isActive) {
                 Native.status(a)
-                if (a[0] != 0.0) {
+                if (status.value.phase == Phase.DEMO) {
+                    status.value = status.value.copy(meterDbm = a[6], noiseFloor = a[11], sampleRate = SAMPLE_RATE)
+                } else if (a[0] != 0.0) {
                     status.value = status.value.copy(
                         mode = a[2].toInt(), filterLow = a[3].toInt(), filterHigh = a[4].toInt(),
                         sampleRate = a[5].toInt(), meterDbm = a[6], lostPackets = a[7].toLong(),

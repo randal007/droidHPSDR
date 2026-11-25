@@ -31,7 +31,7 @@ class SpectrumView(ctx: Context) : GLSurfaceView(ctx) {
         override fun onDrawFrame(gl: GL10?) {
             val s = Radio.status.value
             // auto levels: follow the noise floor slowly, like deskHPSDR's autoscale
-            if (s.phase == Phase.RUNNING) {
+            if (s.phase == Phase.RUNNING || s.phase == Phase.DEMO) {
                 floor = if (floor.isNaN()) s.noiseFloor else floor + (s.noiseFloor - floor) * 0.02
             }
             val nf = if (floor.isNaN()) -125.0 else floor

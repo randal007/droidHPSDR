@@ -54,15 +54,18 @@ void rx_panadapter_update(RECEIVER *rx) {
   /* the frequency of the row's data, not of now: see droid_freq_ago() */
   double fmin = (double)droid_freq_ago(droid_row_delay_us) - (double)rx->sample_rate * 0.5 + (double)rx->pan * hzpp;
 
+  droid_rows_push(rx->pixel_samples + rx->pan, (float)soffset, width, fmin, hzpp);
+}
+
+void droid_rows_push(const float *db, float offset, int width, double fmin, double hzpp) {
+  if (width > DROID_ROW_MAX) width = DROID_ROW_MAX;
   pthread_mutex_lock(&lock);
   droid_row *r = &queue[(newest + 1) % DROID_ROW_QUEUE];
-  const float *src = rx->pixel_samples + rx->pan;
-  for (int i = 0; i < width; i++) r->db[i] = src[i] + (float)soffset;
+  for (int i = 0; i < width; i++) r->db[i] = db[i] + offset;
   r->width = width;
   r->fmin = fmin;
   r->hzpp = hzpp;
   r->seq = ++newest;
-  pthread_mutex_unlock(&lock);
 
   /* noise floor for the display's auto levels: 1 dB histogram, 20th percentile */
   int hist[200] = { 0 };
@@ -72,8 +75,13 @@ void rx_panadapter_update(RECEIVER *rx) {
   }
   int want = width / 5, acc = 0, b = 0;
   while (b < 199 && (acc += hist[b]) < want) b++;
-  pthread_mutex_lock(&lock);
   noise_floor = b - 200.0 + 0.5;
+  pthread_mutex_unlock(&lock);
+}
+
+void droid_meter_set(double dbm) {
+  pthread_mutex_lock(&lock);
+  meter_dbm = dbm;
   pthread_mutex_unlock(&lock);
 }
 

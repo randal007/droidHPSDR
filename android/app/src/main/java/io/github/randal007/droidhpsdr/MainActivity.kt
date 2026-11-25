@@ -3,6 +3,7 @@ package io.github.randal007.droidhpsdr
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.media.AudioManager
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -32,12 +33,19 @@ class MainActivity : ComponentActivity() {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // the phone's volume keys set the phone audio's level
+        volumeControlStream = AudioManager.STREAM_MUSIC
 
         // Local network access (Android 17) is needed to reach the HL2 at all;
         // the radio starts once it is answered. Receive only: starting never transmits.
-        val wanted = arrayOf(LOCAL_NETWORK, Manifest.permission.POST_NOTIFICATIONS)
-            .filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
-        if (wanted.isEmpty()) RadioService.start(this) else requestPermissions(wanted.toTypedArray(), 1)
+        // `adb shell am start ... --ez demo true` opens on the demo band (display work without a radio)
+        if (intent.getBooleanExtra("demo", false)) {
+            Radio.startDemo()
+        } else {
+            val wanted = arrayOf(LOCAL_NETWORK, Manifest.permission.POST_NOTIFICATIONS)
+                .filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
+            if (wanted.isEmpty()) RadioService.start(this) else requestPermissions(wanted.toTypedArray(), 1)
+        }
 
         setContent {
             Screen(onStart = { RadioService.start(this) }, onStop = { RadioService.stop(this) })

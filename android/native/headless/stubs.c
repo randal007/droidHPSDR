@@ -90,6 +90,7 @@ int menu_active_receiver_changed(void *data) { (void)data; return G_SOURCE_REMOV
 int sliders_active_receiver_changed(void *data) { (void)data; return G_SOURCE_REMOVE; }
 int zoompan_active_receiver_changed(void *data) { (void)data; return G_SOURCE_REMOVE; }
 void update_slider_binaural_btn(void) {}
+void update_slider_local_mic_button(void) {}
 void show_filter_high(int rx, int value) { (void)rx; (void)value; }
 void show_filter_low(int rx, int value) { (void)rx; (void)value; }
 void show_filter_shift(int rx, int value) { (void)rx; (void)value; }
@@ -110,20 +111,13 @@ char *getProperty(const char *name) { (void)name; return NULL; }
 void setProperty(const char *name, const char *value) { (void)name; (void)value; }
 double myatof(const char *string) { return string ? strtod(string, NULL) : 0.0; }
 
-/* ---- local PC audio: never used, the HL2+ codec carries audio ---- */
-
-int audio_open_output(RECEIVER *rx) { (void)rx; return -1; }
-int audio_open_input(void) { return -1; }
-int audio_write(RECEIVER *rx, float left_sample, float right_sample) {
-  (void)rx; (void)left_sample; (void)right_sample;
-  return 0;
-}
-float audio_get_next_mic_sample(void) { return 0.0f; }
-void audio_reset_mic_buffer(void) {}
+/* ---- local audio: headless/audio_null.c (m1-rx) or upstream buffered_audio.c
+ *      with app/audio_aaudio.c (the app's phone audio) ---- */
 
 /* ---- TCI and Protocol 2: not in M1 ---- */
 
 int tci_audio_is_active(void) { return 0; }
+void tci_audio_monitor_set_active(int active) { (void)active; }
 int tci_audio_tx_enabled(void) { return 0; }
 void tci_audio_rx_block(RECEIVER *rx, const float *samples, guint frames) { (void)rx; (void)samples; (void)frames; }
 void tci_rx_iq_block(RECEIVER *rx, const double *iq, guint frames) { (void)rx; (void)iq; (void)frames; }

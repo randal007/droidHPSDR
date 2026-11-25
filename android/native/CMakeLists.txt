@@ -54,17 +54,20 @@ target_link_libraries(droidcore PUBLIC
   ${DEPS}/fftw-float/lib/libfftw3f.a
   android log m)
 
-add_executable(m1-rx headless/m1_main.c headless/display_null.c)
+add_executable(m1-rx headless/m1_main.c headless/display_null.c headless/audio_null.c)
 target_link_libraries(m1-rx droidcore)
 
 # The app: radio core + upstream display hook + GPU renderer + JNI bridge.
 add_library(droidhpsdr SHARED
+  ${UPSTREAM}/buffered_audio.c   # deskHPSDR's local audio engine, unchanged
+  app/audio_aaudio.c
+  app/demo.c
   app/radio_core.c
   app/display_bridge.c
   app/gl_render.c
   app/jni_bridge.c)
 target_include_directories(droidhpsdr PRIVATE app)
 target_compile_options(droidhpsdr PRIVATE -Wall -Wno-unused-parameter)
-target_link_libraries(droidhpsdr droidcore GLESv3)
+target_link_libraries(droidhpsdr droidcore GLESv3 aaudio)
 # 16 KB page devices (Android 15+): NDK 27 still links for 4 KB by default.
 target_link_options(droidhpsdr PRIVATE "-Wl,-z,max-page-size=16384")
