@@ -12,6 +12,15 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 
 class MainActivity : ComponentActivity() {
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (checkSelfPermission(LOCAL_NETWORK) == PackageManager.PERMISSION_GRANTED) {
+            RadioService.start(this)
+        } else {
+            Radio.setPhase(Phase.ERROR, "droidHPSDR needs the Local network permission to reach the HL2")
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Radio.init(this)
@@ -24,15 +33,16 @@ class MainActivity : ComponentActivity() {
         }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
-        }
-
-        // Receive only: starting the radio never transmits.
-        RadioService.start(this)
+        // Local network access (Android 17) is needed to reach the HL2 at all;
+        // the radio starts once it is answered. Receive only: starting never transmits.
+        val wanted = arrayOf(LOCAL_NETWORK, Manifest.permission.POST_NOTIFICATIONS)
+            .filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
+        if (wanted.isEmpty()) RadioService.start(this) else requestPermissions(wanted.toTypedArray(), 1)
 
         setContent {
             Screen(onStart = { RadioService.start(this) }, onStop = { RadioService.stop(this) })
         }
     }
 }
+
+private const val LOCAL_NETWORK = "android.permission.ACCESS_LOCAL_NETWORK"

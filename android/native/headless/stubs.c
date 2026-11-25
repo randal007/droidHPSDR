@@ -74,11 +74,7 @@ int discovery_last_device_matches(int protocol, const struct sockaddr_in *addr, 
   (void)protocol; (void)addr; (void)mac;
   return 0;
 }
-int discovery_resolve_target(const char *host, struct sockaddr_in *target, struct sockaddr_in *local_addr,
-                             struct sockaddr_in *netmask, char *ifname, size_t ifname_len, int *is_direct) {
-  (void)host; (void)target; (void)local_addr; (void)netmask; (void)ifname; (void)ifname_len; (void)is_direct;
-  return -1;   /* "could not resolve": old_discovery falls back to broadcast */
-}
+/* discovery_resolve_target(): headless/net_target.c */
 
 /* ---- main.c / ext.c / menus / sliders: UI notifications ---- */
 

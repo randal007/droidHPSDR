@@ -30,7 +30,8 @@ add_library(droidcore STATIC
   ${UPSTREAM_SOURCES}
   compat/glib_compat.c
   headless/radio_state.c
-  headless/stubs.c)
+  headless/stubs.c
+  headless/net_target.c)
 # compat/ first so <gtk/gtk.h>, <glib.h>, <gdk/gdk.h>, <cairo.h> are the shims.
 target_include_directories(droidcore PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/compat
@@ -65,3 +66,5 @@ add_library(droidhpsdr SHARED
 target_include_directories(droidhpsdr PRIVATE app)
 target_compile_options(droidhpsdr PRIVATE -Wall -Wno-unused-parameter)
 target_link_libraries(droidhpsdr droidcore GLESv3)
+# 16 KB page devices (Android 15+): NDK 27 still links for 4 KB by default.
+target_link_options(droidhpsdr PRIVATE "-Wl,-z,max-page-size=16384")

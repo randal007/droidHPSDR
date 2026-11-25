@@ -31,6 +31,7 @@
 #include "band.h"
 #include "channel.h"
 #include "discovered.h"
+#include "discovery.h"
 #include "filter.h"
 #include "mode.h"
 #include "old_discovery.h"
@@ -173,6 +174,9 @@ int droid_radio_start(const droid_start_opts *o, char *msg, int msglen) {
   /* ---- discovery: deskHPSDR's own ---- */
   protocol = ORIGINAL_PROTOCOL;
   devices = 0;
+  /* A known address (the wired link) uses upstream's targeted discovery:
+   * a broadcast cannot work from an app, which cannot list the interfaces. */
+  snprintf(ipaddr_radio, 64, "%s", o->radio_ip);
   old_discovery();
   int pick = -1;
   for (int i = 0; i < devices; i++) {

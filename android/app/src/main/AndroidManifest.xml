@@ -4,6 +4,9 @@
     <uses-feature android:glEsVersion="0x00030000" android:required="true" />
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Android 17: talking to the HL2 on the local network needs this; without it
+         every send to 169.254.19.221 fails with EPERM. -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- also the runtime prerequisite for a connectedDevice foreground service -->
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />

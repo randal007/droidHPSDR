@@ -5,6 +5,9 @@
  * GPL v3 or later, like the rest of droidHPSDR.
  */
 #include <jni.h>
+#include <pthread.h>
+#include <stdint.h>
+#include <unistd.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -17,6 +20,48 @@ void droid_log(const char *fmt, ...) {
   va_start(ap, fmt);
   __android_log_vprint(ANDROID_LOG_INFO, "droidHPSDR", fmt, ap);
   va_end(ap);
+}
+
+/* Upstream prints its messages (t_print) to stdout/stderr, which an app
+ * throws away; pipe both into logcat under the tag "deskHPSDR". */
+static void *log_pump(void *arg) {
+  int fd = (int)(intptr_t)arg;
+  char buf[1024];
+  size_t used = 0;
+  for (;;) {
+    ssize_t n = read(fd, buf + used, sizeof buf - 1 - used);
+    if (n <= 0) break;
+    used += (size_t)n;
+    char *start = buf, *nl;
+    while ((nl = memchr(start, '\n', used - (size_t)(start - buf))) != NULL) {
+      *nl = 0;
+      __android_log_write(ANDROID_LOG_INFO, "deskHPSDR", start);
+      start = nl + 1;
+    }
+    used -= (size_t)(start - buf);
+    memmove(buf, start, used);
+    if (used == sizeof buf - 1) {
+      buf[used] = 0;
+      __android_log_write(ANDROID_LOG_INFO, "deskHPSDR", buf);
+      used = 0;
+    }
+  }
+  return NULL;
+}
+
+JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved) {
+  (void)vm; (void)reserved;
+  int p[2];
+  if (pipe(p) == 0) {
+    setvbuf(stdout, NULL, _IOLBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
+    dup2(p[1], 1);
+    dup2(p[1], 2);
+    pthread_t t;
+    pthread_create(&t, NULL, log_pump, (void *)(intptr_t)p[0]);
+    pthread_detach(t);
+  }
+  return JNI_VERSION_1_6;
 }
 
 #define FN(name) Java_io_github_randal007_droidhpsdr_Native_##name

@@ -67,11 +67,14 @@ class RadioService : Service() {
                     Thread.sleep(250)
                 }
 
-                Radio.setPhase(Phase.CONNECTING, "Looking for the HL2 on $net")
+                // Wired: the HL2 falls back to this APIPA address with no DHCP server
+                // (CLAUDE.md "Network setup"). WiFi: broadcast (the radio's DHCP address).
+                val ip = if (net == "Ethernet") WIRED_HL2 else null
+                Radio.setPhase(Phase.CONNECTING, "Looking for the HL2 on $net${ip?.let { " at $it" } ?: ""}")
                 val s = Radio.status.value
                 val err = Native.start(
                     Radio.freq.value, s.mode, Radio.lnaDb.value, true,
-                    Radio.SAMPLE_RATE, Radio.PIXELS, Radio.FPS, null,
+                    Radio.SAMPLE_RATE, Radio.PIXELS, Radio.FPS, ip,
                 )
                 if (err.isEmpty()) {
                     Native.setVolumeDb(Radio.volumeDb.value)
@@ -138,6 +141,7 @@ class RadioService : Service() {
 
     companion object {
         const val CHANNEL = "radio"
+        const val WIRED_HL2 = "169.254.19.221"
         const val ACTION_STOP = "io.github.randal007.droidhpsdr.STOP"
 
         fun start(ctx: Context) = ctx.startForegroundService(Intent(ctx, RadioService::class.java))

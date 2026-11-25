@@ -100,7 +100,7 @@ static const char *WF_VS =
   "out vec2 vUv;\n"
   "void main() {\n"
   "  vec2 c = vec2(gl_VertexID & 1, gl_VertexID >> 1);\n"
-  "  vUv = vec2(c.x, 1.0 - c.y);\n"   /* y: 0 = top (newest) */
+  "  vUv = c;\n"   /* y: 0 = top (newest) */
   "  gl_Position = vec4(mix(uRect.x, uRect.z, c.x), mix(uRect.w, uRect.y, c.y), 0.0, 1.0);\n"
   "}\n";
 
@@ -351,7 +351,8 @@ void droid_gl_draw(const droid_view *v) {
 
   /* ---- 3D ---- */
   const int style = v->style < 0 || v->style > 3 ? 0 : v->style;
-  const float back_w = 0.6f, span = 1.0f / back_w;
+  /* X6100 look 3 recedes gently, as in the picked mock-up; the terrain styles use AetherSDR's depth */
+  const float back_w = style == 0 ? 0.8f : 0.6f, span = 1.0f / back_w;
   int cols = (int)(vw * 0.5f * span);
   if (cols > 2400) cols = 2400;
   float plot_h = (float)vh * (float)v->split;
