@@ -152,10 +152,9 @@ Everything needed to *use* the receiver day to day.
 - Noise: NB, NB2, NR1–NR4, NNR (WDSP 2.11 neural, voice and CW models),
   ANF, SNB; squelch; CW peak / APF; binaural.
 - RX equalizer with its graph.
-- ~~Second receiver (RX2)~~ **Decided: not doing** (Randal, 2026-11-24): the
-  phone app has one receiver. VFO B / split stay (TX on B needs no RX2).
-  The code still creates `receiver[1]` because `old_protocol.c` reads it;
-  it is never shown or used.
+- Second receiver (RX2): **later** (Randal, 2026-11-24). One receiver for
+  now; deskHPSDR can run RX2, so it may come back after the main work.
+  `receiver[1]` already exists in code because `old_protocol.c` reads it.
 - Remaining Display / FFT / Screen settings.
 - FEATURES.md: Noise, Equalizer, Display, FFT, Screen, Diversity, DDC,
   Toolbar, Switch (several are not HL2 features: decide per item).
