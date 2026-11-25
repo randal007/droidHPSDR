@@ -1,0 +1,112 @@
+// M4 round 1: where the receive-operating controls live on layout 1
+// (VFO B, A/B, split, RIT, CTUN, lock, step, band stack, memories, AGC, meter).
+'use strict';
+const VB = 14.0785e6;
+const meterCard = () => abs(10, 10, 168, null, `<div class="row" style="justify-content:space-between;margin-bottom:6px"><span style="font-size:20px;font-weight:500">S7</span><span class="dim" style="font-size:11px">−87 dBm</span></div>${meter(146, 9, 7.4, true)}`, 'glass', 'padding:9px 11px');
+const topBtns = () => abs(720, 12, 100, 44, `<div class="row" style="gap:8px;justify-content:flex-end"><div class="ico glass" style="font-weight:600;font-size:13px">3D</div><div class="ico glass">${icon('menu')}</div></div>`);
+const pill = (extra = '', w = 300, x = 266) => abs(x, 8, w, 62, `<div class="row" style="gap:10px;justify-content:center;height:100%">
+  <span class="tag vfoA">A</span>${fq(VFO, 34)}
+  <div class="col" style="gap:3px"><span class="tag acc">USB-D</span><span class="tag">3.0k</span></div>${extra}</div>`, 'glass');
+const chips = (list) => abs(10, 328, 812, 46, `<div class="row" style="gap:7px">${list.map(([l, v, on]) => chip(l, v, on)).join('')}</div>`);
+const CHIPS = [['BAND', '20m'], ['AF', '70'], ['LNA', '+20 dB'], ['PHONE', 'Off'], ['FILTER', '3.0k'], ['STEP', '10 Hz'], ['SPAN', '48 kHz']];
+const base = (spec = {}, kind = 'stack3d') => ({
+  f0: 14.044e6, f1: 14.104e6, vfo: VFO, filt: [0, 3000], want: 7, bandplan: true,
+  parts: [kind === 'spec2d' ? { kind: 'spec2d', h: 0.5, dbl: true, line: '#cfe9ff', fillTop: 'rgba(80,140,255,0.45)' }
+    : { kind: 'stack3d', h: 0.5, line: 'x6100line', fog: true }, { kind: 'wf2d', h: 0.5, pal: 'x6100' }], ...spec,
+});
+const bigBtn = (t, on, w = null, sub = '') => `<div class="btn ${on ? 'on' : ''}" style="height:40px;${w ? 'width:' + w + 'px;' : 'flex:1;'}flex-direction:column;gap:1px">${t}${sub ? `<span style="font-size:9.5px;color:var(--dim)">${sub}</span>` : ''}</div>`;
+
+Object.assign(LAYOUTS, {
+  // A — tap the VFO pill: it drops open into the VFO panel
+  V1: () => ({
+    html: cv('c', 0, 0, 832, 384) + meterCard() + topBtns() + chips(CHIPS) +
+      abs(236, 8, 360, 250, `<div style="padding:12px 16px">
+        <div class="row" style="gap:10px"><span class="tag vfoA">A</span>${fq(VFO, 32)}<span class="tag acc">USB-D</span><span class="tag">3.0k</span></div>
+        <div class="row dim" style="gap:10px;margin-top:8px"><span class="tag" style="background:none;border:1px solid var(--line);color:var(--dim)">B</span>${fq(VB, 18, 'dim')}<span class="tag">USB-D</span></div>
+        <div class="row" style="gap:6px;margin-top:12px">${bigBtn('A›B')}${bigBtn('B›A')}${bigBtn('A⇄B')}${bigBtn('SPLIT', false, null, 'TX on B')}</div>
+        <div class="row" style="gap:6px;margin-top:6px">${bigBtn('RIT', true, null, '+120 Hz')}${bigBtn('CTUN')}${bigBtn('LOCK')}${bigBtn('STEP', false, null, '10 Hz')}</div>
+        <div class="dim" style="font-size:10px;margin-top:8px;text-align:center">RIT on: drag the passband to set the offset · tap outside to close</div></div>`, 'glass', 'border-radius:18px;background:rgba(9,13,24,.9)'),
+    canvases: [['#c', base()]],
+  }),
+
+  // B — VFO B always shown, state as badges you tap; markers on the spectrum
+  V2: () => ({
+    html: cv('c', 0, 0, 832, 384) + meterCard() + topBtns() + chips(CHIPS) +
+      abs(206, 8, 420, 62, `<div class="row" style="gap:10px;justify-content:center;height:100%">
+        <span class="tag vfoA">A</span>${fq(VFO, 34)}
+        <div class="col" style="gap:3px"><span class="tag acc">USB-D</span><span class="tag">3.0k</span></div>
+        <div class="col" style="gap:2px;padding-left:10px;border-left:1px solid var(--line)"><span class="dim" style="font-size:10px">B · hold to swap</span>${fq(VB, 15, 'dim')}</div></div>`, 'glass') +
+      abs(246, 74, 340, 26, `<div class="row" style="gap:6px;justify-content:center">
+        <span class="tag amb">RIT +120</span><span class="tag" style="background:rgba(180,140,255,.18);color:#c9a8ff">SPLIT · TX B</span><span class="tag">CTUN</span><span class="tag">🔒 LOCK</span></div>`),
+    canvases: [['#c', base({ labels: [{ f: VB, y: 0.08, t: 'B / TX', c: '#c9a8ff' }] })]],
+  }),
+
+  // C — the bottom row becomes pages you swipe: Audio · VFO · DSP · Band
+  V3: () => ({
+    html: cv('c', 0, 0, 832, 384) + meterCard() + topBtns() + pill() +
+      abs(10, 306, 400, 18, `<div class="row" style="gap:14px;font-size:10.5px;letter-spacing:.6px"><span class="dim">AUDIO</span><b style="color:var(--acc)">VFO</b><span class="dim">DSP</span><span class="dim">BAND</span><span class="dim" style="margin-left:6px">‹ swipe ›</span></div>`, '', 'padding-left:4px') +
+      chips([['B', '14.078.500'], ['A⇄B', 'swap'], ['SPLIT', 'Off'], ['RIT', '+120', true], ['CTUN', 'Off'], ['LOCK', 'Off'], ['STEP', '10 Hz']]),
+    canvases: [['#c', base()]],
+  }),
+
+  // D — a VFO drawer from the right edge, like the DSP drawer picture
+  V4: () => ({
+    html: cv('c', 0, 0, 832, 384) + meterCard() + pill('', 300, 150) + chips(CHIPS.slice(0, 4)) +
+      abs(0, 0, 532, 384, '', '', 'background:linear-gradient(90deg,rgba(0,0,0,0),rgba(0,0,0,.35))') +
+      abs(532, 0, 300, 384, `<div style="padding:12px 14px">
+        <div class="row" style="justify-content:space-between"><span style="font-size:17px;font-weight:500">VFO</span><span class="dim">${icon('chev', 18)}</span></div>
+        <div class="row" style="gap:8px;margin-top:10px"><span class="tag vfoA">A</span>${fq(VFO, 22)}</div>
+        <div class="row dim" style="gap:8px;margin-top:6px"><span class="tag">B</span>${fq(VB, 18, 'dim')}</div>
+        <div class="row" style="gap:6px;margin-top:10px">${bigBtn('A›B')}${bigBtn('B›A')}${bigBtn('A⇄B')}</div>
+        <div class="lbl" style="margin:10px 0 5px">RIT</div>
+        <div class="row" style="gap:6px">${bigBtn('Off')}${bigBtn('On', true)}<div class="btn" style="flex:2;height:40px;font-size:15px">+120 Hz</div>${bigBtn('Clear')}</div>
+        <div class="row" style="gap:6px;margin-top:8px">${bigBtn('SPLIT')}${bigBtn('CTUN')}${bigBtn('LOCK')}</div>
+        <div class="dim" style="font-size:10px;margin-top:8px">Swipe in from the right edge · RIT: drag the passband</div></div>`, 'glass', 'border-radius:18px 0 0 18px;background:rgba(9,12,22,.86)'),
+    canvases: [['#c', base()]],
+  }),
+
+  // E — band sheet: bands, this band's stack, memories
+  V5: () => ({
+    html: cv('c', 0, 0, 832, 384) + meterCard() + topBtns() + pill() +
+      abs(0, 0, 832, 384, '', '', 'background:linear-gradient(180deg,rgba(0,0,0,0) 30%,rgba(0,0,0,.45) 55%)') +
+      abs(116, 150, 600, 234, `<div style="padding:12px 16px">
+        <div class="row" style="justify-content:space-between"><span style="font-size:16px;font-weight:500">Band</span><span class="dim" style="font-size:11px">hold a memory to store here</span></div>
+        <div class="row" style="gap:5px;margin-top:8px">${['160', '80', '60', '40', '30', '20', '17', '15', '12', '10', '6', 'GEN', 'WWV'].map(b => `<div class="btn ${b === '20' ? 'on' : ''}" style="flex:1;height:32px;font-size:12.5px">${b}</div>`).join('')}</div>
+        <div class="lbl" style="margin:10px 0 5px">20 m band stack</div>
+        <div class="row" style="gap:6px">${[[14.074e6, 'USB-D', 1], [14.025e6, 'CW'], [14.205e6, 'USB'], [14.078e6, 'USB-D'], [14.230e6, 'USB']].map(([f, m, on]) => `<div class="btn col ${on ? 'on' : ''}" style="flex:1;height:44px;gap:1px">${fq(f, 13)}<span style="font-size:9.5px;color:var(--dim)">${m}</span></div>`).join('')}</div>
+        <div class="lbl" style="margin:10px 0 5px">Memories</div>
+        <div class="row" style="gap:5px">${['7.074', '14.074', '3.573', '10.136', '—', '—', '—', '—', '—', '—'].map((f, i) => `<div class="btn col" style="flex:1;height:40px;gap:0"><span style="font-size:9px;color:var(--dim)">M${i}</span><span style="font-size:11.5px">${f}</span></div>`).join('')}</div></div>`,
+      'glass', 'border-radius:18px 18px 0 0;background:rgba(10,14,26,.95)'),
+    canvases: [['#c', base()]],
+  }),
+
+  // F — AGC on the spectrum: drag the AGC line (deskHPSDR draws it on the panadapter)
+  V6: () => ({
+    html: cv('c', 0, 0, 832, 384) + meterCard() + topBtns() + pill() + chips([['AGC', 'Med', true], ...CHIPS.slice(0, 6)]) +
+      abs(0, 120, 832, 2, '', '', 'background:repeating-linear-gradient(90deg,#ffb341 0 10px,transparent 10px 18px);opacity:.9') +
+      abs(600, 104, 150, 30, `<div class="row" style="gap:6px;padding:0 10px;height:100%;font-size:11px"><b style="color:var(--amb)">AGC</b><span>−95 dBm</span><span class="dim">drag ↕</span></div>`, 'glass', 'border-radius:15px;border-color:rgba(255,179,65,.5)') +
+      `<div class="finger" style="left:690px;top:98px"></div>` +
+      abs(200, 140, 420, 44, `<div class="seg" style="height:100%;align-items:center">${['Off', 'Long', 'Slow', 'Med', 'Fast', 'Auto'].map(t => `<b class="${t === 'Med' ? 'on' : ''}">${t}</b>`).join('')}</div>`, 'glass', 'border-radius:12px;padding:3px'),
+    canvases: [['#c', base({}, 'spec2d')]],
+  }),
+
+  // G — meter choices: digital bar (now), analog needle, both with peak/average
+  V7: () => ({
+    html: cv('c', 0, 0, 832, 384) + topBtns() + pill() + chips(CHIPS) +
+      abs(10, 10, 190, null, `<div class="col" style="align-items:center">${arcMeter(170, 0.42)}<div class="row" style="justify-content:space-between;width:100%;margin-top:-2px"><b style="font-size:15px;font-weight:500">S7</b><span class="dim">−87 dBm</span></div>
+        <div class="seg" style="width:100%;margin-top:6px"><b>Peak</b><b class="on">Avg</b></div></div>`, 'glass', 'padding:8px 12px'),
+    canvases: [['#c', base()]],
+  }),
+
+  // H — RIT and split shown on the spectrum, set by dragging
+  V8: () => {
+    const f0 = 14.0725e6, f1 = 14.0815e6, X = f => (f - f0) / (f1 - f0) * 832;
+    return {
+      html: cv('c', 0, 0, 832, 384) + meterCard() + topBtns() + pill(`<span class="tag amb" style="margin-left:4px">RIT +350</span>`, 360, 236) + chips(CHIPS) +
+        `<div class="finger" style="left:${X(VFO + 350 + 1500) - 23}px;top:150px"></div>` +
+        `<div class="tip" style="left:${X(VFO + 350 + 1500) + 28}px;top:136px"><b style="color:var(--amb)">RIT +350 Hz</b><br><span class="dim">hold the passband, drag</span></div>` +
+        abs(X(VB) - 30, 80, 60, 20, `<div class="row" style="justify-content:center"><span class="tag" style="background:rgba(180,140,255,.22);color:#d4b8ff">TX · B</span></div>`),
+      canvases: [['#c', { ...base(), f0, f1, want: 6, filt: [350, 3350], filtCol: 'rgba(255,179,65,0.12)', filtEdge: 'rgba(255,179,65,0.55)' }]],
+    };
+  },
+});
