@@ -105,6 +105,12 @@ The first thing that looks like droidHPSDR.
   lit terrain, neon wire); more may come later.
 - Filter edges limited per mode by deskHPSDR's widest presets; ESSB kept.
 - **Phone audio as well as the HL2+** (CLAUDE.md decision 1 changed).
+- 3D looks are **settings** (Display sheet, hold the 3D button); the button
+  itself only switches 2D/3D.
+- Peak labels: **S-units by default**; otherwise deskHPSDR's own settings
+  and defaults. In general **every deskHPSDR setting is included** (the
+  FEATURES.md rule), placed the phone's way.
+- 2D was "a little fast": averaged over deskHPSDR's Av. Time (250 ms).
 
 **Done and checked on the radio:**
 - Android app (Gradle, Kotlin, Compose; native core as one JNI library),
