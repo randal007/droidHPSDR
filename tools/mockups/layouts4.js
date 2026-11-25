@@ -246,3 +246,20 @@ Object.assign(LAYOUTS, {
     canvases: [['#c', base()]],
   }),
 });
+
+// M4 round 7 (Randal: indicators in the top pill, wider not taller, a bit more transparent)
+const pillWide = (alpha) => abs(246, 8, 340, 74, `<div class="row" style="gap:10px;justify-content:center;height:100%">
+    <div class="col" style="gap:3px;align-items:flex-start">
+      <div class="row" style="gap:8px"><span class="tag vfoA">A</span>${fq(VFO, 32)}</div>
+      <div class="row dim" style="gap:6px;padding-left:2px"><span style="font-size:10px;font-weight:700;width:24px;text-align:center">B</span>${fq(VB, 13, 'dim')}</div>
+    </div>
+    <div class="col" style="gap:3px"><span class="tag acc">USB-D</span><span class="tag">3.0k</span></div>
+    <div class="col" style="gap:2px;padding-left:9px;border-left:1px solid var(--line);align-items:flex-start">
+      <span style="font-size:10px;font-weight:700;color:var(--amb)">RIT +120</span>
+      <span style="font-size:10px;font-weight:700;color:#c9a8ff">SPLIT · TX B</span>
+      <span style="font-size:10px;font-weight:700;color:var(--dim)">🔒 LOCK</span>
+    </div></div>`, 'glass', `background:rgba(10,16,30,${alpha});backdrop-filter:blur(10px)`);
+Object.assign(LAYOUTS, {
+  K1: () => ({ html: cv('c', 0, 0, 832, 384) + meterCard() + topBtns() + chips(CHIPS) + pillWide(0.40), canvases: [['#c', base()]] }),
+  K2: () => ({ html: cv('c', 0, 0, 832, 384) + meterCard() + topBtns() + chips(CHIPS) + pillWide(0.28), canvases: [['#c', base()]] }),
+});
