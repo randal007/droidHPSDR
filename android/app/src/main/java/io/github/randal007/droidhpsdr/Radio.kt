@@ -167,8 +167,8 @@ object Radio {
 
     val running get() = status.value.phase == Phase.RUNNING
 
-    fun tune(hz: Double) {
-        val st = step.value.coerceAtLeast(1)
+    fun tune(hz: Double, exact: Boolean = false) {
+        val st = if (exact) 1 else step.value.coerceAtLeast(1)
         val f = ((hz / st).roundToLong() * st).coerceIn(100_000L, 61_440_000L)
         if (f == freq.value) return
         freq.value = f

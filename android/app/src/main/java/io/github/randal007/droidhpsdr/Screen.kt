@@ -12,6 +12,7 @@ import android.provider.Settings
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
@@ -101,7 +102,7 @@ private val Grn = Color(0xFF3EE07A)
 private val Red = Color(0xFFFF5A50)
 
 
-private enum class Sheet { BAND, MODE, AF, LNA, FILTER, MENU, DISPLAY }
+private enum class Sheet { BAND, MODE, AF, LNA, FILTER, MENU, DISPLAY, FREQ }
 
 private fun Modifier.glass(r: Int = 14) =
     clip(RoundedCornerShape(r.dp)).background(Glass).border(1.dp, Line, RoundedCornerShape(r.dp))
@@ -120,7 +121,7 @@ fun Screen(onStart: () -> Unit, onStop: () -> Unit) {
             SpectrumOverlay(Modifier.fillMaxSize())
 
             MeterCard(status.meterDbm, Modifier.align(Alignment.TopStart).padding(10.dp))
-            VfoPill(freq, status, { sheet = Sheet.MODE }, { sheet = Sheet.FILTER },
+            VfoPill(freq, status, { sheet = Sheet.MODE }, { sheet = Sheet.FILTER }, { sheet = Sheet.FREQ },
                 Modifier.align(Alignment.TopCenter).padding(top = 8.dp))
             SegmentTag(freq, Modifier.align(Alignment.TopCenter).padding(top = 76.dp))
             Flash(flash, Modifier.align(Alignment.TopEnd).padding(top = 66.dp, end = 12.dp))
@@ -379,7 +380,7 @@ private fun sMeter(dbm: Double): Pair<String, Double> {
 }
 
 @Composable
-private fun VfoPill(freq: Long, st: Status, onMode: () -> Unit, onFilter: () -> Unit, modifier: Modifier) {
+private fun VfoPill(freq: Long, st: Status, onMode: () -> Unit, onFilter: () -> Unit, onFreq: () -> Unit, modifier: Modifier) {
     Row(
         modifier.height(62.dp).glass().padding(horizontal = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -391,6 +392,9 @@ private fun VfoPill(freq: Long, st: Status, onMode: () -> Unit, onFilter: () -> 
         val haptic = LocalHapticFeedback.current
         Box(
             Modifier.pointerInput(Unit) {
+                // tap: type a frequency (deskHPSDR's VFO number pad)
+                detectTapGestures(onTap = { onFreq() })
+            }.pointerInput(Unit) {
                 // hold, then drag sideways: one step per 8 dp
                 val px = 8.dp.toPx()
                 var start = 0L
@@ -593,6 +597,7 @@ private fun SheetHost(which: Sheet, st: Status, onStart: () -> Unit, onStop: () 
                 Sheet.FILTER -> FilterSheet(st, close)
                 Sheet.MENU -> MenuSheet(st, onStart, onStop, close)
                 Sheet.DISPLAY -> DisplaySheet()
+                Sheet.FREQ -> FreqSheet(close)
             }
         }
     }
@@ -708,6 +713,35 @@ private fun FilterSheet(st: Status, close: () -> Unit) {
         close()
     }
     Text("Or drag the passband edges on the spectrum.", color = Dim, fontSize = 11.sp)
+}
+
+/** deskHPSDR's VFO number pad: type a frequency, finish with MHz or kHz. */
+@Composable
+private fun FreqSheet(close: () -> Unit) {
+    var text by remember { mutableStateOf("") }
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        SheetTitle("Frequency")
+        Spacer(Modifier.weight(1f))
+        Text(text.ifEmpty { "type, then MHz or kHz" }, color = if (text.isEmpty()) Dim else Txt,
+            fontSize = if (text.isEmpty()) 13.sp else 26.sp, fontWeight = FontWeight.Medium)
+    }
+    fun enter(scale: Double) {
+        val v = text.toDoubleOrNull() ?: return
+        Radio.tune(v * scale, exact = true)
+        close()
+    }
+    val keys = listOf("1", "2", "3", "MHz", "4", "5", "6", "kHz", "7", "8", "9", "⌫", ".", "0", "Clear", "Cancel")
+    GridButtons(keys, null, 4) {
+        when (val k = keys[it]) {
+            "MHz" -> enter(1e6)
+            "kHz" -> enter(1e3)
+            "⌫" -> text = text.dropLast(1)
+            "Clear" -> text = ""
+            "Cancel" -> close()
+            "." -> if (!text.contains('.')) text += "."
+            else -> if (text.length < 12) text += k
+        }
+    }
 }
 
 /** deskHPSDR's Display menu, the phone's way: the 3D looks first. */
