@@ -48,6 +48,10 @@ object Native {
     external fun memory(store: Boolean, slot: Int)
     external fun save()                         // write deskHPSDR's props file
 
+    // M5: receive DSP fields, numbered as in dsp.c (Dsp in Radio.kt)
+    external fun dspSet(field: Int, value: Double)
+    external fun dspGet(out: DoubleArray): Int
+
     // deskHPSDR's tables, one entry per line, fields split by '|'
     external fun filters(mode: Int): String     // title|low|high
     external fun bands(): String                // title|fmin|fmax (index = band number)

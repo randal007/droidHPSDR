@@ -62,6 +62,49 @@ object Modes {
     }
 }
 
+/**
+ * M5 receive DSP: deskHPSDR's Noise menu, notch, squelch, RX EQ and DSP menu
+ * as numbered fields, the same numbers as android/native/app/dsp.c. Units are
+ * the ones deskHPSDR's menus show. NR, NB, ANF, SNB, their settings, the EQ
+ * and the CW peak filter are kept per mode by the radio (deskHPSDR's way).
+ */
+object Dsp {
+    const val NR = 0; const val NB = 1; const val ANF = 2; const val SNB = 3
+    const val MNF = 4; const val MNF_FREQ = 5; const val MNF_WIDTH = 6; const val NR_POST_AGC = 7
+    const val NR2_GAIN = 8; const val NR2_NPE = 9; const val NR2_AE = 10; const val NR2_POST = 11
+    const val NR2_POST_LEVEL = 12; const val NR2_POST_RATE = 13; const val NR2_POST_FACTOR = 14
+    const val NR2_POST_TAPER = 15; const val NR2_TRAINED_THRESH = 16; const val NR2_TRAINED_T2 = 17
+    const val NB2_MODE = 18; const val NB_SLEW = 19; const val NB_LEAD = 20; const val NB_LAG = 21; const val NB_THRESH = 22
+    const val NR4_REDUCTION = 23; const val NR4_SMOOTHING = 24; const val NR4_WHITENING = 25
+    const val NR4_RESCALE = 26; const val NR4_THRESHOLD = 27
+    const val NNR_MODEL = 28; const val NNR_FLOOR = 29
+    const val SQL_ON = 30; const val SQL = 31; const val EQ_ON = 32; const val BINAURAL = 33; const val CW_PEAK = 34
+    const val LOW_LATENCY = 35; const val FIR_SIZE = 36
+    const val EQ_GAIN0 = 37   // 13 gains; [0] = the added frequency-independent gain
+    const val EQ_FREQ0 = 50   // 13 frequencies; [0] unused
+    const val COUNT = 63
+
+    val NR_NAMES = listOf("Off", "NR", "NR2", "NR3", "NR4", "NNR")
+    val NB_NAMES = listOf("Off", "NB", "NB2")
+
+    /** receiver.c's defaults (rx create), for before the radio has said otherwise. */
+    val DEFAULTS = DoubleArray(COUNT).also { d ->
+        d[MNF_WIDTH] = 80.0; d[NR2_GAIN] = 2.0; d[NR2_AE] = 1.0
+        d[NR2_POST_LEVEL] = 15.0; d[NR2_POST_RATE] = 5.0; d[NR2_POST_FACTOR] = 15.0; d[NR2_POST_TAPER] = 12.0
+        d[NR2_TRAINED_THRESH] = -0.5; d[NR2_TRAINED_T2] = 0.2
+        d[NB_SLEW] = 0.01; d[NB_LEAD] = 0.01; d[NB_LAG] = 0.01; d[NB_THRESH] = 30.0
+        d[NR4_REDUCTION] = 10.0; d[NR4_RESCALE] = 2.0; d[NR4_THRESHOLD] = -10.0; d[NNR_FLOOR] = -25.0
+        d[FIR_SIZE] = 2048.0
+        listOf(0.0, 50.0, 100.0, 200.0, 500.0, 1000.0, 1500.0, 2000.0, 2500.0, 3000.0, 5000.0, 6000.0, 8000.0)
+            .forEachIndexed { i, f -> d[EQ_FREQ0 + i] = f }
+    }
+
+    /** deskHPSDR: no noise reduction (NR, SNB) in the digital modes. */
+    fun nrAllowed(mode: Int) = mode != Modes.DIGU && mode != Modes.DIGL
+    /** receiver.c rx_anf_allowed(): no ANF in CW and the digital modes. */
+    fun anfAllowed(mode: Int) = nrAllowed(mode) && mode != Modes.CWU && mode != Modes.CWL
+}
+
 enum class Phase { IDLE, PREPARING, CONNECTING, RUNNING, ERROR, DEMO }
 
 data class Status(
@@ -100,6 +143,7 @@ object Radio {
     const val PIXELS = 2048
     const val FPS = 30
     const val SAMPLE_RATE = 384000   // default; the HL2 does 48/96/192/384 kHz
+    val DEFAULT_CHIPS = listOf("NR", "BAND", "AF", "LNA", "PHONE", "FILTER", "AGC", "STEP", "SPAN")
 
     val status = MutableStateFlow(Status())
     val freq = MutableStateFlow(14_074_000L)
@@ -130,6 +174,26 @@ object Radio {
     val fps = MutableStateFlow(FPS)              // spectrum rows per second
     val window = MutableStateFlow(5)             // FFT window: 5 = Kaiser, upstream's default
     val detector = MutableStateFlow(1)           // 1 = Average, upstream's default
+
+    /** M5: the receive DSP fields (Dsp), read from the radio while it runs. */
+    val dsp = MutableStateFlow(Dsp.DEFAULTS.copyOf())
+    @Volatile private var lastDspMs = 0L
+
+    fun setDsp(field: Int, v: Double) {
+        val a = dsp.value.copyOf()
+        a[field] = v
+        dsp.value = a
+        lastDspMs = System.currentTimeMillis()
+        if (running) Native.dspSet(field, v)
+    }
+
+    /** The bottom row (deskHPSDR's Toolbar menu, the phone's way): chip ids, see ChipSpec. */
+    val chips = MutableStateFlow(DEFAULT_CHIPS)
+
+    fun setChips(l: List<String>) {
+        chips.value = l
+        prefs.edit().putString("chips", l.joinToString(",")).apply()
+    }
 
     /** The display's smoothed noise floor (dBm), written by the renderer, read by the labels. */
     @Volatile var displayFloor = -125.0
@@ -176,6 +240,7 @@ object Radio {
         wiredIp.value = prefs.getString("wiredIp", "169.254.19.221") ?: "169.254.19.221"
         wifiIp.value = prefs.getString("wifiIp", "") ?: ""
         status.value = status.value.copy(mode = prefs.getInt("mode", Modes.DIGU))
+        prefs.getString("chips", null)?.let { c -> chips.value = c.split(",").filter { it.isNotBlank() } }
     }
 
     val running get() = status.value.phase == Phase.RUNNING
@@ -388,6 +453,7 @@ object Radio {
         poll = scope.launch {
             val a = DoubleArray(26)
             val pk = DoubleArray(64)
+            val dv = DoubleArray(Dsp.COUNT)
             var tick = 0
             while (isActive) {
                 Native.status(a)
@@ -411,6 +477,11 @@ object Radio {
                     }
                 }
                 if (++tick % 4 == 0) pollPeaks(pk)
+                // the radio changes these itself on a mode change (per-mode settings)
+                if (tick % 6 == 0 && running && System.currentTimeMillis() - lastDspMs > 800 &&
+                    Native.dspGet(dv) == Dsp.COUNT) {
+                    if (!dv.contentEquals(dsp.value)) dsp.value = dv.copyOf()
+                }
                 delay(50)
             }
         }

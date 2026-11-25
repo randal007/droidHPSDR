@@ -58,7 +58,7 @@
 
 enum { CMD_FREQ, CMD_MODE, CMD_FILTER, CMD_VOLUME, CMD_LNA, CMD_PHONE_AUDIO, CMD_ZOOM, CMD_FPS, CMD_WINDOW, CMD_DETECTOR,
        CMD_FILTER_PRESET, CMD_BAND, CMD_BANDSTACK, CMD_VFO_OP, CMD_RIT, CMD_CTUN, CMD_LOCK, CMD_STEP, CMD_MEMORY,
-       CMD_AGC, CMD_SAVE };
+       CMD_AGC, CMD_SAVE, CMD_DSP };
 typedef struct { int type; long long i; double d; int a, b; } cmd;
 #define CMD_MAX 256
 static cmd cmds[CMD_MAX];
@@ -68,9 +68,10 @@ static pthread_mutex_t cmd_lock = PTHREAD_MUTEX_INITIALIZER;
 static void post(cmd c) {
   pthread_mutex_lock(&cmd_lock);
   /* A newer frequency replaces one still waiting, so a fast drag never lags. */
-  if (c.type == CMD_FREQ || c.type == CMD_VOLUME || c.type == CMD_LNA || c.type == CMD_FILTER || c.type == CMD_ZOOM) {
+  if (c.type == CMD_FREQ || c.type == CMD_VOLUME || c.type == CMD_LNA || c.type == CMD_FILTER || c.type == CMD_ZOOM ||
+      c.type == CMD_DSP) {
     for (int k = cmd_tail; k != cmd_head; k = (k + 1) % CMD_MAX) {
-      if (cmds[k].type == c.type) {
+      if (cmds[k].type == c.type && (c.type != CMD_DSP || cmds[k].a == c.a)) {
         cmds[k] = c;
         pthread_mutex_unlock(&cmd_lock);
         return;
@@ -106,6 +107,7 @@ void droid_step(int hz) { post((cmd){ .type = CMD_STEP, .a = hz }); }
 void droid_memory(int store, int slot) { post((cmd){ .type = CMD_MEMORY, .a = store, .b = slot }); }
 void droid_agc(int agc) { post((cmd){ .type = CMD_AGC, .a = agc }); }
 void droid_save(void) { post((cmd){ .type = CMD_SAVE }); }
+void droid_dsp_set(int field, double value) { post((cmd){ .type = CMD_DSP, .a = field, .d = value }); }
 
 /* ---- when the radio was on which frequency ----
  * A spectrum row describes samples from some time before it is drawn (the
@@ -224,6 +226,9 @@ static void run(const cmd *c) {
     break;
   case CMD_SAVE:
     droid_radio_save_now();
+    break;
+  case CMD_DSP:
+    droid_dsp_apply(c->a, c->d);
     break;
   case CMD_VOLUME:
     rx->volume = c->d;

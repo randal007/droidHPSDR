@@ -63,6 +63,7 @@ add_library(droidhpsdr SHARED
   ${UPSTREAM}/buffered_audio.c   # deskHPSDR's local audio engine, unchanged
   app/audio_aaudio.c
   app/demo.c
+  app/dsp.c
   app/radio_core.c
   app/display_bridge.c
   app/gl_render.c

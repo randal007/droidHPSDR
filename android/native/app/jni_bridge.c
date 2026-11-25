@@ -180,6 +180,23 @@ JNIEXPORT void JNICALL FN(memory)(JNIEnv *env, jobject self, jboolean store, jin
 }
 JNIEXPORT void JNICALL FN(save)(JNIEnv *env, jobject self) { (void)env; (void)self; droid_save(); }
 
+/* M5: receive DSP fields (dsp.c) */
+JNIEXPORT void JNICALL FN(dspSet)(JNIEnv *env, jobject self, jint field, jdouble value) {
+  (void)env; (void)self;
+  droid_dsp_set(field, value);
+}
+JNIEXPORT jint JNICALL FN(dspGet)(JNIEnv *env, jobject self, jdoubleArray out) {
+  (void)self;
+  double v[128];
+  int n = droid_dsp_count();
+  if (n > 128) n = 128;
+  droid_dsp_get(v);
+  jsize len = (*env)->GetArrayLength(env, out);
+  if (len < n) n = len;
+  (*env)->SetDoubleArrayRegion(env, out, 0, n, v);
+  return n;
+}
+
 /* Lists as text, one entry per line, fields split by '|'. */
 static jstring text(JNIEnv *env, const char *s) { return (*env)->NewStringUTF(env, s); }
 

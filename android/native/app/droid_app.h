@@ -98,6 +98,13 @@ void droid_memory(int store, int slot);/* store_memory_slot() / recall_memory_sl
 void droid_agc(int agc);               /* rx->agc + rx_set_agc() */
 void droid_save(void);                 /* write the props file (radio.c's save order) */
 
+/* M5, receive DSP (dsp.c): deskHPSDR's Noise menu, notch, squelch, RX EQ,
+ * DSP menu. Fields are numbered (dsp.c's enum = Dsp in Radio.kt). */
+void droid_dsp_set(int field, double value);   /* queued to the loop thread */
+void droid_dsp_apply(int field, double value); /* on the loop thread */
+void droid_dsp_get(double *out);               /* droid_dsp_count() values */
+int droid_dsp_count(void);
+
 /* lists for the UI: deskHPSDR's tables, read on the loop thread's data */
 int droid_filters(int mode, char titles[][16], int *lo, int *hi, int max);
 int droid_bands(char titles[][16], long long *fmin, long long *fmax, int max);

@@ -96,20 +96,20 @@ import kotlin.math.ceil
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
-private val Bg = Color(0xFF05070D)
-private val Glass = Color(0xA80A101E)
-private val Line = Color(0x1AFFFFFF)
-private val Txt = Color(0xFFE9EEF7)
-private val Dim = Color(0xFF8B97AD)
-private val Acc = Color(0xFF3FD0FF)
-private val Amb = Color(0xFFFFB341)
-private val Grn = Color(0xFF3EE07A)
-private val Red = Color(0xFFFF5A50)
+internal val Bg = Color(0xFF05070D)
+internal val Glass = Color(0xA80A101E)
+internal val Line = Color(0x1AFFFFFF)
+internal val Txt = Color(0xFFE9EEF7)
+internal val Dim = Color(0xFF8B97AD)
+internal val Acc = Color(0xFF3FD0FF)
+internal val Amb = Color(0xFFFFB341)
+internal val Grn = Color(0xFF3EE07A)
+internal val Red = Color(0xFFFF5A50)
 
 
-private enum class Sheet { BAND, MODE, AF, LNA, FILTER, MENU, DISPLAY, FREQ, VFO, AGC, SDR, DISCOVERY, ABOUT }
+internal enum class Sheet { BAND, MODE, AF, LNA, FILTER, MENU, DISPLAY, FREQ, VFO, AGC, SDR, DISCOVERY, ABOUT, NOISE, EQ, DSP, TOOLBAR }
 
-private fun Modifier.glass(r: Int = 14) =
+internal fun Modifier.glass(r: Int = 14) =
     clip(RoundedCornerShape(r.dp)).background(Glass).border(1.dp, Line, RoundedCornerShape(r.dp))
 
 @Composable
@@ -158,6 +158,9 @@ fun Screen(onStart: () -> Unit, onStop: () -> Unit) {
             when (sheet) {
                 Sheet.VFO -> VfoPanel(freq, status, dismiss)
                 Sheet.MENU -> MainMenu(status, onStart, done) { sheet = it; fromMenu = true }
+                Sheet.NOISE -> NoiseDrawer(status, dismiss)
+                Sheet.EQ -> EqPanel(status, dismiss)
+                Sheet.TOOLBAR -> ToolbarEditor(status, dismiss)
                 null -> {}
                 else -> SheetHost(sheet!!, status, onStart, onStop, dismiss, done)
             }
@@ -178,9 +181,23 @@ private fun SpectrumOverlay(modifier: Modifier) {
     val split by Radio.split.collectAsState()
     val flat by Radio.flat.collectAsState()
     val style by Radio.style.collectAsState()
+    val dsp by Radio.dsp.collectAsState()
     val measurer = rememberTextMeasurer()
     val scope = rememberCoroutineScope()
     val fling = remember { arrayOfNulls<Job>(1) }
+    // a single tap waits this long for a second one: double-tap puts the notch there (M5, D5)
+    val tap = remember { arrayOfNulls<Job>(1) }
+    val lastTap = remember { floatArrayOf(-1f, 0f, 0f) }   // uptime ms (as float), x, y
+
+    /** Where the squelch line is (px from the top), as the peak labels place a level. */
+    fun sqlY(splitY: Float, nf: Double, dbm: Double): Float = if (Radio.flat.value) {
+        val lo2 = nf + SpectrumView.PAN_LO
+        val hi2 = nf + SpectrumView.PAN_HI
+        splitY * (1 - ((dbm - lo2) / (hi2 - lo2)).coerceIn(0.0, 1.0)).toFloat()
+    } else {
+        val s = ((dbm - SpectrumView.floor3d(Radio.style.value, nf)) / SpectrumView.RANGE_3D).coerceIn(0.0, 1.0)
+        splitY * (1 - SpectrumView.ridge3d(Radio.style.value, s)).toFloat()
+    }
 
     Canvas(
         modifier.pointerInput(Unit) {
@@ -200,8 +217,22 @@ private fun SpectrumOverlay(modifier: Modifier) {
                 val xb = ((f0 + ritHz + st.filterHigh - lo) / hzpx).toFloat()
                 val dA = abs(down.position.x - xa)
                 val dB = abs(down.position.x - xb)
-                // 0 = tune, 1 = low edge, 2 = high edge, 3 = RIT (RIT on: drag the middle of the passband)
+                val d0 = Radio.dsp.value
+                val splitY = size.height * Radio.split.value
+                // the notch (D5): grab it to change its width, push it off the top to remove it
+                val notchOn = d0[Dsp.MNF] != 0.0 && d0[Dsp.MNF_FREQ] > 0
+                val nx = ((d0[Dsp.MNF_FREQ] - lo) / hzpx).toFloat()
+                val nHalf = maxOf((d0[Dsp.MNF_WIDTH] / 2 / hzpx).toFloat(), 14.dp.toPx())
+                // the squelch line (D6): drag it up and down
+                val sqlOn = d0[Dsp.SQL_ON] != 0.0
+                val sy = sqlY(splitY, Radio.displayFloor, sqlDbm(d0[Dsp.SQL]))
+                val dbPerPx = (if (Radio.flat.value) SpectrumView.PAN_HI - SpectrumView.PAN_LO else SpectrumView.RANGE_3D.toDouble()) / splitY
+                // 0 = tune, 1 = low edge, 2 = high edge, 3 = RIT (RIT on: drag the middle of the passband),
+                // 5 = notch, 6 = squelch line
                 val edge = when {
+                    sqlOn && abs(down.position.y - sy) < 16.dp.toPx() &&
+                        down.position.x > minOf(xa, xb) - 20.dp.toPx() && down.position.x < maxOf(xa, xb) + 20.dp.toPx() -> 6
+                    notchOn && abs(down.position.x - nx) < nHalf -> 5
                     minOf(dA, dB) <= edgeTol -> if (dA < dB) 1 else 2
                     st.ritOn && down.position.x > xa && down.position.x < xb -> 3
                     else -> 0
@@ -236,15 +267,40 @@ private fun SpectrumOverlay(modifier: Modifier) {
                             1 -> Radio.setFilter((st.filterLow + dx * hzpx).roundToInt(), st.filterHigh)
                             2 -> Radio.setFilter(st.filterLow, (st.filterHigh + dx * hzpx).roundToInt())
                             3 -> Radio.rit(true, ((st.rit + dx * hzpx) / 10).roundToLong() * 10)
+                            5 -> if (c.position.y - down.position.y < -70.dp.toPx() && c.position.y < splitY * 0.25f) {
+                                Radio.setDsp(Dsp.MNF, 0.0)   // pushed off the top: gone
+                            } else if (Radio.dsp.value[Dsp.MNF] != 0.0) {
+                                val wHz = (2 * abs(c.position.x - nx) * hzpx).coerceIn(10.0, 15000.0)
+                                Radio.setDsp(Dsp.MNF_WIDTH, (wHz / 10).roundToInt() * 10.0)
+                            }
+                            6 -> {
+                                val v = (d0[Dsp.SQL] - (c.position.y - down.position.y) * dbPerPx * 100.0 / 160.0).coerceIn(0.0, 100.0)
+                                Radio.setDsp(Dsp.SQL, v.roundToInt().toDouble())
+                            }
                             else -> Radio.tune(f0 - dx * hzpx)
                         }
                         c.consume()
                     }
                 }
                 if (!moved) {
-                    // tap: put that signal in the middle of the passband
                     val f = lo + down.position.x * hzpx
-                    Radio.tune(f - (st.filterLow + st.filterHigh) / 2.0)
+                    val t = down.uptimeMillis.toFloat()
+                    val again = tap[0]?.isActive == true && t - lastTap[0] < 300f &&
+                        (down.position - Offset(lastTap[1], lastTap[2])).getDistance() < 40.dp.toPx()
+                    if (again) {
+                        // double-tap: the manual notch goes here (deskHPSDR: right-click on the panadapter)
+                        tap[0]?.cancel()
+                        lastTap[0] = -1f
+                        Radio.setDsp(Dsp.MNF_FREQ, f)
+                        Radio.setDsp(Dsp.MNF, 1.0)
+                    } else {
+                        // tap: put that signal in the middle of the passband
+                        lastTap[0] = t; lastTap[1] = down.position.x; lastTap[2] = down.position.y
+                        tap[0] = scope.launch {
+                            delay(260)
+                            Radio.tune(f - (st.filterLow + st.filterHigh) / 2.0)
+                        }
+                    }
                 } else if (!pinch && edge == 0) {
                     val v = vt.calculateVelocity().x
                     if (abs(v) > 400f) {
@@ -277,6 +333,32 @@ private fun SpectrumOverlay(modifier: Modifier) {
         drawLine(Color(0x668CD2FF), Offset(pa, 0f), Offset(pa, h), 1.dp.toPx())
         drawLine(Color(0x668CD2FF), Offset(pb, 0f), Offset(pb, h), 1.dp.toPx())
         drawLine(Color(0xFFFF4D4D), Offset(x(freq.toDouble()), 0f), Offset(x(freq.toDouble()), h), 1.2.dp.toPx())
+
+        // the manual notch (MNF): a red band, its width as wide as the notch
+        if (dsp[Dsp.MNF] != 0.0 && dsp[Dsp.MNF_FREQ] > 0) {
+            val cx = x(dsp[Dsp.MNF_FREQ])
+            val half = maxOf((dsp[Dsp.MNF_WIDTH] / 2 / hzpx).toFloat(), 1.5.dp.toPx())
+            drawRect(Color(0x38FF4D4D), Offset(cx - half, 0f), Size(2 * half, h))
+            drawLine(Color(0xD9FF5A5A), Offset(cx - half, 0f), Offset(cx - half, h), 1.5.dp.toPx())
+            drawLine(Color(0xD9FF5A5A), Offset(cx + half, 0f), Offset(cx + half, h), 1.5.dp.toPx())
+        }
+
+        // the squelch line across the passband, with its level (dBm only in AM: see sqlLabel)
+        if (dsp[Dsp.SQL_ON] != 0.0) {
+            val sy = sqlY(splitY, Radio.displayFloor, sqlDbm(dsp[Dsp.SQL]))
+            val dash = 10.dp.toPx()
+            var xx = minOf(pa, pb)
+            while (xx < maxOf(pa, pb)) {
+                drawLine(Grn, Offset(xx, sy), Offset(minOf(xx + dash, maxOf(pa, pb)), sy), 2.dp.toPx())
+                xx += dash * 1.8f
+            }
+            val t = measurer.measure("SQL " + sqlLabel(status.mode, dsp[Dsp.SQL]) + "  drag ↕",
+                TextStyle(color = Txt, fontSize = 10.5.sp, fontWeight = FontWeight.Medium))
+            val bx = (maxOf(pa, pb) + 8.dp.toPx()).coerceAtMost(w - t.size.width - 16.dp.toPx())
+            drawRoundRect(Color(0xCC08101E), Offset(bx, sy - t.size.height / 2 - 4.dp.toPx()),
+                Size(t.size.width + 16.dp.toPx(), t.size.height + 8.dp.toPx()), CornerRadius(12.dp.toPx()))
+            drawText(t, topLeft = Offset(bx + 8.dp.toPx(), sy - t.size.height / 2))
+        }
 
         // frequency axis between the 3D view and the waterfall
         val axisH = 16.dp.toPx()
@@ -562,7 +644,7 @@ private fun Tag(text: String, fg: Color, bg: Color, onClick: () -> Unit) {
     ) { Text(text, color = fg, fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
 }
 
-private fun widthLabel(hz: Int) = if (hz >= 1000) "%.1fk".format(hz / 1000.0) else "$hz"
+internal fun widthLabel(hz: Int) = if (hz >= 1000) "%.1fk".format(hz / 1000.0) else "$hz"
 
 /** The X6100 band bar's tag: band and segment, shown for 2 s whenever either changes. */
 @Composable
@@ -619,39 +701,25 @@ private fun RoundButton(label: String, onLongClick: (() -> Unit)? = null, onClic
 
 // ---------------------------------------------------------------- bottom chips
 
+/** The bottom row: the chips Randal picked (deskHPSDR's Toolbar menu, the phone's way; see Dsp.kt). */
 @Composable
 private fun ChipRow(st: Status, open: (Sheet) -> Unit, modifier: Modifier) {
-    val freq by Radio.freq.collectAsState()
-    val vol by Radio.volumeDb.collectAsState()
-    val lna by Radio.lnaDb.collectAsState()
-    val step by Radio.step.collectAsState()
-    val span by Radio.span.collectAsState()
+    val ids by Radio.chips.collectAsState()
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-        Chip("BAND", BandPlan.band(freq)?.name ?: "GEN") { open(Sheet.BAND) }
-        Chip("AF", "${((vol + 40) / 40 * 100).roundToInt()}") { open(Sheet.AF) }
-        Chip("LNA", "%+.0f dB".format(lna)) { open(Sheet.LNA) }
-        val phone by Radio.phoneAudio.collectAsState()
-        Chip("PHONE", if (phone) "On" else "Off", on = phone) { Radio.setPhoneAudio(!phone) }
-        Chip("FILTER", widthLabel(st.filterHigh - st.filterLow)) { open(Sheet.FILTER) }
-        Chip("AGC", AGC_NAMES.getOrElse(st.agc) { "?" }) { open(Sheet.AGC) }
-        Chip("STEP", if (step >= 1000) "${step / 1000} kHz" else "$step Hz") {
-            val steps = listOf(1, 10, 50, 100, 500, 1000)
-            Radio.setStep(steps[(steps.indexOf(step) + 1) % steps.size])
-        }
-        Chip("SPAN", "${(span / 1000).roundToInt()} kHz") {
-            val spans = listOf(6_000.0, 12_000.0, 24_000.0, 48_000.0, 96_000.0, 182_000.0, 364_000.0)
-                .filter { it <= st.sampleRate * 0.95 }
-            Radio.setSpan(spans.firstOrNull { it > span * 1.05 } ?: spans.first())
-        }
+        ids.forEach { ChipFor(it, st, open) }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun Chip(label: String, value: String, on: Boolean = false, onClick: () -> Unit) {
+internal fun Chip(
+    label: String, value: String, on: Boolean = false, modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null, onClick: () -> Unit,
+) {
     Column(
-        Modifier.height(46.dp).widthIn(min = 70.dp).glass(13)
+        modifier.height(46.dp).widthIn(min = 70.dp).glass(13)
             .then(if (on) Modifier.border(1.dp, Acc.copy(alpha = 0.55f), RoundedCornerShape(13.dp)) else Modifier)
-            .clickable(onClick = onClick).padding(horizontal = 12.dp),
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick).padding(horizontal = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -720,6 +788,8 @@ private fun SheetHost(
                 Sheet.SDR -> SdrDeviceSheet(st)
                 Sheet.DISCOVERY -> DiscoverySheet(st, onStart, onStop, close)
                 Sheet.ABOUT -> AboutSheet()
+                Sheet.DSP -> DspSheet(st)
+                Sheet.NOISE, Sheet.EQ, Sheet.TOOLBAR -> {}
                 Sheet.DISPLAY -> DisplaySheet()
                 Sheet.FREQ -> FreqSheet(close)
                 Sheet.AGC -> AgcSheet(st, close)
@@ -751,10 +821,10 @@ private fun IpField(value: String, hint: String, modifier: Modifier, set: (Strin
 }
 
 @Composable
-private fun SheetTitle(t: String) = Text(t, color = Txt, fontSize = 17.sp, fontWeight = FontWeight.Medium)
+internal fun SheetTitle(t: String) = Text(t, color = Txt, fontSize = 17.sp, fontWeight = FontWeight.Medium)
 
 @Composable
-private fun GridButtons(items: List<String>, selected: String?, cols: Int, onClick: (Int) -> Unit) {
+internal fun GridButtons(items: List<String>, selected: String?, cols: Int, onClick: (Int) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
         items.chunked(cols).forEachIndexed { r, row ->
             Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -885,7 +955,7 @@ private fun AgcSheet(st: Status, close: () -> Unit) {
     GridButtons(AGC_NAMES, AGC_NAMES.getOrNull(st.agc), 5) { Radio.agc(it); close() }
 }
 
-private val AGC_NAMES = listOf("Off", "Long", "Slow", "Med", "Fast")
+internal val AGC_NAMES = listOf("Off", "Long", "Slow", "Med", "Fast")
 
 /** deskHPSDR's VFO number pad: type a frequency, finish with MHz or kHz. */
 @Composable
@@ -977,7 +1047,7 @@ private fun DisplaySheet() {
 }
 
 @Composable
-private fun Label(t: String) = Text(t, color = Dim, fontSize = 11.sp)
+internal fun Label(t: String) = Text(t, color = Dim, fontSize = 11.sp)
 
 /** One button of the main menu: opens [sheet], or isn't built yet ([later] = the milestone that brings it). */
 private class MenuItem(val label: String, val sheet: Sheet? = null, val later: String? = null)
@@ -992,13 +1062,13 @@ private val MENU_COLUMNS = listOf(
         MenuItem("Meter", later = "M4"), MenuItem("XVTR", later = "M6"), MenuItem("Discovery", Sheet.DISCOVERY)),
     listOf(MenuItem("VFO", Sheet.VFO), MenuItem("Band", Sheet.BAND), MenuItem("BandStack", Sheet.BAND),
         MenuItem("Mode", Sheet.MODE), MenuItem("Memory", Sheet.BAND)),
-    listOf(MenuItem("RX", later = "M4"), MenuItem("RX Filter", Sheet.FILTER), MenuItem("Noise", later = "M5"),
+    listOf(MenuItem("RX", later = "M4"), MenuItem("RX Filter", Sheet.FILTER), MenuItem("Noise", Sheet.NOISE),
         MenuItem("AGC", Sheet.AGC)),
     listOf(MenuItem("TX", later = "M7"), MenuItem("PA", later = "M6"), MenuItem("VOX", later = "M7"),
         MenuItem("PS", later = "M7"), MenuItem("CW", later = "M7")),
-    listOf(MenuItem("DSP", later = "M5"), MenuItem("WDSP EQ", later = "M5"), MenuItem("Ant", later = "M6"),
+    listOf(MenuItem("DSP", Sheet.DSP), MenuItem("WDSP EQ", Sheet.EQ), MenuItem("Ant", later = "M6"),
         MenuItem("OC Output", later = "M6"), MenuItem("Extras", later = "M8")),
-    listOf(MenuItem("Toolbar", later = "M5"), MenuItem("CAT/TCI", later = "M8"), MenuItem("MIDI", later = "M8")),
+    listOf(MenuItem("Toolbar", Sheet.TOOLBAR), MenuItem("CAT/TCI", later = "M8"), MenuItem("MIDI", later = "M8")),
 )
 
 /** The ☰ button: deskHPSDR's main menu grid. A menu opened from here comes back here when closed. */
