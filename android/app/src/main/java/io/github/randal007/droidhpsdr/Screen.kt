@@ -1069,7 +1069,7 @@ private fun MainMenu(st: Status, onStart: () -> Unit, close: () -> Unit, open: (
 @Composable
 private fun MenuButton(label: String, modifier: Modifier, later: String? = null, onClick: () -> Unit) {
     Column(
-        modifier.height(36.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF0F1624))
+        modifier.height(32.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF0F1624))
             .border(1.dp, Line, RoundedCornerShape(10.dp)).clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
     ) {
