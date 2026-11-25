@@ -171,3 +171,44 @@ Object.assign(LAYOUTS, {
     canvases: [['#c', base({ labels: [{ f: VB, y: 0.08, t: 'B / TX', c: '#c9a8ff' }] })]],
   }),
 });
+
+// M4 round 5 (Randal: the indicators under the pill should go somewhere better)
+const pillB = (aExtra = '', bLine = null, aTag = '<span class="tag vfoA">A</span>', w = 260, x = 286, bottom = '') =>
+  abs(x, 8, w, 74, `<div class="row" style="gap:10px;justify-content:center;height:100%">
+    <div class="col" style="gap:3px;align-items:flex-start">
+      <div class="row" style="gap:8px">${aTag}${fq(VFO, 32)}${aExtra}</div>
+      ${bLine ?? `<div class="row dim" style="gap:6px;padding-left:2px"><span style="font-size:10px;font-weight:700;width:24px;text-align:center">B</span>${fq(VB, 13, 'dim')}</div>`}
+    </div>
+    <div class="col" style="gap:3px"><span class="tag acc">USB-D</span><span class="tag">3.0k</span></div></div>${bottom}`, 'glass');
+Object.assign(LAYOUTS, {
+  // 1: built into what is already there - RIT after A's digits, split turns the B line purple, lock replaces the A tag
+  Y1: () => ({
+    html: cv('c', 0, 0, 832, 384) + meterCard() + topBtns() + chips(CHIPS) +
+      pillB(`<span style="font-size:11px;font-weight:700;color:var(--amb);align-self:flex-start;margin-top:4px">+120</span>`,
+        `<div class="row" style="gap:6px;padding-left:2px"><span style="font-size:9.5px;font-weight:700;color:#c9a8ff;width:24px;text-align:center">TX B</span>${fq(VB, 13).replace('class="freq', 'style="color:#c9a8ff" class="freq')}</div>`,
+        `<span class="tag" style="background:var(--amb);color:#1a1000">🔒</span>`, 290, 271),
+    canvases: [['#c', base({ labels: [{ f: VB, y: 0.08, t: 'TX', c: '#c9a8ff' }] })]],
+  }),
+  // 2: on the spectrum itself - RIT shown at the passband, split as the TX marker, lock on the VFO line
+  Y2: () => ({
+    html: cv('c', 0, 0, 832, 384) + meterCard() + topBtns() + chips(CHIPS) + pillB() +
+      abs(426, 128, 70, 20, `<span class="tag amb">RIT +120</span>`) +
+      abs(398, 100, 20, 20, `<span style="font-size:13px">🔒</span>`),
+    canvases: [['#c', base({ labels: [{ f: VB, y: 0.46, t: 'TX · B', c: '#c9a8ff', drop: 40 }] })]],
+  }),
+  // 3: in the meter card, under the scale
+  Y3: () => ({
+    html: cv('c', 0, 0, 832, 384) + topBtns() + chips(CHIPS) + pillB() +
+      abs(10, 10, 168, null, `<div class="row" style="justify-content:space-between;margin-bottom:6px"><span style="font-size:20px;font-weight:500">S7</span><span class="dim" style="font-size:11px">−87 dBm</span></div>${meter(146, 9, 7.4, true)}
+        <div class="row" style="gap:4px;margin-top:7px"><span class="tag amb">RIT +120</span><span class="tag" style="background:rgba(180,140,255,.18);color:#c9a8ff">SPLIT</span><span class="tag">🔒</span></div>`, 'glass', 'padding:9px 11px'),
+    canvases: [['#c', base()]],
+  }),
+  // 4: small coloured icons along the pill's bottom edge, the pill keeps its size
+  Y4: () => ({
+    html: cv('c', 0, 0, 832, 384) + meterCard() + topBtns() + chips(CHIPS) +
+      pillB('', null, undefined, 260, 286,
+        `<div class="row" style="position:absolute;left:0;right:0;bottom:-9px;justify-content:center;gap:5px">
+          ${[['R+120', 'var(--amb)', '#1a1000'], ['SPLIT', '#b48cff', '#140a26'], ['🔒', '#8b97ad', '#0a0f1a']].map(([t, bg, fg]) => `<span style="font-size:9px;font-weight:800;padding:1px 6px;border-radius:7px;background:${bg};color:${fg}">${t}</span>`).join('')}</div>`),
+    canvases: [['#c', base()]],
+  }),
+});
