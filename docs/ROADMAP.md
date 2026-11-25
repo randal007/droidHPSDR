@@ -178,7 +178,10 @@ Strict order, each step tested on a dummy load first:
 2. TX audio chain: compressor, CFC, leveler, TX EQ, VOX, monitor.
 3. CW: HL2 internal keyer from the KEY jack (arms only in CW mode, see
    docs/HARDWARE.md), sidetone, CW engine / keyboard CW, voice keyer.
-4. PureSignal (PS menu).
+4. PureSignal (PS menu). Randal wants it (2026-11-24). Upstream runs PS at
+   any Protocol 1 rate (`tx_ps_set_sample_rate`, 8:1 at 384 kHz). To test:
+   does the HL2's link carry two RX plus two feedback DDCs at 384 kHz? If
+   not, PS drops to 192 kHz (the menu's sample-rate setting).
 5. AM, FM, digital modes; two-tone and the other test signals.
 
 - FEATURES.md: TX, CW, VOX, PS, and the TX actions.
