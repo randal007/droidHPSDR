@@ -270,7 +270,7 @@ AGP), Gradle wrapper 9.9.2, Android SDK in ~/Android/Sdk with
 - The Gradle build is Debug: it keeps code the release build drops, so a
   missing upstream symbol may only show there (vfo.c's VFO bar did).
 - **Demo band**: `adb shell am start -n io.github.randal007.droidhpsdr/.MainActivity --ez demo true`
-  (or ☰ → Demo band) feeds a made-up 20 m band through the real renderer:
+  (or ☰ → Discovery → Demo band) feeds a made-up 20 m band through the real renderer:
   display work with the radio off. Don't launch it while Randal is using
   the phone: it restarts the app on his screen.
 - Screenshots: `adb exec-out screencap -p`; screen video:
