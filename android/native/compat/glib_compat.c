@@ -116,6 +116,8 @@ struct _GSource {
   GDestroyNotify notify;
   guint interval_ms;     /* 0 = idle (run once per pass until it returns FALSE) */
   gint64 due_us;
+  gboolean dispatching;  /* droid_compat_run_pending() is in its callback: the slot
+                            stays taken and the destroy notify is left to it */
 };
 
 static struct _GSource sources[MAX_SOURCES];
@@ -127,7 +129,7 @@ static guint add_source(GSourceFunc func, gpointer data, GDestroyNotify notify, 
   guint id = 0;
   pthread_mutex_lock(&sources_lock);
   for (int i = 0; i < MAX_SOURCES; i++) {
-    if (sources[i].id == 0) {
+    if (sources[i].id == 0 && !sources[i].dispatching) {
       id = next_id++;
       if (next_id == 0) next_id = 1;
       sources[i] = (struct _GSource){ id, func, data, notify, interval_ms,
@@ -177,8 +179,10 @@ gboolean g_source_remove(guint tag) {
   pthread_mutex_lock(&sources_lock);
   for (int i = 0; i < MAX_SOURCES; i++) {
     if (sources[i].id == tag && tag != 0) {
-      notify = sources[i].notify;
-      data = sources[i].data;
+      if (!sources[i].dispatching) {   /* else run_pending notifies once the callback returns */
+        notify = sources[i].notify;
+        data = sources[i].data;
+      }
       sources[i].id = 0;
       found = TRUE;
       break;
@@ -222,6 +226,7 @@ void droid_compat_run_pending(void) {
     struct _GSource copy;
     pthread_mutex_lock(&sources_lock);
     copy = sources[i];
+    if (copy.id != 0 && copy.due_us <= now) sources[i].dispatching = TRUE;
     pthread_mutex_unlock(&sources_lock);
     if (copy.id == 0 || copy.due_us > now) continue;
 
@@ -230,17 +235,21 @@ void droid_compat_run_pending(void) {
     gboolean again = copy.func(copy.data);
     current_source = NULL;
 
+    gboolean done;
     pthread_mutex_lock(&sources_lock);
-    /* The callback may have removed itself or been replaced meanwhile. */
-    if (sources[i].id == copy.id) {
-      if (again) {
-        sources[i].due_us = now + (gint64)copy.interval_ms * 1000;
-      } else {
-        sources[i].id = 0;
-      }
+    /* The slot can't be reused while dispatching, so a changed id means
+     * g_source_remove() ran meanwhile (from the callback or another thread)
+     * and left the notify to us: it runs exactly once, after the callback. */
+    if (sources[i].id == copy.id && again) {
+      sources[i].due_us = now + (gint64)copy.interval_ms * 1000;
+      done = FALSE;
+    } else {
+      sources[i].id = 0;
+      done = TRUE;
     }
+    sources[i].dispatching = FALSE;
     pthread_mutex_unlock(&sources_lock);
-    if (!again && copy.notify) copy.notify(copy.data);
+    if (done && copy.notify) copy.notify(copy.data);
   }
 }
 

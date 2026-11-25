@@ -6,15 +6,18 @@
  * phone, and prints the S-meter. RECEIVE ONLY: see stubs.c for why this
  * build cannot put the radio into transmit.
  *
- *   m1-rx [-H nethandle] [-f hz] [-m usb|lsb|cwu|cwl|am] [-g gain_db]
+ *   m1-rx [-H nethandle] [-a ip] [-f hz] [-m usb|lsb|cwu|cwl|am] [-g gain_db]
  *         [-t seconds] [-C]
  *
  *   -H  Android network handle to bind to (the Ethernet network). Without
  *       it, unicast to a 169.254.x.x radio goes out over WiFi and is lost.
  *       run-m1.sh looks it up in `dumpsys connectivity`.
+ *   -a  the radio's IP: targeted discovery instead of a broadcast (the wired
+ *       link: -a 169.254.19.221)
  *   -f  frequency in Hz (default 14074000)
  *   -g  HL2 LNA gain in dB, -12..48 (default 20)
- *   -t  how long to run (default 30 s; Ctrl-C stops early)
+ *   -t  how long to run (default 30 s; Ctrl-C, or adb going away, stops
+ *       early and still sends METIS STOP)
  *   -C  HL2+ codec OFF (default ON: demodulated audio to the HL2+ speaker)
  *
  * GPL v3 or later, like the rest of droidHPSDR.
@@ -40,6 +43,7 @@
 #include "band.h"
 #include "channel.h"
 #include "discovered.h"
+#include "discovery.h"
 #include "filter.h"
 #include "mode.h"
 #include "old_discovery.h"
@@ -75,7 +79,8 @@ static int parse_mode(const char *s) {
   if (!strcmp(s, "cwu")) return modeCWU;
   if (!strcmp(s, "cwl")) return modeCWL;
   if (!strcmp(s, "am")) return modeAM;
-  return modeUSB;
+  if (!strcmp(s, "usb")) return modeUSB;
+  return -1;
 }
 
 /* vfo.c's modesettingsRestoreState() defaults for the fields that matter
@@ -115,24 +120,35 @@ int main(int argc, char **argv) {
   double gain = 20.0;
   int seconds = 30;
   int codec = 1;
+  const char *ip = "";
   int opt;
 
   setvbuf(stdout, NULL, _IOLBF, 0);
-  while ((opt = getopt(argc, argv, "H:f:m:g:t:C")) != -1) {
+  while ((opt = getopt(argc, argv, "H:a:f:m:g:t:C")) != -1) {
     switch (opt) {
     case 'H': net_handle = strtoull(optarg, NULL, 10); break;
+    case 'a': ip = optarg; break;
     case 'f': freq = atoll(optarg); break;
     case 'm': mode = parse_mode(optarg); break;
     case 'g': gain = atof(optarg); break;
     case 't': seconds = atoi(optarg); break;
     case 'C': codec = 0; break;
     default:
-      fprintf(stderr, "usage: %s [-H nethandle] [-f hz] [-m usb|lsb|cwu|cwl|am] [-g dB] [-t s] [-C]\n", argv[0]);
+      mode = -1;
+      break;
+    }
+    if (mode < 0) {
+      fprintf(stderr, "usage: %s [-H nethandle] [-a ip] [-f hz] [-m usb|lsb|cwu|cwl|am] [-g dB] [-t s] [-C]\n",
+              argv[0]);
       return 2;
     }
   }
   signal(SIGINT, on_signal);
   signal(SIGTERM, on_signal);
+  /* `adb shell` without a pty: Ctrl-C on the PC, or adb over WiFi dropping,
+   * reaches us as SIGHUP. Stop cleanly then too, so the radio gets METIS STOP. */
+  signal(SIGHUP, on_signal);
+  signal(SIGPIPE, SIG_IGN);
 
   droid_log("droidHPSDR M1 headless RX — RECEIVE ONLY, transmit is compiled out");
 
@@ -150,12 +166,15 @@ int main(int argc, char **argv) {
 
   /* ---- discovery: deskHPSDR's own, broadcast on every interface ---- */
   protocol = ORIGINAL_PROTOCOL;
+  snprintf(ipaddr_radio, 64, "%s", ip);   /* empty: broadcast */
   old_discovery();
   int pick = -1;
   for (int i = 0; i < devices; i++) {
+    const char *at = inet_ntoa(discovered[i].info.network.address.sin_addr);
     droid_log("found: %s, device %d, gateware %d.%d, %s, via %s", discovered[i].name,
               discovered[i].device, discovered[i].software_version / 10, discovered[i].software_version % 10,
-              inet_ntoa(discovered[i].info.network.address.sin_addr), discovered[i].info.network.interface_name);
+              at, discovered[i].info.network.interface_name);
+    if (ip[0] && strcmp(ip, at) != 0) continue;
     if (pick < 0 && discovered[i].device == DEVICE_HERMES_LITE2) pick = i;
   }
   if (pick < 0) {
@@ -218,15 +237,19 @@ int main(int argc, char **argv) {
   struct timespec t0, now;
   clock_gettime(CLOCK_MONOTONIC, &t0);
   int ticks = 0;
-  while (!stop_requested) {
+  while (!stop_requested && !atomic_load(&droid_fatal_seen)) {
     usleep(100000);
     droid_compat_run_pending();   /* the g_idle_add queue (UI notifications) */
     clock_gettime(CLOCK_MONOTONIC, &now);
     double elapsed = (now.tv_sec - t0.tv_sec) + (now.tv_nsec - t0.tv_nsec) * 1e-9;
     if (++ticks % 5 == 0) {
+      /* calibrated like receiver.c's rx_update_display(): WDSP's raw meter
+       * reads high by the LNA gain (N2ADR board: no Alex/Charly25 terms) */
+      const BAND *band = band_get_band(vfo[0].band);
+      double dbm = rx_get_smeter(receiver[0]) + (double)(rx_gain_calibration - band->gain)
+                   + (double)adc[0].attenuation - adc[0].gain;
       droid_log("t=%5.1fs  S-meter %7.1f dBm  lost packets %u  ADC overloads %d",
-                elapsed, rx_get_smeter(receiver[0]), atomic_load(&droid_sequence_errors),
-                hl2_adc0_ovf_events);
+                elapsed, dbm, atomic_load(&droid_sequence_errors), hl2_adc0_ovf_events);
     }
     if (elapsed >= seconds) break;
   }
@@ -234,6 +257,10 @@ int main(int argc, char **argv) {
   droid_log("stopping stream");
   old_protocol_stop();
   usleep(200000);
+  if (atomic_load(&droid_fatal_seen)) {
+    droid_log("failed (FATAL above)");
+    return 1;
+  }
   droid_log("done");
   return 0;
 }

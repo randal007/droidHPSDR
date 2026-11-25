@@ -197,6 +197,11 @@ int main(int argc, char **argv) {
             return 2;
         }
     }
+    if (timeout_ms < 1) timeout_ms = 1;   /* SO_RCVTIMEO 0 would mean "wait forever" */
+    struct in_addr unicast_addr = {0};
+    if (unicast && inet_pton(AF_INET, unicast, &unicast_addr) != 1) {
+        fprintf(stderr, "bad address: %s\n", unicast); return 1;
+    }
 
     struct in_addr local, mask;
     char name[IFNAMSIZ] = "?";
@@ -240,8 +245,7 @@ int main(int argc, char **argv) {
         memset(pkt, 0, P1_STOP_LEN);
         pkt[0] = 0xEF; pkt[1] = 0xFE; pkt[2] = 0x04; pkt[3] = 0x00;
         if (unicast) {
-            struct in_addr d; inet_pton(AF_INET, unicast, &d);
-            send_to(s, pkt, P1_STOP_LEN, d, "STOP");
+            send_to(s, pkt, P1_STOP_LEN, unicast_addr, "STOP");
         } else {
             struct in_addr d; d.s_addr = INADDR_BROADCAST;
             send_to(s, pkt, P1_STOP_LEN, d, "STOP");

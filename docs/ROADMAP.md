@@ -32,7 +32,15 @@ next, what's waiting on whom. Session history lives in git and in
   start fails, a clear message when the radio's address changes - that one
   needs a fresh app process, old_protocol.c keeps the address). Radio
   checks: CW tap-to-tune lands in the passband; drag a CW filter edge.
-  M1 still to review. Tag
+  M1 done 2026-11-25 (`9f49c21..m1-done`, high; 10 findings, 8 fixed:
+  m1-rx's S-meter now calibrated like receiver.c (read high by the LNA
+  gain), stops with an error on an upstream FATAL, catches SIGHUP so a
+  dropped adb still sends METIS STOP, rejects an unknown -m, new `-a ip`
+  for targeted discovery; GLib shim runs a destroy notify exactly once;
+  WDSP build prints the compiler error; m0-probe -t 0 and -u bogus. Not
+  needed: thread structs (threads start once per process), vfo.c copy
+  (compiled since M4). Radio check: `run-m1.sh -a 169.254.19.221 -t 20`
+  shows the same dBm as the app. Every milestone so far reviewed. Tag
   `m5-done` when M5 is accepted.
 - **M5 round 2 pictures sent** (E1-E6, `tools/mockups/layouts6.js`):
   Display tabs + manual levels (E1) or dragging the dB scale (E2),

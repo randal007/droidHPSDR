@@ -78,8 +78,10 @@ int discovery_last_device_matches(int protocol, const struct sockaddr_in *addr, 
 
 /* ---- main.c / ext.c / menus / sliders: UI notifications ---- */
 
+atomic_int droid_fatal_seen;
 int fatal_error(void *data) {
   droid_log("FATAL: %s", data ? (const char *)data : "(no message)");
+  atomic_store(&droid_fatal_seen, 1);
   return G_SOURCE_REMOVE;
 }
 int ext_vfo_update(void *data) { (void)data; return G_SOURCE_REMOVE; }

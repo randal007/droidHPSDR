@@ -141,7 +141,7 @@ build_wdsp() {
 -I$OUT/fftw-double/include"
   # shellcheck disable=SC2016
   printf '%s\n' $sources | xargs -P"$JOBS" -I{} sh -c \
-    '$CC $WDSP_CFLAGS -c -o "$OBJ/$(basename {} .c).o" "$WDSP_DIR/{}" 2>>"$OBJ/../warnings.log" || { echo "FAILED: {}"; exit 255; }'
+    'log="$OBJ/$(basename {} .c).log"; $CC $WDSP_CFLAGS -c -o "$OBJ/$(basename {} .c).o" "$WDSP_DIR/{}" 2>"$log"; rc=$?; cat "$log" >>"$OBJ/../warnings.log"; [ $rc -eq 0 ] || { echo "FAILED: {}"; tail -n 30 "$log"; exit 255; }; rm -f "$log"'
   "$AR" rcs "$OUT/wdsp/libwdsp.a" "$obj"/*.o
   "$RANLIB" "$OUT/wdsp/libwdsp.a"
   echo "$(ls "$obj" | wc -l) objects, warnings in $OUT/wdsp/warnings.log"
