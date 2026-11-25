@@ -25,6 +25,8 @@ object Native {
     external fun setLnaDb(db: Double)
     /** Also play the receiver on the phone (deskHPSDR's local audio); the HL2+ speaker keeps playing. */
     external fun setPhoneAudio(on: Boolean)
+    /** Upstream's spectrum zoom, 1..16 (more detail when pinched in). */
+    external fun setZoom(zoom: Int)
     /** How old a spectrum row's data is, so rows drawn while tuning land at the right frequency. */
     external fun setRowDelayMs(ms: Int)
 

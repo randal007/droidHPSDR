@@ -206,6 +206,14 @@ object Radio {
     fun setSpan(hz: Double) {
         span.value = hz.coerceIn(1_500.0, status.value.sampleRate * 0.95)
         prefs.edit().putFloat("span", span.value.toFloat()).apply()
+        applyZoom()
+    }
+
+    /** Upstream's zoom to match the span: the spectrum row stays a bit wider than the view. */
+    fun applyZoom() {
+        if (!running) return
+        val z = (status.value.sampleRate * 0.9 / span.value).toInt().coerceIn(1, 16)
+        Native.setZoom(z)
     }
 
     fun setStyle(s: Int) {

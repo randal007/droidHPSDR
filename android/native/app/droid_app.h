@@ -77,6 +77,7 @@ void droid_set_filter(int low, int high);
 void droid_set_volume_db(double db);   /* -40..0 */
 void droid_set_lna_db(double db);      /* -12..48 */
 void droid_set_phone_audio(int on);    /* also play on the phone (deskHPSDR's local audio) */
+void droid_set_zoom(int zoom);         /* upstream's zoom, 1..16 */
 
 typedef struct {
   long long freq;
@@ -89,6 +90,7 @@ typedef struct {
   double lna_db, volume_db;
   double noise_floor;
   int phone_audio;
+  int zoom;
   int running;
 } droid_status;
 void droid_get_status(droid_status *s);

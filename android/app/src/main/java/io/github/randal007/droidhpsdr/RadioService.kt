@@ -89,6 +89,7 @@ class RadioService : Service() {
                     Native.setPhoneAudio(Radio.phoneAudio.value)
                     Radio.setPhase(Phase.RUNNING, "", net)
                     Radio.applyModeFilter()
+                    Radio.applyZoom()
                     getSystemService(NotificationManager::class.java).notify(1, notification("Receiving on $net"))
                 } else {
                     Radio.setPhase(Phase.ERROR, err)

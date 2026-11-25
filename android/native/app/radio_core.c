@@ -48,7 +48,7 @@
 
 /* ---- requests from the UI, run on the loop thread ---- */
 
-enum { CMD_FREQ, CMD_MODE, CMD_FILTER, CMD_VOLUME, CMD_LNA, CMD_PHONE_AUDIO };
+enum { CMD_FREQ, CMD_MODE, CMD_FILTER, CMD_VOLUME, CMD_LNA, CMD_PHONE_AUDIO, CMD_ZOOM };
 typedef struct { int type; long long i; double d; int a, b; } cmd;
 #define CMD_MAX 256
 static cmd cmds[CMD_MAX];
@@ -58,7 +58,7 @@ static pthread_mutex_t cmd_lock = PTHREAD_MUTEX_INITIALIZER;
 static void post(cmd c) {
   pthread_mutex_lock(&cmd_lock);
   /* A newer frequency replaces one still waiting, so a fast drag never lags. */
-  if (c.type == CMD_FREQ || c.type == CMD_VOLUME || c.type == CMD_LNA || c.type == CMD_FILTER) {
+  if (c.type == CMD_FREQ || c.type == CMD_VOLUME || c.type == CMD_LNA || c.type == CMD_FILTER || c.type == CMD_ZOOM) {
     for (int k = cmd_tail; k != cmd_head; k = (k + 1) % CMD_MAX) {
       if (cmds[k].type == c.type) {
         cmds[k] = c;
@@ -81,6 +81,7 @@ void droid_set_filter(int low, int high) { post((cmd){ .type = CMD_FILTER, .a = 
 void droid_set_volume_db(double db) { post((cmd){ .type = CMD_VOLUME, .d = db }); }
 void droid_set_lna_db(double db) { post((cmd){ .type = CMD_LNA, .d = db }); }
 void droid_set_phone_audio(int on) { post((cmd){ .type = CMD_PHONE_AUDIO, .a = on }); }
+void droid_set_zoom(int zoom) { post((cmd){ .type = CMD_ZOOM, .a = zoom }); }
 
 /* ---- when the radio was on which frequency ----
  * A spectrum row describes samples from some time before it is drawn (the
@@ -148,6 +149,16 @@ static void run(const cmd *c) {
     break;
   case CMD_LNA:
     adc[0].gain = c->d < -12 ? -12 : c->d > 48 ? 48 : c->d;   /* old_protocol.c sends it */
+    break;
+  case CMD_ZOOM:
+    /* zoompan.c's set_zoom(): more analyzer pixels, so pinching in gets real
+     * detail instead of a stretched picture. With CTUN off upstream keeps
+     * the zoomed window centred on the VFO. */
+    if (c->a < 1 || c->a > 16 || c->a == rx->zoom) break;
+    g_mutex_lock(&rx->display_mutex);
+    rx->zoom = c->a;
+    rx_update_zoom_locked(rx);
+    g_mutex_unlock(&rx->display_mutex);
     break;
   case CMD_PHONE_AUDIO:
     /* deskHPSDR's "local audio": receiver.c then also hands every audio
@@ -350,6 +361,7 @@ void droid_get_status(droid_status *s) {
   s->volume_db = receiver[0]->volume;
   s->noise_floor = droid_noise_floor();
   s->phone_audio = receiver[0]->local_audio;
+  s->zoom = receiver[0]->zoom;
 }
 
 int droid_wisdom(const char *dir) { return WDSPwisdom((char *)dir); }

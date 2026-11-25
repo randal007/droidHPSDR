@@ -120,6 +120,10 @@ JNIEXPORT void JNICALL FN(setRowDelayMs)(JNIEnv *env, jobject self, jint ms) {
   (void)env; (void)self;
   droid_row_delay_us = ms * 1000;
 }
+JNIEXPORT void JNICALL FN(setZoom)(JNIEnv *env, jobject self, jint zoom) {
+  (void)env; (void)self;
+  droid_set_zoom(zoom);
+}
 JNIEXPORT void JNICALL FN(setPhoneAudio)(JNIEnv *env, jobject self, jboolean on) {
   (void)env; (void)self;
   droid_set_phone_audio(on);
