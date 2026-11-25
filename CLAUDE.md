@@ -222,6 +222,8 @@ Decided; don't widen these without a reason.
 - `docs/M1-PLAN.md` is the finished milestone 1, kept as history.
 - Randal works one section at a time and wants each nailed down before the
   next: mock-ups and his pick before UI code, a radio test before a tick.
+- **One receiver only, no RX2** (Randal, 2026-11-24). `receiver[1]` exists
+  in code only because `old_protocol.c` reads it; never surface it.
 - **No transmit until Randal asks.** The headless build is receive-only by
   construction (`android/native/headless/stubs.c`); keep it that way.
 
