@@ -143,3 +143,16 @@ Object.assign(LAYOUTS, {
     canvases: [['#c', base()]],
   }),
 });
+
+// M4 round 3 (Randal: "I like 1 but not the hold-to-swap text"): option 1, B labelled only.
+Object.assign(LAYOUTS, {
+  X4: () => ({
+    html: cv('c', 0, 0, 832, 384) + meterCard() + topBtns() + chips(CHIPS) +
+      abs(216, 8, 400, 62, `<div class="row" style="gap:10px;justify-content:center;height:100%">
+        <span class="tag vfoA">A</span>${fq(VFO, 34)}
+        <div class="col" style="gap:3px"><span class="tag acc">USB-D</span><span class="tag">3.0k</span></div>
+        <div class="row" style="gap:6px;padding-left:10px;border-left:1px solid var(--line)"><span class="tag" style="background:none;border:1px solid var(--line);color:var(--dim)">B</span>${fq(VB, 15, 'dim')}</div></div>`, 'glass') +
+      abs(246, 74, 340, 26, `<div class="row" style="gap:6px;justify-content:center"><span class="tag amb">RIT +120</span><span class="tag" style="background:rgba(180,140,255,.18);color:#c9a8ff">SPLIT · TX B</span></div>`),
+    canvases: [['#c', base({ labels: [{ f: VB, y: 0.08, t: 'B / TX', c: '#c9a8ff' }] })]],
+  }),
+});
