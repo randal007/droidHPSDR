@@ -5,7 +5,10 @@
 // segment tag. Sizes are dp at the S26 Ultra's 832 x 384 dp landscape.
 package io.github.randal007.droidhpsdr
 
+import android.app.Activity
 import android.content.Intent
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.BoxWithConstraints
 import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
@@ -104,7 +107,7 @@ private val Grn = Color(0xFF3EE07A)
 private val Red = Color(0xFFFF5A50)
 
 
-private enum class Sheet { BAND, MODE, AF, LNA, FILTER, MENU, DISPLAY, FREQ, VFO, AGC }
+private enum class Sheet { BAND, MODE, AF, LNA, FILTER, MENU, DISPLAY, FREQ, VFO, AGC, SDR, DISCOVERY, ABOUT }
 
 private fun Modifier.glass(r: Int = 14) =
     clip(RoundedCornerShape(r.dp)).background(Glass).border(1.dp, Line, RoundedCornerShape(r.dp))
@@ -116,6 +119,11 @@ fun Screen(onStart: () -> Unit, onStop: () -> Unit) {
         val freq by Radio.freq.collectAsState()
         val flat by Radio.flat.collectAsState()
         var sheet by remember { mutableStateOf<Sheet?>(null) }
+        // deskHPSDR: a menu opened from the main menu goes back to it when closed
+        var fromMenu by remember { mutableStateOf(false) }
+        val dismiss = { sheet = if (fromMenu && sheet != Sheet.MENU) Sheet.MENU else null; fromMenu = false }
+        val done = { sheet = null; fromMenu = false }
+        BackHandler(enabled = sheet != null) { dismiss() }
         var flash by remember { mutableStateOf("" to 0L) }
 
         Box(Modifier.fillMaxSize().background(Bg)) {
@@ -135,10 +143,10 @@ fun Screen(onStart: () -> Unit, onStop: () -> Unit) {
                     flash = (if (!flat) "2D spectrum" else "3D: ${SpectrumView.STYLES[Radio.style.value]}") +
                         " · hold for 3D looks and settings" to System.currentTimeMillis()
                 }
-                RoundButton("☰") { sheet = Sheet.MENU }
+                RoundButton("☰") { sheet = Sheet.MENU; fromMenu = false }
             }
 
-            ChipRow(status, { sheet = it }, Modifier.align(Alignment.BottomStart).padding(10.dp))
+            ChipRow(status, { sheet = it; fromMenu = false }, Modifier.align(Alignment.BottomStart).padding(10.dp))
 
             if (status.phase == Phase.DEMO) {
                 Text("DEMO · no radio", color = Amb, fontSize = 12.sp, fontWeight = FontWeight.Bold,
@@ -148,9 +156,10 @@ fun Screen(onStart: () -> Unit, onStop: () -> Unit) {
                 StatusCard(status, onStart, Modifier.align(Alignment.Center))
             }
             when (sheet) {
-                Sheet.VFO -> VfoPanel(freq, status) { sheet = null }
+                Sheet.VFO -> VfoPanel(freq, status, dismiss)
+                Sheet.MENU -> MainMenu(status, onStart, done) { sheet = it; fromMenu = true }
                 null -> {}
-                else -> SheetHost(sheet!!, status, onStart, onStop) { sheet = null }
+                else -> SheetHost(sheet!!, status, onStart, onStop, dismiss, done)
             }
         }
     }
@@ -688,8 +697,10 @@ private fun CardButton(text: String, color: Color, onClick: () -> Unit) {
 }
 
 @Composable
-private fun SheetHost(which: Sheet, st: Status, onStart: () -> Unit, onStop: () -> Unit, close: () -> Unit) {
-    Box(Modifier.fillMaxSize().background(Color(0x66000000)).clickable(onClick = close)) {
+private fun SheetHost(
+    which: Sheet, st: Status, onStart: () -> Unit, onStop: () -> Unit, dismiss: () -> Unit, close: () -> Unit,
+) {
+    Box(Modifier.fillMaxSize().background(Color(0x66000000)).clickable(onClick = dismiss)) {
         Column(
             Modifier.align(Alignment.BottomCenter).widthIn(max = 560.dp).fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)).background(Color(0xF20C111E))
@@ -706,11 +717,13 @@ private fun SheetHost(which: Sheet, st: Status, onStart: () -> Unit, onStop: () 
                 Sheet.LNA -> SliderSheet("LNA gain", Radio.lnaDb.collectAsState().value, -12f..48f,
                     { "%+.0f dB".format(it) }) { Radio.setLna(it.roundToInt().toDouble()) }
                 Sheet.FILTER -> FilterSheet(st, close)
-                Sheet.MENU -> MenuSheet(st, onStart, onStop, close)
+                Sheet.SDR -> SdrDeviceSheet(st)
+                Sheet.DISCOVERY -> DiscoverySheet(st, onStart, onStop, close)
+                Sheet.ABOUT -> AboutSheet()
                 Sheet.DISPLAY -> DisplaySheet()
                 Sheet.FREQ -> FreqSheet(close)
                 Sheet.AGC -> AgcSheet(st, close)
-                Sheet.VFO -> {}
+                Sheet.VFO, Sheet.MENU -> {}
             }
         }
     }
@@ -966,33 +979,111 @@ private fun DisplaySheet() {
 @Composable
 private fun Label(t: String) = Text(t, color = Dim, fontSize = 11.sp)
 
+/** One button of the main menu: opens [sheet], or isn't built yet ([later] = the milestone that brings it). */
+private class MenuItem(val label: String, val sheet: Sheet? = null, val later: String? = null)
+
+/**
+ * deskHPSDR's main menu (src/new_menu.c), same columns and order so a
+ * deskHPSDR user finds things: radio, VFO, RX, TX, RX+TX, control.
+ * Diversity is left out (it needs RX2); P2 ADC/DDC and Saturn never show on an HL2.
+ */
+private val MENU_COLUMNS = listOf(
+    listOf(MenuItem("SDR Device", Sheet.SDR), MenuItem("Screen", later = "M5"), MenuItem("Display", Sheet.DISPLAY),
+        MenuItem("Meter", later = "M4"), MenuItem("XVTR", later = "M6"), MenuItem("Discovery", Sheet.DISCOVERY)),
+    listOf(MenuItem("VFO", Sheet.VFO), MenuItem("Band", Sheet.BAND), MenuItem("BandStack", Sheet.BAND),
+        MenuItem("Mode", Sheet.MODE), MenuItem("Memory", Sheet.BAND)),
+    listOf(MenuItem("RX", later = "M4"), MenuItem("RX Filter", Sheet.FILTER), MenuItem("Noise", later = "M5"),
+        MenuItem("AGC", Sheet.AGC)),
+    listOf(MenuItem("TX", later = "M7"), MenuItem("PA", later = "M6"), MenuItem("VOX", later = "M7"),
+        MenuItem("PS", later = "M7"), MenuItem("CW", later = "M7")),
+    listOf(MenuItem("DSP", later = "M5"), MenuItem("WDSP EQ", later = "M5"), MenuItem("Ant", later = "M6"),
+        MenuItem("OC Output", later = "M6"), MenuItem("Extras", later = "M8")),
+    listOf(MenuItem("Toolbar", later = "M5"), MenuItem("CAT/TCI", later = "M8"), MenuItem("MIDI", later = "M8")),
+)
+
+/** The ☰ button: deskHPSDR's main menu grid. A menu opened from here comes back here when closed. */
 @Composable
-private fun MenuSheet(st: Status, onStart: () -> Unit, onStop: () -> Unit, close: () -> Unit) {
-    val region by Radio.region.collectAsState()
-    SheetTitle("droidHPSDR")
-    Text(
-        when (st.phase) {
-            Phase.RUNNING -> "Receiving on ${st.network} · ${st.sampleRate / 1000} kHz · lost packets ${st.lostPackets} · ADC overloads ${st.adcOverloads}"
-            else -> "${st.phase.name.lowercase()}: ${st.message}"
-        },
-        color = Dim, fontSize = 12.sp,
-    )
+private fun MainMenu(st: Status, onStart: () -> Unit, close: () -> Unit, open: (Sheet) -> Unit) {
     val ctx = LocalContext.current
-    val wired by Radio.wiredIp.collectAsState()
-    val wifi by Radio.wifiIp.collectAsState()
-    Label("Radio address: on the USB Ethernet link / on WiFi")
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        IpField(wired, "169.254.19.221", Modifier.weight(1f)) { Radio.setWiredIp(it) }
-        IpField(wifi, "radio's IP on your WiFi", Modifier.weight(1f)) { Radio.setWifiIp(it) }
-    }
-    val pm = ctx.getSystemService(PowerManager::class.java)
-    if (!pm.isIgnoringBatteryOptimizations(ctx.packageName)) {
-        GridButtons(listOf("Let it run in the background (battery setting)"), null, 1) {
-            ctx.startActivity(
-                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${ctx.packageName}")),
-            )
+    var note by remember { mutableStateOf("") }
+    Box(Modifier.fillMaxSize().background(Color(0x66000000)).clickable(onClick = close)) {
+        BoxWithConstraints(Modifier.align(Alignment.Center).padding(6.dp)) {
+            val narrow = maxWidth < 600.dp
+            Column(
+                Modifier.widthIn(max = 820.dp).fillMaxWidth().glass(18).background(Color(0xF20C111E))
+                    .clickable(enabled = false) {}.verticalScroll(rememberScrollState()).padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween) {
+                    SheetTitle("droidHPSDR - Menu")
+                    Text(
+                        when (st.phase) {
+                            Phase.RUNNING -> "${st.network} · ${st.sampleRate / 1000} kHz · lost ${st.lostPackets} · ADC overloads ${st.adcOverloads}"
+                            Phase.DEMO -> "demo band, no radio"
+                            else -> "${st.phase.name.lowercase()}${if (st.message.isNotEmpty()) ": ${st.message}" else ""}"
+                        },
+                        color = Dim, fontSize = 11.sp,
+                    )
+                }
+                // first row: Close / Restart Protocol / Iconify
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    MenuButton("Close", Modifier.weight(1f), onClick = close)
+                    if (st.phase == Phase.RUNNING) {
+                        MenuButton("Restart Protocol P1", Modifier.weight(1f)) { RadioService.restart(ctx); close() }
+                    } else {
+                        MenuButton("Start radio", Modifier.weight(1f)) { onStart(); close() }
+                    }
+                    // the radio keeps running in the background (foreground service)
+                    MenuButton("Iconify", Modifier.weight(1f)) { (ctx as? Activity)?.moveTaskToBack(true); close() }
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
+                val press: (MenuItem) -> Unit = { item ->
+                    if (item.sheet != null) open(item.sheet)
+                    else note = "${item.label} isn't built yet: it comes with ${item.later}"
+                }
+                val blocks = if (narrow) MENU_COLUMNS.chunked(3) else listOf(MENU_COLUMNS)
+                blocks.forEach { cols ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        cols.forEach { col ->
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                col.forEach { item ->
+                                    MenuButton(item.label, Modifier.fillMaxWidth(), later = item.later) { press(item) }
+                                }
+                            }
+                        }
+                    }
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(note, color = Amb, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                    MenuButton("About", Modifier.weight(1f)) { open(Sheet.ABOUT) }
+                    Text("Receive only: transmit comes with M7", color = Dim, fontSize = 10.sp,
+                        modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                }
+            }
         }
     }
+}
+
+@Composable
+private fun MenuButton(label: String, modifier: Modifier, later: String? = null, onClick: () -> Unit) {
+    Column(
+        modifier.height(36.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF0F1624))
+            .border(1.dp, Line, RoundedCornerShape(10.dp)).clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+    ) {
+        Text(label, color = if (later == null) Txt else Dim.copy(alpha = 0.7f), fontSize = 13.sp,
+            fontWeight = FontWeight.Medium, maxLines = 1)
+        if (later != null) Text(later, color = Dim.copy(alpha = 0.55f), fontSize = 8.5.sp)
+    }
+}
+
+/** deskHPSDR's SDR Device (Radio) menu: the parts built so far. The HL2 settings come with M6. */
+@Composable
+private fun SdrDeviceSheet(st: Status) {
+    val ctx = LocalContext.current
+    SheetTitle("SDR Device")
     val rate by Radio.sampleRate.collectAsState()
     Label("Sample rate: how wide a band the radio hears at once (restarts the stream)")
     val rates = listOf(96000, 192000, 384000)
@@ -1002,28 +1093,63 @@ private fun MenuSheet(st: Status, onStart: () -> Unit, onStop: () -> Unit, close
             if (st.phase == Phase.RUNNING) RadioService.restart(ctx)
         }
     }
-    Text("Band plan region", color = Dim, fontSize = 11.sp)
+    val region by Radio.region.collectAsState()
+    Label("Band plan region")
     GridButtons(listOf("Region 1", "Region 2", "Region 3"), "Region $region", 3) { Radio.setRegion(it + 1) }
     val delay by Radio.rowDelayMs.collectAsState()
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text("Tuning delay (test): spectrum rows are this old", color = Dim, fontSize = 11.sp)
+        Label("Tuning delay (test): spectrum rows are this old")
         Text("$delay ms", color = Acc, fontSize = 12.sp, fontWeight = FontWeight.Medium)
     }
     Slider(
         value = delay.toFloat(), onValueChange = { Radio.setRowDelay(it.roundToInt()) }, valueRange = 0f..400f,
         colors = SliderDefaults.colors(thumbColor = Acc, activeTrackColor = Acc),
     )
-    var showDisplay by remember { mutableStateOf(false) }
+}
+
+/** deskHPSDR's Discovery: where the radio is, start/stop, and the demo band. */
+@Composable
+private fun DiscoverySheet(st: Status, onStart: () -> Unit, onStop: () -> Unit, close: () -> Unit) {
+    val ctx = LocalContext.current
+    SheetTitle("Discovery")
+    val wired by Radio.wiredIp.collectAsState()
+    val wifi by Radio.wifiIp.collectAsState()
+    Label("Radio address: on the USB Ethernet link / on WiFi")
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        IpField(wired, "169.254.19.221", Modifier.weight(1f)) { Radio.setWiredIp(it) }
+        IpField(wifi, "radio's IP on your WiFi", Modifier.weight(1f)) { Radio.setWifiIp(it) }
+    }
     GridButtons(
         listOf(if (st.phase == Phase.RUNNING) "Stop radio" else "Start radio",
-            if (st.phase == Phase.DEMO) "Stop demo" else "Demo band", "Display…"), null, 3,
+            if (st.phase == Phase.DEMO) "Stop demo" else "Demo band"), null, 2,
     ) {
         when (it) {
             0 -> { if (st.phase == Phase.RUNNING) onStop() else onStart(); close() }
-            1 -> { if (st.phase == Phase.DEMO) Radio.stopDemo() else Radio.startDemo(); close() }
-            else -> showDisplay = !showDisplay
+            else -> { if (st.phase == Phase.DEMO) Radio.stopDemo() else Radio.startDemo(); close() }
         }
     }
-    if (showDisplay) DisplaySheet()
-    Text("Receive only: transmit is not built yet (M7).", color = Dim, fontSize = 11.sp)
+    val pm = ctx.getSystemService(PowerManager::class.java)
+    if (!pm.isIgnoringBatteryOptimizations(ctx.packageName)) {
+        GridButtons(listOf("Let it run in the background (battery setting)"), null, 1) {
+            ctx.startActivity(
+                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${ctx.packageName}")),
+            )
+        }
+    }
+}
+
+/** deskHPSDR's About. */
+@Composable
+private fun AboutSheet() {
+    val ctx = LocalContext.current
+    val version = remember { runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "?" }
+    SheetTitle("About droidHPSDR")
+    Text("Version $version", color = Txt, fontSize = 13.sp)
+    Text(
+        "An Android front end for the Hermes Lite 2, built on deskHPSDR by Heiko Amft DL1BZ, " +
+            "which is built on piHPSDR by John Melton G0ORX/N6LYT and Christoph van Wüllen DL1YCF. " +
+            "DSP: WDSP by Warren Pratt NR0V. GPLv3.",
+        color = Dim, fontSize = 12.sp,
+    )
+    Text("github.com/randal007/droidHPSDR", color = Acc, fontSize = 12.sp)
 }
