@@ -103,8 +103,15 @@ object Radio {
     val wfTheme = MutableStateFlow(0)            // waterfall colours, see WF_THEMES
     val depthRows = MutableStateFlow(80)         // 3D history depth
     val peakHold = MutableStateFlow(true)        // 2D peak-hold line
-    val peakLabels = MutableStateFlow(5)         // how many peaks to label, 0 = off
-    val labelsPassband = MutableStateFlow(false) // label only inside the passband
+    // peak labels: deskHPSDR's Display menu settings and defaults, except
+    // "as S-meter values", which Randal wants on by default
+    val peakLabels = MutableStateFlow(3)         // Number of Peaks to label, 0 = off
+    val labelsPassband = MutableStateFlow(false) // Peak Labels in Passband Only
+    val labelsSmeter = MutableStateFlow(true)    // Peak Labels as S-Meter values
+    val labelsHideNoise = MutableStateFlow(true) // Hide Peaks Below Noise Floor
+    val labelsPercentile = MutableStateFlow(80)  // Panadapter Noise Floor Percentile
+    val labelsIgnore = MutableStateFlow(20)      // Panadapter Ignore Adjacent Peaks (width divider)
+    val avgMs = MutableStateFlow(250)            // 2D averaging, deskHPSDR's Av. Time (ms)
     val peaks = MutableStateFlow<List<Pair<Double, Double>>>(emptyList())   // (Hz, dBm)
     val split = MutableStateFlow(0.5f)           // share of the height for the 3D/2D view
     val fps = MutableStateFlow(FPS)              // spectrum rows per second
@@ -141,8 +148,13 @@ object Radio {
         wfTheme.value = prefs.getInt("wfTheme", 0)
         depthRows.value = prefs.getInt("depthRows", 80)
         peakHold.value = prefs.getBoolean("peakHold", true)
-        peakLabels.value = prefs.getInt("peakLabels", 5)
+        peakLabels.value = prefs.getInt("peakLabels3", 3)
         labelsPassband.value = prefs.getBoolean("labelsPassband", false)
+        labelsSmeter.value = prefs.getBoolean("labelsSmeter", true)
+        labelsHideNoise.value = prefs.getBoolean("labelsHideNoise", true)
+        labelsPercentile.value = prefs.getInt("labelsPercentile", 80)
+        labelsIgnore.value = prefs.getInt("labelsIgnore", 20)
+        avgMs.value = prefs.getInt("avgMs", 250)
         split.value = prefs.getFloat("split", 0.5f)
         fps.value = prefs.getInt("fps", FPS)
         window.value = prefs.getInt("window", 5)
@@ -252,8 +264,16 @@ object Radio {
     fun setWfTheme(t: Int) { wfTheme.value = t; prefs.edit().putInt("wfTheme", t).apply() }
     fun setDepthRows(n: Int) { depthRows.value = n; prefs.edit().putInt("depthRows", n).apply() }
     fun setPeakHold(on: Boolean) { peakHold.value = on; prefs.edit().putBoolean("peakHold", on).apply() }
-    fun setPeakLabels(n: Int) { peakLabels.value = n; prefs.edit().putInt("peakLabels", n).apply() }
+    fun setPeakLabels(n: Int) { peakLabels.value = n; prefs.edit().putInt("peakLabels3", n).apply() }
     fun setLabelsPassband(on: Boolean) { labelsPassband.value = on; prefs.edit().putBoolean("labelsPassband", on).apply() }
+    fun setLabelsSmeter(on: Boolean) { labelsSmeter.value = on; prefs.edit().putBoolean("labelsSmeter", on).apply() }
+    fun setLabelsHideNoise(on: Boolean) { labelsHideNoise.value = on; prefs.edit().putBoolean("labelsHideNoise", on).apply() }
+    fun setLabelsPercentile(p: Int) { labelsPercentile.value = p; prefs.edit().putInt("labelsPercentile", p).apply() }
+    fun setLabelsIgnore(d: Int) { labelsIgnore.value = d; prefs.edit().putInt("labelsIgnore", d).apply() }
+    fun setAvgMs(ms: Int) { avgMs.value = ms; prefs.edit().putInt("avgMs", ms).apply() }
+
+    /** Rows the 2D view averages: Av. Time at the current frame rate. */
+    fun avgRows(): Int = (avgMs.value * fps.value / 1000.0).toInt().coerceIn(1, 32)
     fun setWiredIp(ip: String) { wiredIp.value = ip.trim(); prefs.edit().putString("wiredIp", ip.trim()).apply() }
     fun setWifiIp(ip: String) { wifiIp.value = ip.trim(); prefs.edit().putString("wifiIp", ip.trim()).apply() }
 
@@ -291,15 +311,17 @@ object Radio {
         if (status.value.phase == Phase.DEMO) setPhase(Phase.IDLE)
     }
 
-    /** Peak labels: in the view (or the passband), 10 dB over the noise floor, spaced apart. */
+    /** Peak labels, deskHPSDR's way (display_bridge.c droid_peaks). */
     private fun pollPeaks(buf: DoubleArray) {
         val n = peakLabels.value
         if (n <= 0) { peaks.value = emptyList(); return }
         val f = freq.value.toDouble()
         val st = status.value
-        val (lo, hi) = if (labelsPassband.value) f + st.filterLow to f + st.filterHigh
-            else f - span.value / 2 to f + span.value / 2
-        val got = Native.peaks(lo, hi, span.value / 24, 10f, n, buf)
+        val lo = f - span.value / 2
+        val hi = f + span.value / 2
+        val (pl, ph) = if (labelsPassband.value) f + st.filterLow to f + st.filterHigh else lo to hi
+        val got = Native.peaks(lo, hi, pl, ph, n, labelsIgnore.value, labelsHideNoise.value,
+            labelsPercentile.value.toDouble(), buf)
         peaks.value = List(got) { buf[2 * it] to buf[2 * it + 1] }
     }
 

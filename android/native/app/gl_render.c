@@ -172,7 +172,18 @@ static const char *SP_FS =
   "in vec2 vUv;\n"
   "out vec4 o;\n"
   "float yOf(float db) { return 1.0 - clamp((db - uLo) / (uHi - uLo), 0.0, 1.0); }\n"
-  "float traceY(float x) { return yOf(smoothDbAt(0, uViewLo + x * uViewSpan)); }\n"
+  /* deskHPSDR's display averaging ("Av. Time"), done here over uAvgRows rows,
+   * each at its own frequency: calm, and still no smear while tuning */
+  "uniform int uAvgRows;\n"
+  "float avgDb(highp float f) {\n"
+  "  highp float p = 0.0, n = 0.0;\n"
+  "  for (int k = 0; k < uAvgRows; k++) {\n"
+  "    highp float d = rowDb(k, f);\n"
+  "    if (d > -190.0) { p += exp2(d * 0.33219281); n += 1.0; }\n"
+  "  }\n"
+  "  return n > 0.0 ? log2(p / n) * 3.0103 : -200.0;\n"
+  "}\n"
+  "float traceY(float x) { return yOf(avgDb(uViewLo + x * uViewSpan)); }\n"
   "void main() {\n"
   "  vec2 px = 1.0 / uPlotPx;\n"
   "  float y0 = traceY(vUv.x), yl = traceY(vUv.x - px.x), yr = traceY(vUv.x + px.x);\n"
@@ -502,6 +513,7 @@ void droid_gl_draw(const droid_view *v) {
     glUniform1i(U(prog_2d, "uPeak"), 3);
     glUniform1i(U(prog_2d, "uPeakOn"), v->peak_hold && peak_w > 0);
     glUniform3f(U(prog_2d, "uPeakMeta"), (float)(peak_fmin - base_hz), (float)peak_hzpp, (float)peak_w);
+    glUniform1i(U(prog_2d, "uAvgRows"), v->avg_rows < 1 ? 1 : v->avg_rows > 32 ? 32 : v->avg_rows);
     glUniform1f(U(prog_2d, "uLo"), v->pan_lo);
     glUniform1f(U(prog_2d, "uHi"), v->pan_hi);
     glUniform2f(U(prog_2d, "uPlotPx"), (float)vw, plot_h);

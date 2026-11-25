@@ -47,9 +47,12 @@ object Native {
         lo: Double, hi: Double, split: Double, style: Int,
         floorDb: Float, rangeDb: Float, wfLo: Float, wfHi: Float,
         flat: Boolean, panLo: Float, panHi: Float, wfTheme: Int, depthRows: Int,
-        peakHold: Boolean, holdS: Float, dropDbS: Float,
+        peakHold: Boolean, holdS: Float, dropDbS: Float, avgRows: Int,
     )
 
-    /** Strongest peaks of the newest row in [lo, hi]: out = [f0, dB0, f1, dB1, ...]; returns how many. */
-    external fun peaks(lo: Double, hi: Double, sepHz: Double, marginDb: Float, max: Int, out: DoubleArray): Int
+    /** Peak labels the way deskHPSDR finds them: out = [f0, dB0, f1, dB1, ...]; returns how many. */
+    external fun peaks(
+        viewLo: Double, viewHi: Double, pbLo: Double, pbHi: Double, num: Int, divider: Int,
+        hideNoise: Boolean, percentile: Double, out: DoubleArray,
+    ): Int
 }

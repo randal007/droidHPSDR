@@ -44,8 +44,9 @@ void droid_demo_set_frequency(long long hz);
 /* S-meter in dBm, corrected like upstream's (rx_update_display). */
 double droid_meter_dbm(void);
 
-/* Strongest peaks of the newest row in [lo, hi] (peak labels); returns how many. */
-int droid_peaks(double lo, double hi, double sep_hz, float margin, int max, double *f, float *d);
+/* Peak labels, upstream's way (display_bridge.c); returns how many. */
+int droid_peaks(double view_lo, double view_hi, double pb_lo, double pb_hi, int num, int divider, int hide_noise,
+                double percentile, double *f, float *d);
 
 /* Noise floor of the newest row (20th percentile), dBm: the display's auto levels. */
 double droid_noise_floor(void);
@@ -123,6 +124,7 @@ typedef struct {
   int depth_rows;            /* 3D history depth in rows */
   int peak_hold;             /* 2D: draw the peak-hold line */
   float peak_hold_s, peak_drop_db_s;   /* hold time, then fall rate */
+  int avg_rows;              /* 2D: rows averaged (deskHPSDR's Av. Time x fps) */
 } droid_view;
 
 void droid_gl_init(void);

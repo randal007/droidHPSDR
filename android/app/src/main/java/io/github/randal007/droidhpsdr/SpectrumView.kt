@@ -45,7 +45,7 @@ class SpectrumView(ctx: Context) : GLSurfaceView(ctx) {
                 (nf - 2.5).toFloat(), (nf + 48.0).toFloat(),
                 Radio.flat.value, (nf + PAN_LO).toFloat(), (nf + PAN_HI).toFloat(),
                 Radio.wfTheme.value, Radio.depthRows.value,
-                Radio.peakHold.value, 2f, 10f,
+                Radio.peakHold.value, 2f, 10f, Radio.avgRows(),
             )
         }
     }

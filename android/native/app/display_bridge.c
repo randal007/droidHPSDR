@@ -10,6 +10,7 @@
  */
 #include <pthread.h>
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 #include <netinet/in.h>
 #include <gtk/gtk.h>
@@ -105,15 +106,25 @@ double droid_meter_dbm(void) {
   return v;
 }
 
-/* The strongest peaks of the newest row between lo and hi: local maxima
- * more than margin dB over the noise floor, at least sep_hz apart, the
- * strongest first. deskHPSDR's peak labels (Display menu) do the same job. */
-int droid_peaks(double lo, double hi, double sep_hz, float margin, int max, double *f, float *d) {
-  static float row[DROID_ROW_MAX], sm[DROID_ROW_MAX];
-  static int idx[DROID_ROW_MAX];
+static int cmp(const void *a, const void *b) {
+  float x = *(const float *)a, y = *(const float *)b;
+  return x < y ? -1 : x > y;
+}
+
+/* Peak labels, as upstream's rx_panadapter.c finds them (Display menu:
+ * "Number of Peaks to label", "Panadapter Ignore Adjacent Peaks", "Hide Peaks
+ * Below Noise Floor", "Panadapter Noise Floor Percentile", "Peak Labels in
+ * Passband Only"): local maxima of the visible part of the newest row
+ * [view_lo, view_hi], optionally only inside [pb_lo, pb_hi], above the
+ * percentile + 3 dB, one per ignore range (visible width / divider), the
+ * strongest num of them, strongest first. Returns how many. */
+int droid_peaks(double view_lo, double view_hi, double pb_lo, double pb_hi, int num, int divider, int hide_noise,
+                double percentile, double *f, float *d) {
+  static float row[DROID_ROW_MAX], sorted[DROID_ROW_MAX];
   int w;
   double fmin, hzpp;
-  float nf;
+  if (num < 1) return 0;
+  if (num > 32) num = 32;
   pthread_mutex_lock(&lock);
   if (newest == 0) {
     pthread_mutex_unlock(&lock);
@@ -124,34 +135,58 @@ int droid_peaks(double lo, double hi, double sep_hz, float margin, int max, doub
   fmin = r->fmin;
   hzpp = r->hzpp;
   memcpy(row, r->db, sizeof(float) * (size_t)w);
-  nf = (float)noise_floor;
   pthread_mutex_unlock(&lock);
 
-  for (int i = 0; i < w; i++) {
-    float a = row[i > 0 ? i - 1 : i], b = row[i], c = row[i < w - 1 ? i + 1 : i];
-    sm[i] = (a + 2 * b + c) * 0.25f;
+  int i0 = (int)ceil((view_lo - fmin) / hzpp), i1 = (int)floor((view_hi - fmin) / hzpp);
+  if (i0 < 1) i0 = 1;
+  if (i1 > w - 2) i1 = w - 2;
+  int mywidth = i1 - i0 + 1;
+  if (mywidth < 3) return 0;
+  double noise_level = -1e9;
+  if (hide_noise) {
+    memcpy(sorted, row + i0, sizeof(float) * (size_t)mywidth);
+    /* the percentile by sorting, like upstream */
+    qsort(sorted, (size_t)mywidth, sizeof(float), cmp);
+    int k = (int)(percentile / 100.0 * mywidth);
+    if (k < 0) k = 0;
+    if (k >= mywidth) k = mywidth - 1;
+    noise_level = sorted[k] + 3.0;
   }
-  int n = 0;
-  for (int i = 1; i < w - 1; i++) {
+  if (divider < 1) divider = 1;
+  int ignore = (mywidth + divider - 1) / divider;
+  double peaks[32];
+  int pos[32];
+  for (int a = 0; a < num; a++) { peaks[a] = -200; pos[a] = -1; }
+  for (int i = i0; i <= i1; i++) {
     double fi = fmin + (i + 0.5) * hzpp;
-    if (fi < lo || fi > hi || sm[i] < nf + margin) continue;
-    if (sm[i] >= sm[i - 1] && sm[i] > sm[i + 1]) idx[n++] = i;
-  }
-  /* strongest first (insertion sort: few candidates) */
-  for (int a = 1; a < n; a++) {
-    int k = idx[a], b = a - 1;
-    while (b >= 0 && sm[idx[b]] < sm[k]) { idx[b + 1] = idx[b]; b--; }
-    idx[b + 1] = k;
+    if (fi < pb_lo || fi > pb_hi) continue;
+    double s = row[i];
+    if (s < noise_level || !(s > row[i - 1] && s > row[i + 1])) continue;
+    int replace = -1;
+    for (int j = 0; j < num; j++) {
+      if (pos[j] >= 0 && pos[j] >= i - ignore && pos[j] <= i + ignore) {
+        replace = s > peaks[j] ? j : -2;
+        break;
+      }
+    }
+    if (replace >= 0) {
+      peaks[replace] = s;
+      pos[replace] = i;
+    } else if (replace == -1) {
+      int low = 0;
+      for (int j = 1; j < num; j++) if (peaks[j] < peaks[low]) low = j;
+      if (s > peaks[low]) { peaks[low] = s; pos[low] = i; }
+    }
   }
   int out = 0;
-  for (int a = 0; a < n && out < max; a++) {
-    double fa = fmin + (idx[a] + 0.5) * hzpp;
-    int near = 0;
-    for (int b = 0; b < out; b++) if (fabs(f[b] - fa) < sep_hz) near = 1;
-    if (near) continue;
-    f[out] = fa;
-    d[out] = sm[idx[a]];
+  for (int a = 0; a < num; a++) {   /* strongest first */
+    int best = -1;
+    for (int j = 0; j < num; j++) if (pos[j] >= 0 && (best < 0 || peaks[j] > peaks[best])) best = j;
+    if (best < 0) break;
+    f[out] = fmin + (pos[best] + 0.5) * hzpp;
+    d[out] = (float)peaks[best];
     out++;
+    pos[best] = -1;
   }
   return out;
 }

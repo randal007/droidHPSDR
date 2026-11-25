@@ -130,7 +130,7 @@ fun Screen(onStart: () -> Unit, onStop: () -> Unit) {
                 RoundButton(if (flat) "2D" else "3D", onLongClick = { sheet = Sheet.DISPLAY }) {
                     Radio.setFlat(!flat)
                     flash = (if (!flat) "2D spectrum" else "3D: ${SpectrumView.STYLES[Radio.style.value]}") +
-                        " · hold for display settings" to System.currentTimeMillis()
+                        " · hold for 3D looks and settings" to System.currentTimeMillis()
                 }
                 RoundButton("☰") { sheet = Sheet.MENU }
             }
@@ -290,7 +290,8 @@ private fun SpectrumOverlay(modifier: Modifier) {
                 val s = ((pdb - SpectrumView.floor3d(style, nf)) / SpectrumView.RANGE_3D).coerceIn(0.0, 1.0)
                 splitY * (1 - SpectrumView.ridge3d(style, s)).toFloat()
             }
-            val t = measurer.measure("%.4f".format(pf / 1e6), ls)
+            val text = if (Radio.labelsSmeter.value) SMeter.label(freq, pdb) else "%.0f dBm".format(pdb)
+            val t = measurer.measure(text, ls)
             val w = t.size.width + 10.dp.toPx()
             val h = t.size.height + 3.dp.toPx()
             val y = (top - h - 6.dp.toPx()).coerceAtLeast(70.dp.toPx())
@@ -368,14 +369,13 @@ private fun MeterCard(dbm: Double, modifier: Modifier) {
     }
 }
 
-/** S-units the deskHPSDR way: S9 = -73 dBm, 6 dB per S-unit, then +10 dB segments. */
+/** The label from deskHPSDR's S-unit table (SMeter.kt); the bar: 6 dB per S-unit, then 10 dB segments. */
 private fun sMeter(dbm: Double): Pair<String, Double> {
-    if (dbm <= -73.0) {
-        val s = ((dbm + 127.0) / 6.0).coerceAtLeast(0.0)
-        return "S${s.toInt().coerceIn(0, 9)}" to s
-    }
-    val over = dbm + 73.0
-    return "S9+${(over / 10).toInt() * 10}" to 9.0 + over / 10.0
+    val f = Radio.freq.value
+    val s9 = if (f > 30_000_000L) -93.0 else -73.0
+    val label = SMeter.label(f, dbm).let { if (it == "no signal") "S0" else if (it == "out of range") "S9+" else it }
+    val level = if (dbm <= s9) ((dbm - s9) / 6.0 + 9.0).coerceAtLeast(0.0) else 9.0 + (dbm - s9) / 10.0
+    return label to level
 }
 
 @Composable
@@ -710,7 +710,7 @@ private fun FilterSheet(st: Status, close: () -> Unit) {
     Text("Or drag the passband edges on the spectrum.", color = Dim, fontSize = 11.sp)
 }
 
-/** deskHPSDR's Display menu items that matter on the phone (M3). */
+/** deskHPSDR's Display menu, the phone's way: the 3D looks first. */
 @Composable
 private fun DisplaySheet() {
     val flat by Radio.flat.collectAsState()
@@ -720,20 +720,42 @@ private fun DisplaySheet() {
     val hold by Radio.peakHold.collectAsState()
     val labels by Radio.peakLabels.collectAsState()
     val pass by Radio.labelsPassband.collectAsState()
-    SheetTitle("Display")
-    Label("View")
-    GridButtons(listOf("2D spectrum", "3D"), if (flat) "2D spectrum" else "3D", 2) { Radio.setFlat(it == 0) }
-    Label("3D look")
-    GridButtons(SpectrumView.STYLES, SpectrumView.STYLES[style], 4) { Radio.setStyle(it); Radio.setFlat(false) }
-    Label("Waterfall colours")
-    GridButtons(SpectrumView.WF_THEMES, SpectrumView.WF_THEMES[theme], 6) { Radio.setWfTheme(it) }
-    Label("3D history (rows, 30 a second)")
-    val depths = listOf(40, 80, 120, 160)
-    GridButtons(depths.map { "$it" }, "$depth", 4) { Radio.setDepthRows(depths[it]) }
+    val smeter by Radio.labelsSmeter.collectAsState()
+    val hide by Radio.labelsHideNoise.collectAsState()
+    val pct by Radio.labelsPercentile.collectAsState()
+    val ign by Radio.labelsIgnore.collectAsState()
+    val avg by Radio.avgMs.collectAsState()
     val split by Radio.split.collectAsState()
     val fps by Radio.fps.collectAsState()
     val win by Radio.window.collectAsState()
     val det by Radio.detector.collectAsState()
+    SheetTitle("Display")
+    Label("3D look")
+    GridButtons(SpectrumView.STYLES, if (flat) null else SpectrumView.STYLES[style], 4) { Radio.setStyle(it); Radio.setFlat(false) }
+    GridButtons(listOf("2D spectrum"), if (flat) "2D spectrum" else null, 1) { Radio.setFlat(true) }
+    Label("Waterfall colours")
+    GridButtons(SpectrumView.WF_THEMES, SpectrumView.WF_THEMES[theme], 6) { Radio.setWfTheme(it) }
+    Label("Peak labels: how many")
+    val counts = listOf(0, 1, 2, 3, 5, 8)
+    GridButtons(counts.map { if (it == 0) "Off" else "$it" }, if (labels == 0) "Off" else "$labels", 6) { Radio.setPeakLabels(counts[it]) }
+    GridButtons(listOf("S-units", "dBm"), if (smeter) "S-units" else "dBm", 2) { Radio.setLabelsSmeter(it == 0) }
+    GridButtons(listOf("Whole view", "Passband only"), if (pass) "Passband only" else "Whole view", 2) { Radio.setLabelsPassband(it == 1) }
+    Label("Hide peaks below the noise floor (percentile)")
+    val pcts = listOf(0, 60, 70, 80, 90)
+    GridButtons(pcts.map { if (it == 0) "Off" else "$it %" }, if (!hide) "Off" else "$pct %", 5) {
+        if (it == 0) Radio.setLabelsHideNoise(false) else { Radio.setLabelsHideNoise(true); Radio.setLabelsPercentile(pcts[it]) }
+    }
+    Label("Ignore adjacent peaks (screen width ÷)")
+    val ignores = listOf(10, 20, 30, 40)
+    GridButtons(ignores.map { "$it" }, "$ign", 4) { Radio.setLabelsIgnore(ignores[it]) }
+    Label("2D averaging (Av. Time)")
+    val avgs = listOf(0, 120, 250, 500)
+    GridButtons(avgs.map { if (it == 0) "Off" else "$it ms" }, if (avg == 0) "Off" else "$avg ms", 4) { Radio.setAvgMs(avgs[it]) }
+    Label("Peak hold (2D)")
+    GridButtons(listOf("On", "Off"), if (hold) "On" else "Off", 2) { Radio.setPeakHold(it == 0) }
+    Label("3D history (rows)")
+    val depths = listOf(40, 80, 120, 160)
+    GridButtons(depths.map { "$it" }, "$depth", 4) { Radio.setDepthRows(depths[it]) }
     Label("Spectrum / waterfall split")
     val splits = listOf(0.35f, 0.45f, 0.5f, 0.6f)
     GridButtons(splits.map { "${(it * 100).roundToInt()} %" }, "${(split * 100).roundToInt()} %", 4) { Radio.setSplit(splits[it]) }
@@ -746,16 +768,6 @@ private fun DisplaySheet() {
     Label("Detector")
     val dets = listOf("Peak", "Average", "Rosenfell", "Sample")
     GridButtons(dets, dets[det], 4) { Radio.setDisplay(detector = it) }
-    Label("Peak hold (2D)")
-    GridButtons(listOf("On", "Off"), if (hold) "On" else "Off", 2) { Radio.setPeakHold(it == 0) }
-    Label("Peak labels")
-    val counts = listOf(0, 3, 5, 8)
-    GridButtons(counts.map { if (it == 0) "Off" else "$it" }, if (labels == 0) "Off" else "$labels", 4) {
-        Radio.setPeakLabels(counts[it])
-    }
-    GridButtons(listOf("Whole view", "Passband only"), if (pass) "Passband only" else "Whole view", 2) {
-        Radio.setLabelsPassband(it == 1)
-    }
 }
 
 @Composable
