@@ -266,7 +266,7 @@ Which milestone each section belongs to: docs/ROADMAP.md.
 - [ ] RX IQ Auto
 - [ ] RX IQ Status
 - [ ] RX1
-- [ ] RX2
+- [ ] RX2 — not doing: one receiver only, no RX2 on the phone (Randal, 2026-11-24)
 - [ ] TX
 - [ ] Linear Phase  _(choice)_
 - [ ] Low Latency  _(choice)_
@@ -314,12 +314,12 @@ Which milestone each section belongs to: docs/ROADMAP.md.
 
 ### Diversity menu (`src/diversity_menu.c`)
 
-- [ ] Diversity Enable
-- [ ] Brick3 [Previous/Older Firmware]
-- [ ] Gain (dB, coarse)
-- [ ] Gain (dB, fine)
-- [ ] Phase (coarse)
-- [ ] Phase (fine)
+- [ ] Diversity Enable — not doing: needs two receivers (one receiver only, Randal 2026-11-24; the HL2 has one ADC)
+- [ ] Brick3 [Previous/Older Firmware] — not doing: needs two receivers (one receiver only, Randal 2026-11-24; the HL2 has one ADC)
+- [ ] Gain (dB, coarse) — not doing: needs two receivers (one receiver only, Randal 2026-11-24; the HL2 has one ADC)
+- [ ] Gain (dB, fine) — not doing: needs two receivers (one receiver only, Randal 2026-11-24; the HL2 has one ADC)
+- [ ] Phase (coarse) — not doing: needs two receivers (one receiver only, Randal 2026-11-24; the HL2 has one ADC)
+- [ ] Phase (fine) — not doing: needs two receivers (one receiver only, Randal 2026-11-24; the HL2 has one ADC)
 
 ### Ddc menu (`src/ddc_menu.c`)
 
@@ -330,7 +330,7 @@ Which milestone each section belongs to: docs/ROADMAP.md.
 - [ ] ADC0
 - [ ] ADC1
 - [ ] RX1
-- [ ] RX2
+- [ ] RX2 — not doing: one receiver only, no RX2 on the phone (Randal, 2026-11-24)
 - [ ] Reset HERMES
 - [ ] Reset ANAN-100D 1 Ant
 - [ ] Reset ANAN-100D 2 Ant
@@ -350,7 +350,7 @@ Which milestone each section belongs to: docs/ROADMAP.md.
 
 ### Radio menu (`src/radio_menu.c`)
 
-- [ ] Receivers
+- [ ] Receivers — not doing: always one receiver (Randal, 2026-11-24)
 - [ ] RIT/XIT step (Hz)
 - [ ] 10  _(choice)_
 - [ ] 100  _(choice)_
@@ -732,7 +732,7 @@ Which milestone each section belongs to: docs/ROADMAP.md.
 - [ ] RX Filter
 - [ ] Noise
 - [ ] AGC
-- [ ] Diversity
+- [ ] Diversity — not doing: needs two receivers (one receiver only, Randal 2026-11-24; the HL2 has one ADC)
 - [ ] TX
 - [ ] PA
 - [ ] VOX
@@ -758,11 +758,11 @@ Each needs a home in the phone UI (button, gesture, slider, menu entry) or a "no
 - [ ] A>B
 - [ ] AF Gain
 - [ ] AF Gain RX1
-- [ ] AF Gain RX2
+- [ ] AF Gain RX2 — not doing: one receiver only, no RX2 on the phone (Randal, 2026-11-24)
 - [ ] AGC
 - [ ] AGC Gain
 - [ ] AGC Gain RX1
-- [ ] AGC Gain RX2
+- [ ] AGC Gain RX2 — not doing: one receiver only, no RX2 on the phone (Randal, 2026-11-24)
 - [ ] AGC Menu
 - [ ] ANF
 - [ ] Atten
@@ -835,10 +835,10 @@ Each needs a home in the phone UI (button, gesture, slider, menu entry) or a "no
 - [ ] Greyline Window
 - [ ] IF Shift
 - [ ] IF Shift RX1
-- [ ] IF Shift RX2
+- [ ] IF Shift RX2 — not doing: one receiver only, no RX2 on the phone (Randal, 2026-11-24)
 - [ ] IF Width
 - [ ] IF Width RX1
-- [ ] IF Width RX2
+- [ ] IF Width RX2 — not doing: one receiver only, no RX2 on the phone (Randal, 2026-11-24)
 - [ ] Linein Gain
 - [ ] Lock
 - [ ] Main Menu
@@ -857,7 +857,7 @@ Each needs a home in the phone UI (button, gesture, slider, menu entry) or a "no
 - [ ] Mute Audio
 - [ ] Mute RX
 - [ ] Mute RX1
-- [ ] Mute RX2
+- [ ] Mute RX2 — not doing: one receiver only, no RX2 on the phone (Randal, 2026-11-24)
 - [ ] NB
 - [ ] NR
 - [ ] Noise Menu
@@ -911,14 +911,14 @@ Each needs a home in the phone UI (button, gesture, slider, menu entry) or a "no
 - [ ] VK Stop XMIT
 - [ ] RF Gain
 - [ ] RF Gain RX1
-- [ ] RF Gain RX2
+- [ ] RF Gain RX2 — not doing: one receiver only, no RX2 on the phone (Randal, 2026-11-24)
 - [ ] RIT
 - [ ] RIT Clear
 - [ ] RIT On/Off
 - [ ] RIT -
 - [ ] RIT +
 - [ ] RIT RX1
-- [ ] RIT RX2
+- [ ] RIT RX2 — not doing: one receiver only, no RX2 on the phone (Randal, 2026-11-24)
 - [ ] RIT Step
 - [ ] RIT/XIT
 - [ ] RIT/XIT Cycle
@@ -926,14 +926,14 @@ Each needs a home in the phone UI (button, gesture, slider, menu entry) or a "no
 - [ ] RSAT
 - [ ] RX Menu
 - [ ] RX1
-- [ ] RX2
+- [ ] RX2 — not doing: one receiver only, no RX2 on the phone (Randal, 2026-11-24)
 - [ ] SAT
 - [ ] EXIT App
 - [ ] SNB
 - [ ] Split
 - [ ] Squelch
 - [ ] Squelch RX1
-- [ ] Squelch RX2
+- [ ] Squelch RX2 — not doing: one receiver only, no RX2 on the phone (Randal, 2026-11-24)
 - [ ] Swap RX
 - [ ] ToolBar1
 - [ ] ToolBar2
