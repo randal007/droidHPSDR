@@ -151,8 +151,10 @@ Randal). **Pictures:** `~/Pictures/droidhpsdr-mockups/m4-round1` to `round7`.
   and none at all (narrow pill) when nothing is on. Nothing over the 3D
   view. Pill glass more transparent (round 7; how much: open).
 - Band sheet with the band's stack and memories M0-M9 (round 1, E).
-- Open: F (drag the AGC line), G (analog meter, peak/avg), H (RIT by
-  dragging the passband).
+- Keep F (drag the AGC line on the spectrum), G (analog meter option with
+  peak/avg) and H (RIT by dragging the passband; TX-B marker for split).
+- Open: glass transparency for pill, meter card and buttons (round 8:
+  58 % now, 40 %, 28 %).
 
 - VFO A/B, split display, step, RIT, CTUN, lock, the VFO bar.
 - Bands, band stacks, transverter bands later (M6), memories (Store).

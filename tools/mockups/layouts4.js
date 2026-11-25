@@ -263,3 +263,11 @@ Object.assign(LAYOUTS, {
   K1: () => ({ html: cv('c', 0, 0, 832, 384) + meterCard() + topBtns() + chips(CHIPS) + pillWide(0.40), canvases: [['#c', base()]] }),
   K2: () => ({ html: cv('c', 0, 0, 832, 384) + meterCard() + topBtns() + chips(CHIPS) + pillWide(0.28), canvases: [['#c', base()]] }),
 });
+
+// M4 round 8: the same glass everywhere (pill, meter card, buttons) at three strengths
+const allGlass = (a) => `<style>.glass{background:rgba(10,16,30,${a})!important}</style>`;
+const fullAt = (a) => () => ({
+  html: allGlass(a) + cv('c', 0, 0, 832, 384) + meterCard() + topBtns() + chips(CHIPS) + pillWide(a),
+  canvases: [['#c', base()]],
+});
+Object.assign(LAYOUTS, { T1: fullAt(0.58), T2: fullAt(0.40), T3: fullAt(0.28) });
