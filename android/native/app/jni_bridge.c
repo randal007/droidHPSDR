@@ -141,6 +141,23 @@ JNIEXPORT void JNICALL FN(status)(JNIEnv *env, jobject self, jdoubleArray out) {
   (*env)->SetDoubleArrayRegion(env, out, 0, 13, v);
 }
 
+/* out = [f0, dB0, f1, dB1, ...]; returns how many peaks */
+JNIEXPORT jint JNICALL FN(peaks)(JNIEnv *env, jobject self, jdouble lo, jdouble hi, jdouble sep_hz, jfloat margin,
+                                 jint max, jdoubleArray out) {
+  (void)self;
+  double f[32];
+  float d[32];
+  if (max > 32) max = 32;
+  int n = droid_peaks(lo, hi, sep_hz, margin, max, f, d);
+  jdouble v[64];
+  for (int i = 0; i < n; i++) {
+    v[2 * i] = f[i];
+    v[2 * i + 1] = d[i];
+  }
+  if (n > 0) (*env)->SetDoubleArrayRegion(env, out, 0, 2 * n, v);
+  return n;
+}
+
 JNIEXPORT void JNICALL FN(demoStart)(JNIEnv *env, jobject self) { (void)env; (void)self; droid_demo_start(); }
 JNIEXPORT void JNICALL FN(demoStop)(JNIEnv *env, jobject self) { (void)env; (void)self; droid_demo_stop(); }
 JNIEXPORT void JNICALL FN(demoSetFrequency)(JNIEnv *env, jobject self, jlong hz) {
@@ -154,9 +171,13 @@ JNIEXPORT void JNICALL FN(glResize)(JNIEnv *env, jobject self, jint w, jint h) {
   droid_gl_resize(w, h);
 }
 JNIEXPORT void JNICALL FN(glDraw)(JNIEnv *env, jobject self, jdouble lo, jdouble hi, jdouble split, jint style,
-                                  jfloat floor_db, jfloat range_db, jfloat wf_lo, jfloat wf_hi) {
+                                  jfloat floor_db, jfloat range_db, jfloat wf_lo, jfloat wf_hi, jboolean flat,
+                                  jfloat pan_lo, jfloat pan_hi, jint wf_theme, jint depth_rows, jboolean peak_hold,
+                                  jfloat hold_s, jfloat drop_db_s) {
   (void)env; (void)self;
   droid_view v = { .view_lo = lo, .view_hi = hi, .split = split, .style = style, .floor_db = floor_db,
-                   .range_db = range_db, .wf_lo = wf_lo, .wf_hi = wf_hi };
+                   .range_db = range_db, .wf_lo = wf_lo, .wf_hi = wf_hi, .flat = flat, .pan_lo = pan_lo,
+                   .pan_hi = pan_hi, .wf_theme = wf_theme, .depth_rows = depth_rows, .peak_hold = peak_hold,
+                   .peak_hold_s = hold_s, .peak_drop_db_s = drop_db_s };
   droid_gl_draw(&v);
 }

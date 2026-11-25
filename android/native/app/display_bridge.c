@@ -9,6 +9,7 @@
  * GPL v3 or later, like the rest of droidHPSDR.
  */
 #include <pthread.h>
+#include <math.h>
 #include <string.h>
 #include <netinet/in.h>
 #include <gtk/gtk.h>
@@ -99,6 +100,57 @@ double droid_meter_dbm(void) {
   double v = meter_dbm;
   pthread_mutex_unlock(&lock);
   return v;
+}
+
+/* The strongest peaks of the newest row between lo and hi: local maxima
+ * more than margin dB over the noise floor, at least sep_hz apart, the
+ * strongest first. deskHPSDR's peak labels (Display menu) do the same job. */
+int droid_peaks(double lo, double hi, double sep_hz, float margin, int max, double *f, float *d) {
+  static float row[DROID_ROW_MAX], sm[DROID_ROW_MAX];
+  static int idx[DROID_ROW_MAX];
+  int w;
+  double fmin, hzpp;
+  float nf;
+  pthread_mutex_lock(&lock);
+  if (newest == 0) {
+    pthread_mutex_unlock(&lock);
+    return 0;
+  }
+  const droid_row *r = &queue[newest % DROID_ROW_QUEUE];
+  w = r->width;
+  fmin = r->fmin;
+  hzpp = r->hzpp;
+  memcpy(row, r->db, sizeof(float) * (size_t)w);
+  nf = (float)noise_floor;
+  pthread_mutex_unlock(&lock);
+
+  for (int i = 0; i < w; i++) {
+    float a = row[i > 0 ? i - 1 : i], b = row[i], c = row[i < w - 1 ? i + 1 : i];
+    sm[i] = (a + 2 * b + c) * 0.25f;
+  }
+  int n = 0;
+  for (int i = 1; i < w - 1; i++) {
+    double fi = fmin + (i + 0.5) * hzpp;
+    if (fi < lo || fi > hi || sm[i] < nf + margin) continue;
+    if (sm[i] >= sm[i - 1] && sm[i] > sm[i + 1]) idx[n++] = i;
+  }
+  /* strongest first (insertion sort: few candidates) */
+  for (int a = 1; a < n; a++) {
+    int k = idx[a], b = a - 1;
+    while (b >= 0 && sm[idx[b]] < sm[k]) { idx[b + 1] = idx[b]; b--; }
+    idx[b + 1] = k;
+  }
+  int out = 0;
+  for (int a = 0; a < n && out < max; a++) {
+    double fa = fmin + (idx[a] + 0.5) * hzpp;
+    int near = 0;
+    for (int b = 0; b < out; b++) if (fabs(f[b] - fa) < sep_hz) near = 1;
+    if (near) continue;
+    f[out] = fa;
+    d[out] = sm[idx[a]];
+    out++;
+  }
+  return out;
 }
 
 double droid_noise_floor(void) {

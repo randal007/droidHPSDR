@@ -42,5 +42,10 @@ object Native {
     external fun glDraw(
         lo: Double, hi: Double, split: Double, style: Int,
         floorDb: Float, rangeDb: Float, wfLo: Float, wfHi: Float,
+        flat: Boolean, panLo: Float, panHi: Float, wfTheme: Int, depthRows: Int,
+        peakHold: Boolean, holdS: Float, dropDbS: Float,
     )
+
+    /** Strongest peaks of the newest row in [lo, hi]: out = [f0, dB0, f1, dB1, ...]; returns how many. */
+    external fun peaks(lo: Double, hi: Double, sepHz: Double, marginDb: Float, max: Int, out: DoubleArray): Int
 }

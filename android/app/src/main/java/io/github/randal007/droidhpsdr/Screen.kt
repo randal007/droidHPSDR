@@ -5,6 +5,24 @@
 // segment tag. Sizes are dp at the S26 Ultra's 832 x 384 dp landscape.
 package io.github.randal007.droidhpsdr
 
+import android.content.Intent
+import android.net.Uri
+import android.os.PowerManager
+import android.provider.Settings
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.AnimationState
 import androidx.compose.animation.core.animateDecay
@@ -82,9 +100,8 @@ private val Amb = Color(0xFFFFB341)
 private val Grn = Color(0xFF3EE07A)
 private val Red = Color(0xFFFF5A50)
 
-private val STYLE_NAMES = listOf("X6100 look 3", "AetherSDR curtains", "Lit terrain", "Neon wire")
 
-private enum class Sheet { BAND, MODE, AF, LNA, FILTER, MENU }
+private enum class Sheet { BAND, MODE, AF, LNA, FILTER, MENU, DISPLAY }
 
 private fun Modifier.glass(r: Int = 14) =
     clip(RoundedCornerShape(r.dp)).background(Glass).border(1.dp, Line, RoundedCornerShape(r.dp))
@@ -94,7 +111,7 @@ fun Screen(onStart: () -> Unit, onStop: () -> Unit) {
     MaterialTheme(colorScheme = darkColorScheme(primary = Acc, background = Bg, surface = Bg)) {
         val status by Radio.status.collectAsState()
         val freq by Radio.freq.collectAsState()
-        val style by Radio.style.collectAsState()
+        val flat by Radio.flat.collectAsState()
         var sheet by remember { mutableStateOf<Sheet?>(null) }
         var flash by remember { mutableStateOf("" to 0L) }
 
@@ -109,9 +126,11 @@ fun Screen(onStart: () -> Unit, onStop: () -> Unit) {
             Flash(flash, Modifier.align(Alignment.TopEnd).padding(top = 66.dp, end = 12.dp))
 
             Row(Modifier.align(Alignment.TopEnd).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                RoundButton("3D") {
-                    Radio.setStyle(style + 1)
-                    flash = "3D: ${STYLE_NAMES[Radio.style.value]}" to System.currentTimeMillis()
+                // tap: 2D/3D; hold: the display settings
+                RoundButton(if (flat) "2D" else "3D", onLongClick = { sheet = Sheet.DISPLAY }) {
+                    Radio.setFlat(!flat)
+                    flash = (if (!flat) "2D spectrum" else "3D: ${SpectrumView.STYLES[Radio.style.value]}") +
+                        " · hold for display settings" to System.currentTimeMillis()
                 }
                 RoundButton("☰") { sheet = Sheet.MENU }
             }
@@ -139,6 +158,9 @@ private fun SpectrumOverlay(modifier: Modifier) {
     val span by Radio.span.collectAsState()
     val status by Radio.status.collectAsState()
     val region by Radio.region.collectAsState()
+    val peaks by Radio.peaks.collectAsState()
+    val flat by Radio.flat.collectAsState()
+    val style by Radio.style.collectAsState()
     val measurer = rememberTextMeasurer()
     val scope = rememberCoroutineScope()
     val fling = remember { arrayOfNulls<Job>(1) }
@@ -253,6 +275,28 @@ private fun SpectrumOverlay(modifier: Modifier) {
 
         // band bar: red outside the bands, the plan's segments inside
         bandBar(region, lo, lo + span, splitY + axisH / 2, ::x, measurer)
+
+        // peak labels (deskHPSDR's "Peak Labels on Panadapter"), over the 2D trace or the front 3D ridge
+        val nf = Radio.displayFloor
+        val ls = TextStyle(color = Txt, fontSize = 9.5.sp, fontWeight = FontWeight.SemiBold)
+        for ((pf, pdb) in peaks) {
+            val px = x(pf)
+            val top = if (flat) {
+                val lo2 = nf + SpectrumView.PAN_LO
+                val hi2 = nf + SpectrumView.PAN_HI
+                splitY * (1 - ((pdb - lo2) / (hi2 - lo2)).coerceIn(0.0, 1.0)).toFloat()
+            } else {
+                val s = ((pdb - SpectrumView.floor3d(style, nf)) / SpectrumView.RANGE_3D).coerceIn(0.0, 1.0)
+                splitY * (1 - SpectrumView.ridge3d(style, s)).toFloat()
+            }
+            val t = measurer.measure("%.4f".format(pf / 1e6), ls)
+            val w = t.size.width + 10.dp.toPx()
+            val h = t.size.height + 3.dp.toPx()
+            val y = (top - h - 6.dp.toPx()).coerceAtLeast(70.dp.toPx())
+            drawRoundRect(Color(0xCC08101E), Offset(px - w / 2, y), Size(w, h), CornerRadius(h / 2))
+            drawLine(Color(0x66FFFFFF), Offset(px, y + h), Offset(px, top - 2.dp.toPx()), 1.dp.toPx())
+            drawText(t, topLeft = Offset(px - t.size.width / 2, y + 1.5.dp.toPx()))
+        }
     }
 }
 
@@ -343,7 +387,26 @@ private fun VfoPill(freq: Long, st: Status, onMode: () -> Unit, onFilter: () -> 
         Box(Modifier.clip(RoundedCornerShape(6.dp)).background(Amb).padding(horizontal = 7.dp, vertical = 1.dp)) {
             Text("A", color = Color(0xFF1A1000), fontSize = 11.sp, fontWeight = FontWeight.Bold)
         }
-        FreqText(freq, 34)
+        val haptic = LocalHapticFeedback.current
+        Box(
+            Modifier.pointerInput(Unit) {
+                // hold, then drag sideways: one step per 8 dp
+                val px = 8.dp.toPx()
+                var start = 0L
+                var acc = 0f
+                detectDragGesturesAfterLongPress(
+                    onDragStart = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        start = Radio.freq.value
+                        acc = 0f
+                    },
+                ) { change, drag ->
+                    change.consume()
+                    acc += drag.x
+                    Radio.tune(start + (acc / px).toInt() * Radio.step.value.toDouble())
+                }
+            },
+        ) { FreqText(freq, 34) }
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Tag(Modes.name(st.mode), Acc, Color(0x293FD0FF), onMode)
             Tag(widthLabel(st.filterHigh - st.filterLow), Txt, Color(0x14FFFFFF), onFilter)
@@ -420,10 +483,12 @@ private fun Flash(flash: Pair<String, Long>, modifier: Modifier) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun RoundButton(label: String, onClick: () -> Unit) {
+private fun RoundButton(label: String, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
     Box(
-        Modifier.size(44.dp).clip(CircleShape).background(Glass).border(1.dp, Line, CircleShape).clickable(onClick = onClick),
+        Modifier.size(44.dp).clip(CircleShape).background(Glass).border(1.dp, Line, CircleShape)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         contentAlignment = Alignment.Center,
     ) { Text(label, color = Txt, fontSize = if (label.length > 1) 13.sp else 18.sp, fontWeight = FontWeight.SemiBold) }
 }
@@ -512,7 +577,8 @@ private fun SheetHost(which: Sheet, st: Status, onStart: () -> Unit, onStop: () 
             Modifier.align(Alignment.BottomCenter).widthIn(max = 560.dp).fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)).background(Color(0xF20C111E))
                 .border(1.dp, Line, RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
-                .clickable(enabled = false) {}.padding(16.dp),
+                .clickable(enabled = false) {}.heightIn(max = 330.dp)
+                .verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             when (which) {
@@ -524,8 +590,30 @@ private fun SheetHost(which: Sheet, st: Status, onStart: () -> Unit, onStop: () 
                     { "%+.0f dB".format(it) }) { Radio.setLna(it.roundToInt().toDouble()) }
                 Sheet.FILTER -> FilterSheet(st, close)
                 Sheet.MENU -> MenuSheet(st, onStart, onStop, close)
+                Sheet.DISPLAY -> DisplaySheet()
             }
         }
+    }
+}
+
+@Composable
+private fun IpField(value: String, hint: String, modifier: Modifier, set: (String) -> Unit) {
+    var text by remember(value) { mutableStateOf(value) }
+    Box(
+        modifier.height(40.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF0F1624))
+            .border(1.dp, Line, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        if (text.isEmpty()) Text(hint, color = Dim.copy(alpha = 0.6f), fontSize = 13.sp)
+        BasicTextField(
+            value = text,
+            onValueChange = { t -> text = t.filter { it.isDigit() || it == '.' }; set(text) },
+            singleLine = true,
+            textStyle = TextStyle(color = Txt, fontSize = 14.sp),
+            cursorBrush = SolidColor(Acc),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
@@ -620,6 +708,41 @@ private fun FilterSheet(st: Status, close: () -> Unit) {
     Text("Or drag the passband edges on the spectrum.", color = Dim, fontSize = 11.sp)
 }
 
+/** deskHPSDR's Display menu items that matter on the phone (M3). */
+@Composable
+private fun DisplaySheet() {
+    val flat by Radio.flat.collectAsState()
+    val style by Radio.style.collectAsState()
+    val theme by Radio.wfTheme.collectAsState()
+    val depth by Radio.depthRows.collectAsState()
+    val hold by Radio.peakHold.collectAsState()
+    val labels by Radio.peakLabels.collectAsState()
+    val pass by Radio.labelsPassband.collectAsState()
+    SheetTitle("Display")
+    Label("View")
+    GridButtons(listOf("2D spectrum", "3D"), if (flat) "2D spectrum" else "3D", 2) { Radio.setFlat(it == 0) }
+    Label("3D look")
+    GridButtons(SpectrumView.STYLES, SpectrumView.STYLES[style], 4) { Radio.setStyle(it); Radio.setFlat(false) }
+    Label("Waterfall colours")
+    GridButtons(SpectrumView.WF_THEMES, SpectrumView.WF_THEMES[theme], 6) { Radio.setWfTheme(it) }
+    Label("3D history (rows, 30 a second)")
+    val depths = listOf(40, 80, 120, 160)
+    GridButtons(depths.map { "$it" }, "$depth", 4) { Radio.setDepthRows(depths[it]) }
+    Label("Peak hold (2D)")
+    GridButtons(listOf("On", "Off"), if (hold) "On" else "Off", 2) { Radio.setPeakHold(it == 0) }
+    Label("Peak labels")
+    val counts = listOf(0, 3, 5, 8)
+    GridButtons(counts.map { if (it == 0) "Off" else "$it" }, if (labels == 0) "Off" else "$labels", 4) {
+        Radio.setPeakLabels(counts[it])
+    }
+    GridButtons(listOf("Whole view", "Passband only"), if (pass) "Passband only" else "Whole view", 2) {
+        Radio.setLabelsPassband(it == 1)
+    }
+}
+
+@Composable
+private fun Label(t: String) = Text(t, color = Dim, fontSize = 11.sp)
+
 @Composable
 private fun MenuSheet(st: Status, onStart: () -> Unit, onStop: () -> Unit, close: () -> Unit) {
     val region by Radio.region.collectAsState()
@@ -631,6 +754,22 @@ private fun MenuSheet(st: Status, onStart: () -> Unit, onStop: () -> Unit, close
         },
         color = Dim, fontSize = 12.sp,
     )
+    val ctx = LocalContext.current
+    val wired by Radio.wiredIp.collectAsState()
+    val wifi by Radio.wifiIp.collectAsState()
+    Label("Radio address: on the USB Ethernet link / on WiFi")
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        IpField(wired, "169.254.19.221", Modifier.weight(1f)) { Radio.setWiredIp(it) }
+        IpField(wifi, "radio's IP on your WiFi", Modifier.weight(1f)) { Radio.setWifiIp(it) }
+    }
+    val pm = ctx.getSystemService(PowerManager::class.java)
+    if (!pm.isIgnoringBatteryOptimizations(ctx.packageName)) {
+        GridButtons(listOf("Let it run in the background (battery setting)"), null, 1) {
+            ctx.startActivity(
+                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${ctx.packageName}")),
+            )
+        }
+    }
     Text("Band plan region", color = Dim, fontSize = 11.sp)
     GridButtons(listOf("Region 1", "Region 2", "Region 3"), "Region $region", 3) { Radio.setRegion(it + 1) }
     val delay by Radio.rowDelayMs.collectAsState()
@@ -642,15 +781,17 @@ private fun MenuSheet(st: Status, onStart: () -> Unit, onStop: () -> Unit, close
         value = delay.toFloat(), onValueChange = { Radio.setRowDelay(it.roundToInt()) }, valueRange = 0f..400f,
         colors = SliderDefaults.colors(thumbColor = Acc, activeTrackColor = Acc),
     )
+    var showDisplay by remember { mutableStateOf(false) }
     GridButtons(
         listOf(if (st.phase == Phase.RUNNING) "Stop radio" else "Start radio",
-            if (st.phase == Phase.DEMO) "Stop demo" else "Demo band"), null, 2,
+            if (st.phase == Phase.DEMO) "Stop demo" else "Demo band", "Display…"), null, 3,
     ) {
         when (it) {
-            0 -> if (st.phase == Phase.RUNNING) onStop() else onStart()
-            else -> if (st.phase == Phase.DEMO) Radio.stopDemo() else Radio.startDemo()
+            0 -> { if (st.phase == Phase.RUNNING) onStop() else onStart(); close() }
+            1 -> { if (st.phase == Phase.DEMO) Radio.stopDemo() else Radio.startDemo(); close() }
+            else -> showDisplay = !showDisplay
         }
-        close()
     }
+    if (showDisplay) DisplaySheet()
     Text("Receive only: transmit is not built yet (M7).", color = Dim, fontSize = 11.sp)
 }

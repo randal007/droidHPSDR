@@ -98,6 +98,22 @@ object Radio {
     val region = MutableStateFlow(2)             // IARU region for the band bar
     val phoneAudio = MutableStateFlow(false)     // also play on the phone
 
+    // display (deskHPSDR's Display menu, the phone's way)
+    val flat = MutableStateFlow(false)           // 2D spectrum instead of 3D
+    val wfTheme = MutableStateFlow(0)            // waterfall colours, see WF_THEMES
+    val depthRows = MutableStateFlow(80)         // 3D history depth
+    val peakHold = MutableStateFlow(true)        // 2D peak-hold line
+    val peakLabels = MutableStateFlow(5)         // how many peaks to label, 0 = off
+    val labelsPassband = MutableStateFlow(false) // label only inside the passband
+    val peaks = MutableStateFlow<List<Pair<Double, Double>>>(emptyList())   // (Hz, dBm)
+
+    /** The display's smoothed noise floor (dBm), written by the renderer, read by the labels. */
+    @Volatile var displayFloor = -125.0
+
+    // where the radio is: wired (APIPA, see CLAUDE.md) and on WiFi (its DHCP address)
+    val wiredIp = MutableStateFlow("169.254.19.221")
+    val wifiIp = MutableStateFlow("")
+
     private lateinit var prefs: SharedPreferences
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var poll: Job? = null
@@ -114,6 +130,14 @@ object Radio {
         region.value = prefs.getInt("region", 2)
         rowDelayMs.value = prefs.getInt("rowDelay", 90)
         phoneAudio.value = prefs.getBoolean("phoneAudio", false)
+        flat.value = prefs.getBoolean("flat", false)
+        wfTheme.value = prefs.getInt("wfTheme", 0)
+        depthRows.value = prefs.getInt("depthRows", 80)
+        peakHold.value = prefs.getBoolean("peakHold", true)
+        peakLabels.value = prefs.getInt("peakLabels", 5)
+        labelsPassband.value = prefs.getBoolean("labelsPassband", false)
+        wiredIp.value = prefs.getString("wiredIp", "169.254.19.221") ?: "169.254.19.221"
+        wifiIp.value = prefs.getString("wifiIp", "") ?: ""
         status.value = status.value.copy(mode = prefs.getInt("mode", Modes.DIGU))
     }
 
@@ -200,6 +224,15 @@ object Radio {
         prefs.edit().putBoolean("phoneAudio", on).apply()
     }
 
+    fun setFlat(on: Boolean) { flat.value = on; prefs.edit().putBoolean("flat", on).apply() }
+    fun setWfTheme(t: Int) { wfTheme.value = t; prefs.edit().putInt("wfTheme", t).apply() }
+    fun setDepthRows(n: Int) { depthRows.value = n; prefs.edit().putInt("depthRows", n).apply() }
+    fun setPeakHold(on: Boolean) { peakHold.value = on; prefs.edit().putBoolean("peakHold", on).apply() }
+    fun setPeakLabels(n: Int) { peakLabels.value = n; prefs.edit().putInt("peakLabels", n).apply() }
+    fun setLabelsPassband(on: Boolean) { labelsPassband.value = on; prefs.edit().putBoolean("labelsPassband", on).apply() }
+    fun setWiredIp(ip: String) { wiredIp.value = ip.trim(); prefs.edit().putString("wiredIp", ip.trim()).apply() }
+    fun setWifiIp(ip: String) { wifiIp.value = ip.trim(); prefs.edit().putString("wifiIp", ip.trim()).apply() }
+
     fun setRegion(r: Int) {
         region.value = r
         prefs.edit().putInt("region", r).apply()
@@ -224,10 +257,24 @@ object Radio {
         if (status.value.phase == Phase.DEMO) setPhase(Phase.IDLE)
     }
 
+    /** Peak labels: in the view (or the passband), 10 dB over the noise floor, spaced apart. */
+    private fun pollPeaks(buf: DoubleArray) {
+        val n = peakLabels.value
+        if (n <= 0) { peaks.value = emptyList(); return }
+        val f = freq.value.toDouble()
+        val st = status.value
+        val (lo, hi) = if (labelsPassband.value) f + st.filterLow to f + st.filterHigh
+            else f - span.value / 2 to f + span.value / 2
+        val got = Native.peaks(lo, hi, span.value / 24, 10f, n, buf)
+        peaks.value = List(got) { buf[2 * it] to buf[2 * it + 1] }
+    }
+
     private fun startPolling() {
         poll?.cancel()
         poll = scope.launch {
             val a = DoubleArray(13)
+            val pk = DoubleArray(64)
+            var tick = 0
             while (isActive) {
                 Native.status(a)
                 if (status.value.phase == Phase.DEMO) {
@@ -239,6 +286,7 @@ object Radio {
                         adcOverloads = a[8].toInt(), noiseFloor = a[11],
                     )
                 }
+                if (++tick % 4 == 0) pollPeaks(pk)
                 delay(50)
             }
         }

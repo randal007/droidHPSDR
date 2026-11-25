@@ -70,7 +70,13 @@ class RadioService : Service() {
 
                 // Wired: the HL2 falls back to this APIPA address with no DHCP server
                 // (CLAUDE.md "Network setup"). WiFi: broadcast (the radio's DHCP address).
-                val ip = if (net == "Ethernet") WIRED_HL2 else null
+                val ip = if (net == "Ethernet") Radio.wiredIp.value.ifBlank { WIRED_HL2 }
+                    else Radio.wifiIp.value.ifBlank { null }
+                if (ip == null) {
+                    // An app cannot broadcast for the radio (Android hides the interfaces from it).
+                    Radio.setPhase(Phase.ERROR, "On WiFi: enter the radio's IP address in the menu (☰)", net)
+                    return@thread
+                }
                 Radio.setPhase(Phase.CONNECTING, "Looking for the HL2 on $net${ip?.let { " at $it" } ?: ""}")
                 val s = Radio.status.value
                 val err = Native.start(

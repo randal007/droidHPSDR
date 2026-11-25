@@ -44,6 +44,9 @@ void droid_demo_set_frequency(long long hz);
 /* S-meter in dBm, corrected like upstream's (rx_update_display). */
 double droid_meter_dbm(void);
 
+/* Strongest peaks of the newest row in [lo, hi] (peak labels); returns how many. */
+int droid_peaks(double lo, double hi, double sep_hz, float margin, int max, double *f, float *d);
+
 /* Noise floor of the newest row (20th percentile), dBm: the display's auto levels. */
 double droid_noise_floor(void);
 
@@ -105,10 +108,16 @@ const char *droid_wisdom_status(void);
 
 typedef struct {
   double view_lo, view_hi;   /* Hz at the left and right screen edges */
-  double split;              /* 0..1: where the 3D view ends and the waterfall starts */
+  double split;              /* 0..1: where the 3D (or 2D) view ends and the waterfall starts */
   int style;                 /* 0 X6100 look 3, 1 AetherSDR curtains, 2 lit terrain, 3 wire */
   float floor_db, range_db;  /* 3D: dBm at the floor and the dB to a full ridge */
   float wf_lo, wf_hi;        /* waterfall colour range, dBm */
+  int flat;                  /* 1: 2D spectrum instead of the 3D view */
+  float pan_lo, pan_hi;      /* 2D: dBm at the bottom and the top */
+  int wf_theme;              /* waterfall (and 2D fill) colours, see gl_render.c */
+  int depth_rows;            /* 3D history depth in rows */
+  int peak_hold;             /* 2D: draw the peak-hold line */
+  float peak_hold_s, peak_drop_db_s;   /* hold time, then fall rate */
 } droid_view;
 
 void droid_gl_init(void);
