@@ -271,3 +271,11 @@ const fullAt = (a) => () => ({
   canvases: [['#c', base()]],
 });
 Object.assign(LAYOUTS, { T1: fullAt(0.58), T2: fullAt(0.40), T3: fullAt(0.28) });
+
+// M4 round 9 (Randal: picture 1 for the rest; only the main VFO pill more transparent)
+const pillOnly = (a) => () => ({
+  html: allGlass(0.58) + cv('c', 0, 0, 832, 384) + meterCard() + topBtns() + chips(CHIPS) +
+    pillWide(a).replace('class="a glass"', 'class="a glass vfopill"') + `<style>.vfopill{background:rgba(10,16,30,${a})!important}</style>`,
+  canvases: [['#c', base()]],
+});
+Object.assign(LAYOUTS, { T4: pillOnly(0.40), T5: pillOnly(0.28) });
