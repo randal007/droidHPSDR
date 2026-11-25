@@ -110,3 +110,36 @@ Object.assign(LAYOUTS, {
     };
   },
 });
+
+// M4 round 2 (Randal: "a mix of A and B, and E"): B's pill (VFO B always
+// shown, state badges) that drops open into A's panel when tapped.
+const abPill = (badgesInside) => abs(196, 8, 440, badgesInside ? 84 : 62, `
+  <div class="row" style="gap:10px;justify-content:center;height:62px">
+    <span class="tag vfoA">A</span>${fq(VFO, 34)}
+    <div class="col" style="gap:3px"><span class="tag acc">USB-D</span><span class="tag">3.0k</span></div>
+    <div class="col" style="gap:2px;padding-left:10px;border-left:1px solid var(--line)"><span class="dim" style="font-size:10px">B · hold to swap</span>${fq(VB, 15, 'dim')}</div></div>
+  ${badgesInside ? `<div class="row" style="gap:6px;justify-content:center;margin-top:-4px"><span class="tag amb">RIT +120</span><span class="tag" style="background:rgba(180,140,255,.18);color:#c9a8ff">SPLIT · TX B</span></div>` : ''}`, 'glass');
+Object.assign(LAYOUTS, {
+  // closed: badges float under the pill, only the ones that are on
+  X1: () => ({
+    html: cv('c', 0, 0, 832, 384) + meterCard() + topBtns() + chips(CHIPS) + abPill(false) +
+      abs(246, 74, 340, 26, `<div class="row" style="gap:6px;justify-content:center"><span class="tag amb">RIT +120</span><span class="tag" style="background:rgba(180,140,255,.18);color:#c9a8ff">SPLIT · TX B</span></div>`),
+    canvases: [['#c', base({ labels: [{ f: VB, y: 0.08, t: 'B / TX', c: '#c9a8ff' }] })]],
+  }),
+  // closed, other way: the badges live inside the pill, under the numbers
+  X2: () => ({
+    html: cv('c', 0, 0, 832, 384) + meterCard() + topBtns() + chips(CHIPS) + abPill(true),
+    canvases: [['#c', base({ labels: [{ f: VB, y: 0.12, t: 'B / TX', c: '#c9a8ff' }] })]],
+  }),
+  // open: tap the pill and it drops open into the full VFO panel
+  X3: () => ({
+    html: cv('c', 0, 0, 832, 384) + meterCard() + topBtns() + chips(CHIPS) +
+      abs(196, 8, 440, 268, `<div style="padding:12px 16px">
+        <div class="row" style="gap:10px"><span class="tag vfoA">A</span>${fq(VFO, 32)}<span class="tag acc">USB-D</span><span class="tag">3.0k</span></div>
+        <div class="row" style="gap:10px;margin-top:8px"><span class="tag" style="background:none;border:1px solid var(--line);color:var(--dim)">B</span>${fq(VB, 20, 'dim')}<span class="tag">USB-D</span><span class="dim" style="font-size:10px;margin-left:auto">tap B to make it active</span></div>
+        <div class="row" style="gap:6px;margin-top:12px">${bigBtn('A›B')}${bigBtn('B›A')}${bigBtn('A⇄B')}${bigBtn('SPLIT', true, null, 'TX on B')}</div>
+        <div class="row" style="gap:6px;margin-top:6px">${bigBtn('RIT', true, null, '+120 Hz')}${bigBtn('RIT 0')}${bigBtn('CTUN')}${bigBtn('LOCK')}${bigBtn('STEP', false, null, '10 Hz')}</div>
+        <div class="dim" style="font-size:10px;margin-top:8px;text-align:center">RIT: drag the passband · tap outside to close · the badges show what's on</div></div>`, 'glass', 'border-radius:18px;background:rgba(9,13,24,.92)'),
+    canvases: [['#c', base()]],
+  }),
+});
