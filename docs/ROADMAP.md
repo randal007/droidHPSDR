@@ -6,6 +6,8 @@ next, what's waiting on whom. Session history lives in git and in
 
 ## Now (in short)
 
+- **Next: the radio test before M7 (Randal, 2026-11-25): `docs/RADIO-TEST.md`.** Tick items there and in FEATURES.md as they pass; tag `m5-done` / `m6-done` after. Backgrounds: the 10 NASA pictures only (an ESO set was tried and reverted, Randal will find his own).
+
 - **2026-11-24 evening (demo mode, Randal away from the radio):** the ☰
   button opens deskHPSDR's main menu (same columns and order); M5 built from
   Randal's picks (D1 Noise drawer, D5 notch, D6 squelch line, D7 EQ graph,
