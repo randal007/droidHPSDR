@@ -56,11 +56,16 @@ class RadioService : Service() {
         override fun onAvailable(network: Network) {
             if (!wanted || Radio.running || starting) return
             Log.i("droidHPSDR", "Ethernet back")
+            replugAt = System.currentTimeMillis()
             // let the static address settle; a Stop meanwhile cancels this (shutdown)
             main.removeCallbacks(replugStart)
             main.postDelayed(replugStart, 1500)
         }
     }
+
+    /** When the adapter last came back: for a minute after, the watchdog retries sooner (the HL2 is
+     *  usually looking for a DHCP server first, ~15-20 s, as after power-on). */
+    @Volatile private var replugAt = 0L
 
     /** The start after the adapter comes back: only if still wanted and nobody started meanwhile. */
     private val replugStart = Runnable { if (wanted && !Radio.running && !starting) startRadio() }
@@ -115,10 +120,13 @@ class RadioService : Service() {
                 if (!Radio.running || starting || Radio.playback.value) { lastRows = -1; continue }
                 val now = System.currentTimeMillis()
                 if (st.rows != lastRows) { lastRows = st.rows; quietSince = now; continue }
-                if (now - quietSince > 3000) {
+                val afterReplug = now - replugAt < 60_000
+                if (now - quietSince > (if (afterReplug) 1500 else 3000)) {
                     Log.i("droidHPSDR", "no data for 3 s: restarting the stream")
                     stopStream()
-                    Radio.setPhase(Phase.CONNECTING, "No data from the radio: trying again")
+                    Radio.setPhase(Phase.CONNECTING,
+                        if (afterReplug) "Waiting for the HL2: after a replug it looks for a DHCP server first (about 20 s)"
+                        else "No data from the radio: trying again")
                     lastRows = -1
                     startRadio()
                 }

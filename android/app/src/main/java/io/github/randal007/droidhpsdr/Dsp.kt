@@ -16,6 +16,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -618,8 +619,9 @@ internal fun ToolbarEditor(st: Status, close: () -> Unit) {
             }
         }
         // the row itself, in edit mode, where it always is
-        Row(Modifier.align(Alignment.BottomStart).padding(10.dp).clickable(enabled = false) {},
-            horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+        // scrolls like the real row; a long press starts a move, a plain swipe scrolls
+        Row(Modifier.align(Alignment.BottomStart).padding(10.dp).horizontalScroll(rememberScrollState())
+            .clickable(enabled = false) {}, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             ids.forEach { id -> key(id) {   // state and gesture follow the chip as it moves
                 var dx by remember(id) { mutableStateOf(0f) }
                 Box(

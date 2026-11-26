@@ -11,6 +11,7 @@ enum class SegKind(val label: String, val color: Color) {
     CW("CW", Color(40, 110, 200)),
     DIGITAL("Digital", Color(40, 170, 90)),
     PHONE("SSB", Color(210, 150, 40)),
+    CHANNEL("Channel", Color(255, 190, 60)),   // a 60 m channel (SDR Device → 60 m channel markers)
 }
 
 data class Segment(val loHz: Long, val hiHz: Long, val kind: SegKind)
@@ -77,7 +78,7 @@ object BandPlan {
     val bands = listOf(
         Band(1_800_000, 2_000_000, "160m", 1_840_000),
         Band(3_500_000, 4_000_000, "80m", 3_573_000),
-        Band(5_351_500, 5_366_500, "60m", 5_357_000),
+        Band(5_250_000, 5_450_000, "60m", 5_357_000),   // all the 60 m channel schemes; the segments say what's allowed
         Band(7_000_000, 7_300_000, "40m", 7_074_000),
         Band(10_100_000, 10_150_000, "30m", 10_136_000),
         Band(14_000_000, 14_350_000, "20m", 14_074_000),
@@ -92,7 +93,13 @@ object BandPlan {
 
     fun segments(region: Int, loHz: Long, hiHz: Long): List<Segment> {
         val table = when (region) { 2 -> region2; 3 -> region3; else -> region1 }
-        return table.filter { it.hiHz > loHz && it.loHz < hiHz }
+        // 60 m: with a channel set chosen (SDR Device), its channels replace the WRC-15 segment, so
+        // Canada's or the US's channels show as allowed and the gaps between them as out of band
+        val ch = Hl2.channels60.value
+        val plan = if (ch.isEmpty()) table
+        else table.filter { it.hiHz <= 5_250_000L || it.loHz >= 5_450_000L } +
+            ch.map { (f, w) -> Segment(f - w / 2, f + w / 2, SegKind.CHANNEL) }
+        return plan.filter { it.hiHz > loHz && it.loHz < hiHz }
     }
 
     fun segmentAt(region: Int, hz: Long): Segment? = segments(region, hz, hz + 1).firstOrNull()

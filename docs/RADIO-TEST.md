@@ -88,6 +88,14 @@ what was on. Gateware flashing: not tested, later (Randal: no need now).
 
 ## Fix list (found during the test)
 
+All five fixed 2026-11-25 (commit after 8c260e9/f980de7; see git log): 60 m
+follows the chosen channel set (channels as "Channel" segments, gaps out of
+band; the 60 m band widened to 5.25-5.45 MHz); RIT drag snaps to the RIT
+step; bottom row and the editor's row scroll; the real row hides while the
+editor shows its copy; after a replug the watchdog retries every 1.5 s and
+says the HL2 is looking for DHCP (the ~20 s is the HL2: log 21:47:28-48,
+5 starts with no data, then data). To check on the radio next time.
+
 1. **60 m band bar wrong:** BandPlan.kt only has the WRC-15 band
    (5351.5-5366.5 kHz), so in Region 2 the Canadian/US channels (5332,
    5348, 5373, 5405) show "OUT OF BAND" and the segment label doesn't fit

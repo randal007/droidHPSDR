@@ -42,6 +42,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -167,7 +168,8 @@ fun Screen(onStart: () -> Unit, onStop: () -> Unit) {
                 RoundButton("☰") { sheet = Sheet.MENU; fromMenu = false }
             }
 
-            if (showChips) ChipRow(status, { sheet = it; fromMenu = false }, Modifier.align(Alignment.BottomStart).padding(10.dp))
+            // the editor draws its own copy of the row in the same place: not both (they don't line up)
+            if (showChips && sheet != Sheet.TOOLBAR) ChipRow(status, { sheet = it; fromMenu = false }, Modifier.align(Alignment.BottomStart).padding(10.dp))
 
             val playing by Radio.playback.collectAsState()
             if (status.phase == Phase.DEMO || playing) {
@@ -324,7 +326,10 @@ private fun SpectrumOverlay(modifier: Modifier) {
                         when (edge) {
                             1 -> Radio.setFilter((st.filterLow + dx * hzpx).roundToInt(), st.filterHigh)
                             2 -> Radio.setFilter(st.filterLow, (st.filterHigh + dx * hzpx).roundToInt())
-                            3 -> Radio.rit(true, ((st.rit + dx * hzpx) / 10).roundToLong() * 10)
+                            3 -> {   // RIT drag, in deskHPSDR's RIT/XIT step (VFO panel: 1, 10 or 100 Hz)
+                                val rs = st.ritStep.coerceAtLeast(1)
+                                Radio.rit(true, ((st.rit + dx * hzpx) / rs).roundToLong() * rs)
+                            }
                             5 -> if (c.position.y - down.position.y < -70.dp.toPx() && c.position.y < splitY * 0.3f) {
                                 Radio.setDsp(Dsp.MNF, 0.0)   // pushed off the top: gone
                             } else if (Radio.dsp.value[Dsp.MNF] != 0.0) {
@@ -876,7 +881,8 @@ private fun RoundButton(label: String, onLongClick: (() -> Unit)? = null, onClic
 @Composable
 private fun ChipRow(st: Status, open: (Sheet) -> Unit, modifier: Modifier) {
     val ids by Radio.chips.collectAsState()
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+    // more chips than fit: the row scrolls sideways instead of squashing the last ones together
+    Row(modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
         ids.forEach { ChipFor(it, st, open) }
     }
 }
