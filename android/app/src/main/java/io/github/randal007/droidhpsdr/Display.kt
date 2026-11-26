@@ -49,7 +49,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
@@ -79,9 +78,6 @@ internal object Disp {
     // the 2D view's background picture (Thetis-style): 0 none, else 1.. = assets/backgrounds, sorted
     val bgImage = MutableStateFlow(0)
     val bgStrength = MutableStateFlow(40)     // percent of the picture that shows through
-    const val BG_CUSTOM = 99                  // bgImage: your own picture (filesDir/bg_custom.jpg)
-    val bgCustomVer = MutableStateFlow(0)     // bumped when your picture changes, so it is loaded again
-    fun bumpCustom() { set(bgCustomVer, bgCustomVer.value + 1) }
 
     // Screen (E6)
     val fftSize = MutableStateFlow(0)            // 0 Auto
@@ -101,7 +97,7 @@ internal object Disp {
 
     private val ints = listOf(
         "panHi" to panHi, "panLo" to panLo, "panStep" to panStep, "panMargin" to panMargin, "wfHi" to wfHi,
-        "wfLo" to wfLo, "avgMode" to avgMode, "bgImage" to bgImage, "bgStrength" to bgStrength, "bgCustomVer" to bgCustomVer, "peakMode" to peakMode, "peakColor" to peakColor, "fftSize" to fftSize,
+        "wfLo" to wfLo, "avgMode" to avgMode, "bgImage" to bgImage, "bgStrength" to bgStrength, "peakMode" to peakMode, "peakColor" to peakColor, "fftSize" to fftSize,
     )
     private val bools = listOf(
         "panAuto" to panAuto, "wfAuto" to wfAuto, "saveZoom" to saveZoom, "preserve" to preserve,
@@ -521,95 +517,42 @@ internal object BgThumbs {
     }
 }
 
-/** Your own picture, copied into the app (picked with Android's picker, scaled to at most 2560 px). */
-internal fun customPictureFile(ctx: android.content.Context) = java.io.File(ctx.filesDir, "bg_custom.jpg")
-
-/** Copy a picked image into the app, scaled down so a texture of it stays reasonable. */
-private fun importPicture(ctx: android.content.Context, uri: android.net.Uri): Boolean = runCatching {
-    val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    ctx.contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) }
-    var sample = 1
-    while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 2560) sample *= 2
-    val bmp = ctx.contentResolver.openInputStream(uri)?.use {
-        android.graphics.BitmapFactory.decodeStream(it, null, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
-    } ?: return false
-    customPictureFile(ctx).outputStream().use { bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, it) }
-    bmp.recycle()
-    true
-}.getOrDefault(false)
-
 /** Display → Look: the picture behind the 2D spectrum, as thumbnails, and how much of it shows. */
 @Composable
 private fun BackgroundPicker() {
     val ctx = androidx.compose.ui.platform.LocalContext.current
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
     val sel by Disp.bgImage.collectAsState()
     val strength by Disp.bgStrength.collectAsState()
-    val customVer by Disp.bgCustomVer.collectAsState()
     val files = remember { backgroundFiles(ctx) }
     // decoded once, off the main thread, and kept for the app's life (BgThumbs)
     LaunchedEffect(Unit) { BgThumbs.load(ctx) }
     val thumbs by BgThumbs.list.collectAsState()
-    var customThumb by remember { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(customVer) {
-        customThumb = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            val f = customPictureFile(ctx)
-            if (!f.exists()) null else runCatching {
-                android.graphics.BitmapFactory.decodeFile(f.path, android.graphics.BitmapFactory.Options().apply { inSampleSize = 16 })?.asImageBitmap()
-            }.getOrNull()
-        }
-    }
-    var note by remember { mutableStateOf("") }
-    val pick = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.GetContent(),
-    ) { uri ->
-        if (uri != null) scope.launch {
-            val ok = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { importPicture(ctx, uri) }
-            if (ok) { Disp.bumpCustom(); Disp.set(Disp.bgImage, Disp.BG_CUSTOM); note = "" }
-            else note = "That picture couldn't be read."
-        }
-    }
-    Label("2D background picture (NASA, ESO, or your own)")
-    // tile codes: 0 None, 1..n the built-in pictures, BG_CUSTOM yours, -1 "Choose..."
-    val codes = listOf(0) + (1..files.size) + listOf(Disp.BG_CUSTOM, -1)
-    codes.chunked(6).forEach { chunk ->
+    Label("2D background picture (NASA)")
+    val tiles: List<ImageBitmap?> = listOf<ImageBitmap?>(null) + files.indices.map { thumbs.getOrNull(it) }
+    tiles.chunked(6).forEachIndexed { row, chunk ->
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            chunk.forEach { code ->
-                val img = when (code) { Disp.BG_CUSTOM -> customThumb; in 1..files.size -> thumbs.getOrNull(code - 1); else -> null }
-                val name = when (code) {
-                    0 -> "None"; -1 -> "Choose your own picture"; Disp.BG_CUSTOM -> "Your own picture"
-                    else -> pictureName(files[code - 1])
-                }
+            chunk.forEachIndexed { col, img ->
+                val i = row * 6 + col
                 Box(
                     Modifier.weight(1f).height(40.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF0F1624))
-                        .border(if (code == sel) 2.dp else 1.dp, if (code == sel) Acc else Line, RoundedCornerShape(8.dp))
-                        .clickable {
-                            when {
-                                code == -1 -> pick.launch("image/*")
-                                code == Disp.BG_CUSTOM && customThumb == null -> pick.launch("image/*")
-                                else -> Disp.set(Disp.bgImage, code)
-                            }
-                        },
+                        .border(if (i == sel) 2.dp else 1.dp, if (i == sel) Acc else Line, RoundedCornerShape(8.dp))
+                        .clickable { Disp.set(Disp.bgImage, i) },
                     contentAlignment = Alignment.Center,
                 ) {
+                    val name = if (i == 0) "None" else pictureName(files[i - 1])
                     when {
-                        code == 0 -> Text("None", color = Dim, fontSize = 11.sp)
-                        code == -1 -> Text("Choose…", color = Acc, fontSize = 11.sp)
+                        i == 0 -> Text("None", color = Dim, fontSize = 11.sp)
                         img != null -> androidx.compose.foundation.Image(img, name, Modifier.fillMaxSize(),
                             contentScale = androidx.compose.ui.layout.ContentScale.Crop)
-                        code == Disp.BG_CUSTOM -> Text("Yours", color = Dim, fontSize = 11.sp)
-                        else -> Text("$code", color = Dim, fontSize = 11.sp)   // still loading (or unreadable)
+                        else -> Text("$i", color = Dim, fontSize = 11.sp)   // still loading (or unreadable)
                     }
                 }
             }
             repeat(6 - chunk.size) { Box(Modifier.weight(1f)) }
         }
     }
-    if (note.isNotEmpty()) Text(note, color = Red, fontSize = 11.sp)
-    val valid = sel in 1..files.size || (sel == Disp.BG_CUSTOM && customThumb != null)
-    Setting("Picture strength", strength.toDouble(), 10f..80f, 5.0, { "%.0f %%".format(it) }, valid) {
+    Setting("Picture strength", strength.toDouble(), 10f..80f, 5.0, { "%.0f %%".format(it) }, sel in 1..files.size) {
         Disp.set(Disp.bgStrength, it.toInt())
     }
-    Text("Shows in the 2D view, under the trace. Built-in pictures: NASA and ESO (credits in About). " +
-        "\"Choose…\" takes any picture on the phone (for your own use).", color = Dim, fontSize = 10.5.sp)
+    Text("Shows in the 2D view, under the trace. Pictures: NASA (credits in About).", color = Dim, fontSize = 10.5.sp)
 }

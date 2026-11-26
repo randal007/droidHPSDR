@@ -40,14 +40,9 @@ class SpectrumView(ctx: Context) : GLSurfaceView(ctx) {
          * never draws it, so no texture then). Decoded on a background thread, uploaded here.
          */
         private fun syncBackground() {
-            val sel = if (Radio.flat.value) Disp.bgImage.value else 0
-            // your own picture: reload whenever you pick another (its version is part of the key)
-            val want = if (sel == Disp.BG_CUSTOM) Disp.BG_CUSTOM * 1000 + Disp.bgCustomVer.value else sel
+            val want = if (Radio.flat.value) Disp.bgImage.value else 0
             if (want == bgLoaded) return
-            val file: String? = when {
-                sel == Disp.BG_CUSTOM -> customPictureFile(ctx).takeIf { it.exists() }?.path
-                else -> backgroundFiles(ctx).getOrNull(sel - 1)?.let { "asset:$it" }
-            }
+            val file = backgroundFiles(ctx).getOrNull(want - 1)
             var bmp: android.graphics.Bitmap? = null
             if (file != null) {
                 val ready = pending
@@ -56,9 +51,7 @@ class SpectrumView(ctx: Context) : GLSurfaceView(ctx) {
                         decoding = want
                         Thread {
                             val b = runCatching {
-                                if (file.startsWith("asset:")) ctx.assets.open("backgrounds/" + file.removePrefix("asset:"))
-                                    .use { android.graphics.BitmapFactory.decodeStream(it) }
-                                else android.graphics.BitmapFactory.decodeFile(file)
+                                ctx.assets.open("backgrounds/$file").use { android.graphics.BitmapFactory.decodeStream(it) }
                             }.getOrNull()
                             pending?.second?.recycle()   // an older one nobody took
                             pending = want to b
@@ -111,7 +104,7 @@ class SpectrumView(ctx: Context) : GLSurfaceView(ctx) {
             // peaks & hold: Hold never drops, Decay holds then falls (Display → Averaging)
             val pk = Disp.peakMode.value
             syncBackground()
-            val bgAlpha = if (Radio.flat.value && Disp.bgImage.value > 0 && bgTex != 0) Disp.bgStrength.value / 100f else 0f
+            val bgAlpha = if (Radio.flat.value && Disp.bgImage.value > 0) Disp.bgStrength.value / 100f else 0f
             Native.glDraw(
                 f - half, f + half, Radio.split.value.toDouble(), style,
                 floor3.toFloat(), range3.toFloat(), wfLo.toFloat(), wfHi.toFloat(),
