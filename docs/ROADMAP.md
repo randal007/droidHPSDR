@@ -323,7 +323,9 @@ One **TX** chip (shows the drive %) opens the transmit panel, instead of
 separate MIC / DRIVE / TUNE chips (Randal).
 **Randal happy with round 1 (2026-11-25):** A, M1, M5b, M6, M7, M8 as
 drawn. **Step 1 built the same day** (29424fb; code review of `059d3d1..29424fb`: 10 findings,
-all fixed in eb55688; **next review starts after eb55688**; installed on the phone 2026-11-25): upstream transmitter.c /
+all fixed in eb55688; then 2063a1d (watchdog cut TUNE/PTT after 3 s: fixed; TX log;
+PA default), reviewed `8499dca..2063a1d`, fixes eadad0b; **next review starts after eadad0b**;
+installed on the phone 2026-11-25). Randal's PA was off (props saved 0): he turns it on himself: upstream transmitter.c /
 tx_off.c / vox.c compiled unchanged, radio.c's TX functions in
 `android/native/app/transmit.c`, PTT chip (hold, repeats every 250 ms,
 back to RX after 1.5 s without one), TX chip + panel, TX and PA pages, TX
