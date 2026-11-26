@@ -6,7 +6,7 @@ next, what's waiting on whom. Session history lives in git and in
 
 ## Now (in short)
 
-*Offload 2026-11-25.* Branch `m3-app` (pushed) holds M3-M6; `master` is still at M1.
+*Offload 2026-11-25 (late).* Branch `m3-app` (pushed) holds M3-M6; `master` is still at M1.
 
 - **Radio test done 2026-11-25** (`docs/RADIO-TEST.md`): Randal is happy,
   "the majority of everything works". The 5 fixes from it are built,
@@ -40,8 +40,8 @@ next, what's waiting on whom. Session history lives in git and in
   phone (own step, with him watching); whether to delete the empty repo
   `randal007/DroidHPSDR-scaffold`; whether Display → Speed did nothing with
   the radio running (the demo band ignored it: fixed).
-- **Phone:** debug build of `a13bace` (= `8c260e9` minus docs) installed
-  2026-11-25 20:57; the test IQ recording `demo_14225000Hz.wav` in
+- **Phone:** debug build of `922774f` (all fixes, reviewed) installed
+  2026-11-25 22:15; the test IQ recording `demo_14225000Hz.wav` in
   `Android/data/io.github.randal007.droidhpsdr/files/` (no licence: test
   only, delete before a release). adb over wireless debugging (paired; it
   switches itself off; the phone's WiFi address changes: `adb mdns services`).

@@ -276,6 +276,12 @@ AGP), Gradle wrapper 9.9.2, Android SDK in ~/Android/Sdk with
   UDP socket to a new Android network with dup2 (adapter replugged).
 - **adb**: wireless debugging (pair with the code, `adb mdns services` for
   the ports); it switches itself off, and the phone's WiFi address changes.
+- **Replug takes ~20 s and that is the HL2**, not the app: when its link
+  comes back it looks for a DHCP server first, as at power-on (log
+  2026-11-25: the app restarted within 1 s, data came 19 s later). After a
+  replug the watchdog retries every 1.5 s and the screen says so.
+- **A band that sounds dead may be dead**: check with another radio before
+  debugging (40 m on 2026-11-25 was).
 - **WDSP display averaging is off** on purpose (it smeared the 3D view when
   tuning); the renderer averages rows itself (2D Av. Time setting).
 - **Linker wrap**: `-Wl,--wrap=old_protocol_audio_samples` (CMakeLists.txt)
