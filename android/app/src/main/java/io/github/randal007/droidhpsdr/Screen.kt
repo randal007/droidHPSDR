@@ -1318,7 +1318,9 @@ private fun AboutSheet() {
     Text("github.com/randal007/droidHPSDR", color = Acc, fontSize = 12.sp)
     Text(
         "2D background pictures: NASA (ISS crews, STS-39, SDO, JPL-Caltech/DSN, Apollo 8 / Bill Anders); " +
-            "Cosmic Cliffs: NASA, ESA, CSA, STScI (CC BY 4.0, resized). NASA does not endorse this app.",
+            "Cosmic Cliffs: NASA, ESA, CSA, STScI (CC BY 4.0, resized). NASA does not endorse this app. " +
+            "ESO pictures (CC BY 4.0, resized): ESO; ESO/C. Malin; ESO/J. F. Salgado; ESO/B. Tafreshi; P. Horálek/ESO; " +
+            "ESO/G. Brammer; G. Hüdepohl/ESO; ESO/A. Santerne; Y. Beletsky (LCO)/ESO.",
         color = Dim, fontSize = 10.5.sp,
     )
 }
