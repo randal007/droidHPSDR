@@ -168,6 +168,11 @@ int audio_backend_output_is_alive(void *handle) {
 
 static atomic_int mic_device;      /* AAudio device id, 0 = Android's default input */
 static atomic_int mic_bluetooth;   /* 1: a Bluetooth headset (communication device) */
+static atomic_uint mic_frames;     /* frames the phone mic delivered (transmit.c logs the rate) */
+static _Atomic float mic_peak;     /* the loudest sample since the last read */
+
+unsigned droid_mic_frames(void) { return atomic_load(&mic_frames); }
+float droid_mic_peak(void) { return atomic_exchange(&mic_peak, 0.0f); }
 
 void droid_mic_route(int device_id, int bluetooth) {
   atomic_store(&mic_device, device_id);
@@ -176,7 +181,12 @@ void droid_mic_route(int device_id, int bluetooth) {
 
 static aaudio_data_callback_result_t on_mic(AAudioStream *s, void *user, void *data, int32_t frames) {
   (void)s; (void)user;
-  audio_process_local_mic_input((const float *)data, (unsigned)frames);
+  const float *f = data;
+  float pk = atomic_load(&mic_peak);
+  for (int32_t i = 0; i < frames; i++) { float a = f[i] < 0 ? -f[i] : f[i]; if (a > pk) pk = a; }
+  atomic_store(&mic_peak, pk);
+  atomic_fetch_add(&mic_frames, (unsigned)frames);
+  audio_process_local_mic_input(f, (unsigned)frames);
   return AAUDIO_CALLBACK_RESULT_CONTINUE;
 }
 

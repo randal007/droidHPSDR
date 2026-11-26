@@ -798,6 +798,13 @@ void tx_panadapter_update(TRANSMITTER *tx) {
   pthread_mutex_unlock(&txrow_lock);
 }
 
+unsigned long long droid_tx_rows_count(void) {
+  pthread_mutex_lock(&txrow_lock);
+  unsigned long long n = txrow_seq;
+  pthread_mutex_unlock(&txrow_lock);
+  return n;
+}
+
 int droid_tx_row(float *db, int max, double *fmin, double *hzpp, uint64_t *seq) {
   pthread_mutex_lock(&txrow_lock);
   int w = txrow_w < max ? txrow_w : max;
@@ -822,6 +829,7 @@ void droid_tx_create(int pixels) {
   if (made) return;
   made = 1;
   pa_power = PA_5W;
+  pa_enabled = 1;   /* radio.c's default (radio_state.c keeps 0 for the RX-only m1-rx); the props file decides */
   GetPropI0("pa_enabled", pa_enabled);
   GetPropI0("pa_power", pa_power);
   GetPropI0("mic_boost", mic_boost);
@@ -1052,6 +1060,22 @@ void droid_tx_poll(void) {
   }
   if (tx_since_us == 0) tx_since_us = t;
   atomic_store(&tx_since_s, (int)((t - tx_since_us) / 1000000));
+  /* once a second on the air: what goes out, for checking on the radio (logcat droidHPSDR) */
+  static long long log_us;
+  static unsigned frames_then;
+  if (t - log_us >= 1000000) {
+    unsigned fr = droid_mic_frames();
+    float pk = droid_mic_peak();
+    droid_log("TX %s: fwd %.2f W, SWR %.2f, ALC %.1f dB, WDSP mic %.1f dB, %s mic%s, drive %d (level %d), PA %s",
+              tune ? "TUNE" : mox ? "MOX" : "VOX", transmitter->fwd, transmitter->swr, transmitter->alc,
+              GetTXAMeter(transmitter->id, TXA_MIC_PK),
+              transmitter->local_microphone ? "phone" : "HL2+", "", transmitter->drive, transmitter->drive_level,
+              pa_enabled ? "on" : "OFF");
+    if (transmitter->local_microphone)
+      droid_log("TX phone mic: %u frames/s, peak %.3f", log_us ? fr - frames_then : 0, pk);
+    frames_then = fr;
+    log_us = t;
+  }
   /* a held screen PTT repeats every 250 ms; 1.5 s without one = the finger is gone */
   if (atomic_load(&ptt_screen) && mox && t - atomic_load(&ptt_seen_us) > 1500000) {
     droid_log("screen PTT: no repeat for 1.5 s, back to receive");

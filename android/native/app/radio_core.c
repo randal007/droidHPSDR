@@ -801,7 +801,9 @@ void droid_get_status(droid_status *s) {
   s->bandstack = vfo[0].bandstack;
   s->filter = vfo[0].filter;
   s->agc = receiver[0]->agc;
-  s->rows = droid_rows_count();
+  /* rows from the receiver and, while transmitting (the receiver's display stops), the
+   * transmitter: the service's no-data watchdog restarted the stream during TUNE */
+  s->rows = droid_rows_count() + droid_tx_rows_count();
   s->rit_step = vfo[0].rit_step;
 }
 

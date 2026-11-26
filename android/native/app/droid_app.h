@@ -159,6 +159,9 @@ void droid_tx_ptt_seen(void);                  /* a screen PTT repeat (any threa
 int droid_tx_on_air(void);
 /* the phone mic's AAudio device (0: default) and whether it is a Bluetooth headset (audio_aaudio.c) */
 void droid_mic_route(int device_id, int bluetooth);
+unsigned droid_mic_frames(void);   /* frames the phone mic delivered so far */
+float droid_mic_peak(void);        /* its loudest sample since the last call (0..1) */
+unsigned long long droid_tx_rows_count(void);   /* TX spectrum rows so far: data flows while transmitting too */
 /* the newest TX spectrum row (transmit.c); -1 when there is none newer than *seq */
 int droid_tx_row(float *db, int max, double *fmin, double *hzpp, uint64_t *seq);
 
