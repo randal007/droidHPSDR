@@ -252,4 +252,6 @@ Object.assign(LAYOUTS, {
     canvases: [['#c', rxSpec()]],
   }),
 });
+// shared with layouts12.js (M7 step 2)
+window.M7H = { txSpec, rxSpec, txMeter, pill, ptt, tBtns, meterCard, info, chipRow, note, lbl, seg, tog, sl, panel, dim, RED, frozenNote };
 })();

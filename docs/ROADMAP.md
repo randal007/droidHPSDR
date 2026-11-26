@@ -350,6 +350,14 @@ split now enabled), PA calibration Save / Load saved (band.c's own file in
 the app folder). Later (no effect on an HL2, for other Protocol 1 radios):
 watt meter calibration, TX antenna. Not run on the radio yet.
 
+**Step 2 (TX audio chain), started 2026-11-26:** pictures round 1, N1-N6 in
+`~/Pictures/droidhpsdr-mockups/m7-round2` (`tools/mockups/layouts12.js`):
+N1 A drawer (like the Noise drawer), N2 B chain strip with live stage
+levels while transmitting, N3 C tabs on the TX page; N4 CFC curves, N5 TX
+EQ graph, N6 VOX + noise gate + monitor. Settings are per mode
+(mode_settings, copy_mode_settings), as deskHPSDR's tx_menu.c. Waiting on
+Randal's pick.
+
 **First on-air check (low drive, Randal watching the XPA125B):**
 1. TX page: Transmit enabled off → PTT shows the lock and refuses.
 2. On, drive ~10 %, 20 m SSB: hold PTT, speak into the HL2+ mic: meter
