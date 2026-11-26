@@ -426,7 +426,7 @@ Which milestone each section belongs to: docs/ROADMAP.md.
 
 - [ ] Band
 - [ ] RX Ant
-- [ ] TX Ant
+- [ ] TX Ant — later: only Alex relays, none on an HL2; for other Protocol 1 radios (Randal 2026-11-25)
 - [ ] Ant1  _(choice)_
 - [ ] Ant2  _(choice)_
 - [ ] Ant3  _(choice)_
@@ -468,7 +468,7 @@ Which milestone each section belongs to: docs/ROADMAP.md.
 - [ ] Save
 - [ ] Import
 - [ ] Calibrate
-- [ ] Watt Meter Calibrate
+- [ ] Watt Meter Calibrate — later: deskHPSDR resets it on an HL2 with the PA on (compute_power → reassign_pa_trim), so it does nothing there; for other Protocol 1 radios (Randal 2026-11-25)
 
 ### Xvtr menu (`src/xvtr_menu.c`)
 

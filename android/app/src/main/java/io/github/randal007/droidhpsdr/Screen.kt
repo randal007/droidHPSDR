@@ -728,9 +728,11 @@ private fun VfoPill(
             Tag(Modes.name(st.mode), Acc, Color(0x293FD0FF), onMode)
             Tag(widthLabel(st.filterHigh - st.filterLow), Txt, Color(0x14FFFFFF), onFilter)
         }
+        val txOn by Tx.v.collectAsState()
         val on = buildList {
             if (st.ritOn) add("RIT %+d".format(st.rit) to Amb)
             if (st.split) add("SPLIT · TX B" to Color(0xFFC9A8FF))
+            if (txOn[Tx.XIT_ON] != 0.0) add("XIT %+.0f".format(txOn[Tx.XIT]) to Color(0xFFFF9D9D))
             if (st.ctun) add("CTUN" to Acc)
             if (st.locked) add("🔒 LOCK" to Dim)
         }
@@ -773,7 +775,17 @@ private fun VfoPanel(freq: Long, st: Status, close: () -> Unit) {
                 PanelButton("A›B", modifier = Modifier.weight(1f)) { Radio.vfoOp(0) }
                 PanelButton("B›A", modifier = Modifier.weight(1f)) { Radio.vfoOp(1) }
                 PanelButton("A⇄B", modifier = Modifier.weight(1f)) { Radio.vfoOp(2) }
-                PanelButton("SPLIT", st.split, "with transmit (M7)", Modifier.weight(1f), enabled = false) {}
+                PanelButton("SPLIT", st.split, if (st.split) "TX on B" else null, Modifier.weight(1f)) { Radio.vfoOp(3) }
+            }
+            // XIT (M7): the TX VFO's offset, in the RIT/XIT step
+            val txv by Tx.v.collectAsState()
+            val xitOn = txv[Tx.XIT_ON] != 0.0
+            val xit = txv[Tx.XIT]
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                PanelButton("XIT", xitOn, "%+.0f Hz".format(xit), Modifier.weight(1f)) { Tx.set(Tx.XIT_ON, if (xitOn) 0.0 else 1.0) }
+                PanelButton("XIT −", modifier = Modifier.weight(1f)) { Tx.set(Tx.XIT, (xit - st.ritStep).coerceAtLeast(-9999.0)) }
+                PanelButton("XIT +", modifier = Modifier.weight(1f)) { Tx.set(Tx.XIT, (xit + st.ritStep).coerceAtMost(9999.0)) }
+                PanelButton("XIT 0", modifier = Modifier.weight(1f)) { Tx.set(Tx.XIT, 0.0) }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 PanelButton("RIT", st.ritOn, "%+d Hz".format(st.rit), Modifier.weight(1f)) { Radio.rit(!st.ritOn) }

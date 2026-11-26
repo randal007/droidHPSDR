@@ -73,7 +73,8 @@ static pthread_mutex_t cmd_lock = PTHREAD_MUTEX_INITIALIZER;
 /* TX fields that are events, not settings: every one runs, in order (code review: a PTT 1 in
  * flight replaced a queued release; a mic close + open merged into one no-op open) */
 static int tx_event(const cmd *c) {
-  return c->type == CMD_TX && (c->a == TX_PTT || c->a == TX_TUNE || c->a == TX_MIC_LOCAL || c->a == TX_ENABLED);
+  return c->type == CMD_TX && (c->a == TX_PTT || c->a == TX_TUNE || c->a == TX_MIC_LOCAL || c->a == TX_ENABLED ||
+                               c->a == TX_PA_FILE);
 }
 
 static void post(cmd c) {
@@ -285,6 +286,7 @@ static void run(const cmd *c) {
   case CMD_VFO_OP:
     if (c->a == 0) vfo_a_to_b();
     else if (c->a == 1) vfo_b_to_a();
+    else if (c->a == 3) radio_set_split(!split);   /* M7: split works now that the radio can transmit */
     else vfo_a_swap_b();
     fhist_add(vfo[0].frequency);
     break;
@@ -585,6 +587,9 @@ static int radio_start_locked(const droid_start_opts *o, char *msg, int msglen) 
   real_radio = radio;
 
 setup:
+  /* deskHPSDR keeps its other files (the PA calibration file) next to the props
+   * file, in the folder it runs in: the same here */
+  if (o->props_dir[0] && chdir(o->props_dir) != 0) droid_log("chdir %s: %s", o->props_dir, strerror(errno));
   /* ---- what radio.c's start_radio() sets for an HL2 (see m1_main.c) ---- */
   device = radio->device;
   protocol = radio->protocol;

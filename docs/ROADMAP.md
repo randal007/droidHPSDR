@@ -343,6 +343,11 @@ little hot: one mic gain for all sources, as deskHPSDR). **Force-stopping the
 app or pulling the Ethernet adapter while transmitting: the HL2 unkeys** (Randal).
 Not done yet: the HL2+ jack mic (no mic at hand: skipped for now), the
 timeout, the HL2+ mic PTT.
+**Step 1 leftovers (Randal 2026-11-25):** built: the external TX inhibit
+input switch (TX page, as deskHPSDR's radio menu), XIT (VFO panel, with
+split now enabled), PA calibration Save / Load saved (band.c's own file in
+the app folder). Later (no effect on an HL2, for other Protocol 1 radios):
+watt meter calibration, TX antenna. Not run on the radio yet.
 
 **First on-air check (low drive, Randal watching the XPA125B):**
 1. TX page: Transmit enabled off → PTT shows the lock and refuses.

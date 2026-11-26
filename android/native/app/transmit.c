@@ -28,8 +28,10 @@
  *
  * GPL v3 or later, like the rest of droidHPSDR.
  */
+#include <ctype.h>
 #include <math.h>
 #include <pthread.h>
+#include <stdio.h>
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
@@ -105,7 +107,8 @@ static atomic_int timeouts;            /* times the timeout ended a transmission
 static atomic_int refused;             /* last refusal reason, for the UI (TXR_*) */
 static long long tx_since_us;          /* when this transmission started (loop thread) */
 static atomic_int tx_since_s;          /* seconds on the air, for the UI */
-static atomic_int timed_out;           /* the timeout ended a screen PTT: no TX until it is released */
+static atomic_int timed_out;
+static atomic_int pa_file_ok;          /* last PA calibration Save (1) / Load (2, -2 failed) */           /* the timeout ended a screen PTT: no TX until it is released */
 
 static long long now_us(void) { return g_get_monotonic_time(); }
 
@@ -842,6 +845,7 @@ void droid_tx_create(int pixels) {
   GetPropI0("OCfull_tune_time", OCfull_tune_time);
   GetPropI0("OCmemory_tune_time", OCmemory_tune_time);
   GetPropI0("droid_tx_timeout_s", tx_timeout_s);
+  GetPropI0("enable_tx_inhibit", enable_tx_inhibit);
   if (pa_power < PA_1W || pa_power > PA_5W + 12) pa_power = PA_5W;
   transmitter = tx_create_transmitter(CHANNEL_TX, pixels, pixels, 200);
   can_transmit = 1;
@@ -874,6 +878,7 @@ void droid_tx_save(void) {
   SetPropI0("OCfull_tune_time", OCfull_tune_time);
   SetPropI0("OCmemory_tune_time", OCmemory_tune_time);
   SetPropI0("droid_tx_timeout_s", atomic_load(&tx_timeout_s));
+  SetPropI0("enable_tx_inhibit", enable_tx_inhibit);
   tx_save_state(transmitter);
 }
 
@@ -979,6 +984,27 @@ void droid_tx_apply(int field, double v) {
   case TX_MUTE_RX: mute_rx_while_transmitting = v != 0; break;
   case TX_PA: pa_enabled = v != 0; schedule_high_priority(); break;
   case TX_PA_POWER: pa_power = (int)clampd(v, 0, 13); reassign_pa_trim(); break;
+  /* radio_menu.c toggle_cb on enable_tx_inhibit; off again: the input no longer holds TX off
+   * (old_protocol.c then clears the hardware source itself) */
+  case TX_INHIBIT_EN: enable_tx_inhibit = v != 0; break;
+  /* vfo_menu.c / actions.c: XIT on the TX VFO */
+  case TX_XIT_ON: vfo_xit_onoff(v != 0); break;
+  case TX_XIT: vfo_xit_value((long long)clampd(v, -9999, 9999)); break;
+  case TX_PA_FILE: {   /* pa_menu.c Save / Import, with band.c's own functions and file name */
+    if (v == 1) {
+      PaCalibrationSave();
+      atomic_store(&pa_file_ok, 1);
+    } else if (v == 2) {
+      char name[64], file[128];
+      snprintf(name, sizeof name, "%s", radio->name);
+      for (size_t i = 0; name[i]; i++) if (!isalnum((unsigned char)name[i])) name[i] = '_';
+      snprintf(file, sizeof file, "pa_calibration_%s.props", name);   /* band.c make_pa_calibration_filename() */
+      int ok = PaCalibrationLoad(file);
+      atomic_store(&pa_file_ok, ok ? 2 : -2);
+      radio_calc_drive_level();
+    }
+    break;
+  }
   default:
     if (field >= TX_PA_CAL0 && field < TX_PA_CAL0 + BANDS) {   /* pa_menu.c: 38.8 .. 70 dB */
       BAND *b = band_get_band(field - TX_PA_CAL0);
@@ -1032,6 +1058,12 @@ void droid_tx_get(double *o) {
   o[TXS_OUT_OF_BAND] = tx->out_of_band;
   o[TXS_MAX_W] = pa_power_list[pa_power < 0 || pa_power > 13 ? 1 : pa_power];
   o[TXS_PICO] = device == DEVICE_HERMES_LITE2 && hl2_pico_is_present();
+  o[TX_INHIBIT_EN] = enable_tx_inhibit;
+  o[TXS_INHIBITED] = (g_atomic_int_get(&tx_inhibit_sources) & TX_INHIBIT_SOURCE_HARDWARE) != 0;
+  o[TXS_PA_FILE_OK] = atomic_load(&pa_file_ok);
+  int txv = vfo_get_tx_vfo();
+  o[TX_XIT_ON] = vfo[txv].xit_enabled;
+  o[TX_XIT] = vfo[txv].xit;
 }
 
 int droid_tx_on_air(void) { return can_transmit && radio_is_transmitting(); }

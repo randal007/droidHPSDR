@@ -74,10 +74,11 @@ object Tx {
     const val MIC_BOOST = 9; const val MIC_LOCAL = 10; const val FILTER_LOW = 11; const val FILTER_HIGH = 12
     const val USE_RX_FILTER = 13; const val SWR_PROT = 14; const val SWR_ALARM = 15; const val OUT_OF_BAND = 16
     const val MUTE_RX = 17; const val PA = 18; const val PA_POWER = 19; const val PA_CAL0 = 20
+    const val INHIBIT_EN = 44; const val XIT_ON = 45; const val XIT = 46; const val PA_FILE = 47
     const val ON_AIR = 48; const val FWD = 49; const val REV = 50; const val SWR = 51; const val ALC = 52
     const val MIC = 53; const val HIGH_SWR = 54; const val SECONDS = 55; const val TIMEOUTS = 56; const val REFUSED = 57
     const val RADIO_PTT = 58; const val UNDERRUN = 59; const val OVERRUN = 60; const val OUT_OF_BAND_NOW = 61
-    const val MAX_W = 62; const val PICO = 63; const val COUNT = 72
+    const val MAX_W = 62; const val PICO = 63; const val INHIBITED = 64; const val PA_FILE_OK = 65; const val COUNT = 72
     /** first live field: everything from here on is the radio's, never the UI's */
     private const val LIVE = ON_AIR
 
@@ -131,7 +132,7 @@ object Tx {
         v.value = a
         lastSetMs = System.currentTimeMillis()
         if (running) Native.txSet(field, value)
-        else if (field != PTT && field != TUNE && field < LIVE) synchronized(pending) { pending.add(field) }
+        else if (field != PTT && field != TUNE && field != PA_FILE && field < LIVE) synchronized(pending) { pending.add(field) }
     }
 
     fun setEnabled(on: Boolean) {
@@ -503,6 +504,12 @@ internal fun TxSheet() {
             Setting("SWR ALARM AT", v[Tx.SWR_ALARM], 1.5f..5f, 0.1, { "%.1f".format(it) }) { Tx.set(Tx.SWR_ALARM, it) }
             Toggle("Transmit out of band", v[Tx.OUT_OF_BAND] != 0.0, Modifier.fillMaxWidth()) { Tx.set(Tx.OUT_OF_BAND, if (it) 1.0 else 0.0) }
             Toggle("Mute RX when TX", v[Tx.MUTE_RX] != 0.0, Modifier.fillMaxWidth()) { Tx.set(Tx.MUTE_RX, if (it) 1.0 else 0.0) }
+            // radio_menu.c "Enable external TxInhibit Input": the HL2's IO1 input, active low (grounded = no TX)
+            Toggle("External TX inhibit input", v[Tx.INHIBIT_EN] != 0.0, Modifier.fillMaxWidth(), sub = "IO1, grounded = no TX") {
+                Tx.set(Tx.INHIBIT_EN, if (it) 1.0 else 0.0)
+            }
+            if (v[Tx.INHIBIT_EN] != 0.0 && v[Tx.INHIBITED] != 0.0)
+                Text("TX inhibit input is active: transmit is blocked", color = Red, fontSize = 10.5.sp)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Label("TX FILTER")
@@ -542,7 +549,16 @@ internal fun PaSheet() {
             Text("The HL2 measures its own output (the XPA125B's input), so 5 W. The amplifier shows its own power and SWR.",
                 color = Dim, fontSize = 10.5.sp)
             SmallButton("Reset to 38.8", Modifier.fillMaxWidth()) { Tx.PA_BANDS.forEach { (_, b) -> Tx.set(Tx.PA_CAL0 + b, 38.8) } }
-            Text("Watt meter calibration, Save and Import: next round.", color = Dim, fontSize = 10.sp)
+            // pa_menu.c Save / Import with band.c's own file (pa_calibration_<radio>.props, in the app's folder)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                SmallButton("Save", Modifier.weight(1f)) { Tx.set(Tx.PA_FILE, 1.0) }
+                SmallButton("Load saved", Modifier.weight(1f)) { Tx.set(Tx.PA_FILE, 2.0) }
+            }
+            when (v[Tx.PA_FILE_OK].toInt()) {
+                1 -> Text("Saved", color = Grn, fontSize = 10.5.sp)
+                2 -> Text("Loaded", color = Grn, fontSize = 10.5.sp)
+                -2 -> Text("No saved calibration for this radio", color = Amb, fontSize = 10.5.sp)
+            }
         }
     }
 }

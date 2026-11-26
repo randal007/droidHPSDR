@@ -117,7 +117,7 @@ int droid_hl2_reboot(char *error, int error_len);      /* Screen menu FFT size: 
 void droid_filter_preset(int index);   /* vfo_filter_changed(): 0..9 presets, 10/11 Var1/Var2 */
 void droid_band(int band);             /* vfo_band_changed(): same band again = next stack entry */
 void droid_bandstack(int entry);       /* vfo_bandstack_changed() */
-void droid_vfo_op(int op);             /* 0 A>B, 1 B>A, 2 A<>B */
+void droid_vfo_op(int op);             /* 0 A>B, 1 B>A, 2 A<>B, 3 split on/off */
 void droid_rit(int on, long long hz);  /* vfo_rit_onoff() / vfo_rit_value() */
 void droid_ctun(int on);               /* vfo_ctun_update() */
 void droid_lock(int on);               /* vfo.c's 'locked' */
@@ -141,8 +141,12 @@ enum {
   TX_MIC_GAIN, TX_MIC_BOOST, TX_MIC_LOCAL, TX_FILTER_LOW, TX_FILTER_HIGH, TX_USE_RX_FILTER, TX_SWR_PROT,
   TX_SWR_ALARM, TX_OUT_OF_BAND, TX_MUTE_RX, TX_PA, TX_PA_POWER,
   TX_PA_CAL0 = 20,                 /* + band number (band.h), 24 bands */
+  TX_INHIBIT_EN = 44,              /* radio_menu.c "Enable external TxInhibit Input" */
+  TX_XIT_ON, TX_XIT,               /* the TX VFO's XIT (vfo.c) */
+  TX_PA_FILE,                      /* 1: save the PA calibration, 2: load it (band.c) */
   TXS_ON_AIR = 48, TXS_FWD, TXS_REV, TXS_SWR, TXS_ALC, TXS_MIC, TXS_HIGH_SWR, TXS_SECONDS, TXS_TIMEOUTS,
   TXS_REFUSED, TXS_RADIO_PTT, TXS_UNDERRUN, TXS_OVERRUN, TXS_OUT_OF_BAND, TXS_MAX_W, TXS_PICO,
+  TXS_INHIBITED, TXS_PA_FILE_OK,
   TX_COUNT = 72
 };
 /* why the last PTT / TUNE did not transmit */
