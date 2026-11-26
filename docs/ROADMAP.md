@@ -52,7 +52,12 @@ next, what's waiting on whom. Session history lives in git and in
   rows ends the demo with a message (the service watchdog leaves it
   alone); no Restart Protocol during the demo; a full command queue keeps
   the order; iq_convert.py reads only the data chunk. Next review: from
-  this commit on.
+  this commit on. **`45849bd..59f982b` done 2026-11-25** (high, 7 findings,
+  all fixed): a demo stopped before its native start began is stopped
+  after it; 60 m table copied on the loop thread and read under a lock
+  (the poll refreshes it); markers only with the radio running; RIT step
+  only with the radio, guarded against the poll; ANT sheet follows the
+  radio starting/stopping; iq_convert.py clamps a too-long data length.
   M1 done 2026-11-25 (`9f49c21..m1-done`, high; 10 findings, 8 fixed:
   m1-rx's S-meter now calibrated like receiver.c (read high by the LNA
   gain), stops with an error on an upstream FATAL, catches SIGHUP so a

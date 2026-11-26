@@ -166,7 +166,7 @@ JNIEXPORT void JNICALL FN(setLnaDb)(JNIEnv *env, jobject self, jdouble db) {
 
 /* [running, freq, mode, filterLow, filterHigh, sampleRate, meterDbm, lostPackets, adcOverloads, lna, volume,
  *  noiseFloor, phoneAudio, freqB, modeB, ritOn, rit, ctun, locked, split, step, band, bandstack, filter, agc,
- *  rows] */
+ *  rows, ritStep] */
 #define STATUS_N 27
 JNIEXPORT void JNICALL FN(status)(JNIEnv *env, jobject self, jdoubleArray out) {
   (void)self;

@@ -100,16 +100,13 @@ internal object Hl2 {
         Native.hl2Set(F_SPLIT_OFF, if (splitOff.value) 1.0 else 0.0)
         Native.hl2Set(F_IARU, Radio.region.value.toDouble())
         Native.hl2Set(F_REGION60, region60.value.toDouble())
-        refreshChannels()
     }
 
-    /** The command queue runs them in order: read the table once the region change has been applied. */
-    private fun refreshChannels() {
-        Thread {
-            Thread.sleep(300)
-            channels60.value = Native.channels60m().split(";").filter { it.contains(':') }
-                .map { it.substringBefore(':').toLong() to it.substringAfter(':').toLong() }
-        }.start()
+    /** The region's 60 m channels, as deskHPSDR has them now (Radio's poll calls this about once a second). */
+    fun readChannels() {
+        val l = Native.channels60m().split(";").filter { it.contains(':') }
+            .map { it.substringBefore(':').toLong() to it.substringAfter(':').toLong() }
+        if (l != channels60.value) channels60.value = l
     }
 
     fun sendIaru() { send(F_IARU, Radio.region.value.toDouble()) }
@@ -124,7 +121,7 @@ internal object Hl2 {
     fun setRegion60(r: Int) {
         region60.value = r
         prefs.edit().putInt("hl2.region60", r).apply()
-        if (Radio.running) { Native.hl2Set(F_REGION60, r.toDouble()); refreshChannels() }
+        if (Radio.running) Native.hl2Set(F_REGION60, r.toDouble())   // the poll picks up the new table
     }
     fun setBeacons(on: Boolean) { beacons.value = on; prefs.edit().putBoolean("hl2.beacons", on).apply() }
     fun setContestFree(on: Boolean) { contestFree.value = on; prefs.edit().putBoolean("hl2.contestFree", on).apply() }
@@ -321,14 +318,17 @@ internal fun Hl2SetupSheet(st: Status, onStart: () -> Unit, onStop: () -> Unit) 
 @Composable
 internal fun AntSheet() {
     SheetTitle("Ant")
-    if (!Radio.running || Radio.playback.value) {
+    val st by Radio.status.collectAsState()
+    val playing by Radio.playback.collectAsState()
+    val live = st.phase == Phase.RUNNING && !playing
+    if (!live) {
         Text("Start the radio first: the antennas are deskHPSDR's band settings.", color = Dim, fontSize = 12.sp)
         return
     }
     Text("Your IO board switches receive to its separate RX input on the bands set to \"RX in\". TX antenna comes with M7.",
         color = Dim, fontSize = 11.sp)
-    val hf = remember { Radio.bands().filter { it.fmin in 1_800_000L..54_000_000L && it.title.endsWith("m") } }
-    var ants by remember { mutableStateOf(hf.associate { it.index to Native.bandRxAnt(it.index) }) }
+    val hf = remember(live) { Radio.bands().filter { it.fmin in 1_800_000L..54_000_000L && it.title.endsWith("m") } }
+    var ants by remember(live) { mutableStateOf(hf.associate { it.index to Native.bandRxAnt(it.index) }) }
     hf.chunked(2).forEach { pair ->
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             pair.forEach { b ->

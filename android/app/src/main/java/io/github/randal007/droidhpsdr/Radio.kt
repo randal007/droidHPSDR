@@ -373,9 +373,12 @@ object Radio {
     fun bandstack(i: Int) { if (running) { lastTuneMs = 0; Native.bandstack(i) } }
     /** deskHPSDR's RIT/XIT step (Radio menu), 1, 10 or 100 Hz, kept per mode. */
     fun setRitStep(hz: Int) {
-        if (running) Native.ritStep(hz)
+        if (!running) return   // it is deskHPSDR's per-mode setting: only with the radio's state loaded
+        lastRitMs = System.currentTimeMillis()
+        Native.ritStep(hz)
         status.value = status.value.copy(ritStep = hz)
     }
+    @Volatile private var lastRitMs = 0L
     fun vfoOp(op: Int) { if (running) { lastTuneMs = 0; Native.vfoOp(op) } }
     fun rit(on: Boolean, hz: Long = status.value.rit) {
         status.value = status.value.copy(ritOn = on, rit = hz)
@@ -505,7 +508,11 @@ object Radio {
         scope.launch {
             val err = Native.startPlayback(file.absolutePath, centre, mode, PIXELS, fps.value, appCtx.filesDir.absolutePath)
             synchronized(playbackLock) {
-                if (gen != playbackGen) return@launch   // stopped while opening: stopDemo stopped it
+                if (gen != playbackGen) {   // stopped while opening
+                    // stopDemo may have run before the native start did: stop what it then started
+                    if (err.isEmpty()) Native.stop()
+                    return@launch
+                }
                 if (err.isNotEmpty()) { playback.value = false; setPhase(Phase.ERROR, err); return@launch }
                 startedPlayback(centre)
             }
@@ -581,7 +588,8 @@ object Radio {
                         adcOverloads = a[8].toInt(), noiseFloor = a[11],
                         freqB = a[13].toLong(), modeB = a[14].toInt(), ritOn = a[15] != 0.0, rit = a[16].toLong(),
                         ctun = a[17] != 0.0, locked = a[18] != 0.0, split = a[19] != 0.0, band = a[21].toInt(),
-                        bandstack = a[22].toInt(), filter = a[23].toInt(), agc = a[24].toInt(), rows = a[25].toLong(), ritStep = a[26].toInt(),
+                        bandstack = a[22].toInt(), filter = a[23].toInt(), agc = a[24].toInt(), rows = a[25].toLong(),
+                        ritStep = if (System.currentTimeMillis() - lastRitMs > 800) a[26].toInt() else status.value.ritStep,
                     )
                     // The radio moves the frequency itself on band changes, A/B swaps and memory
                     // recalls: follow it, unless the user is tuning right now.
@@ -613,6 +621,7 @@ object Radio {
                     }
                 }
                 if (++tick % 4 == 0) pollPeaks(pk)
+                if (tick % 20 == 0 && running && !playback.value) Hl2.readChannels()   // the 60 m markers, about once a second
                 // the radio changes these itself on a mode change (per-mode settings)
                 if (tick % 6 == 0 && running && System.currentTimeMillis() - lastDspMs > 800 &&
                     Native.dspGet(dv) == Dsp.COUNT) {

@@ -20,6 +20,10 @@ while True:
         off = f.tell(); dlen = n; break
     else:
         f.seek(n + (n & 1), 1)
+import os
+# a recording cut short (or written as a stream) can claim more data than the file holds, or 0 / 0xFFFFFFFF
+avail = os.path.getsize(src) - off
+if dlen in (0, 0xFFFFFFFF) or dlen > avail: dlen = avail
 if tag == 1 and bits == 16:
     x = np.memmap(src, dtype=np.int16, mode='r', offset=off, shape=(dlen // 4, 2))   # only the data chunk
     x = x[:int(secs * sr)].astype(np.float64)

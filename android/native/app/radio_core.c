@@ -120,10 +120,26 @@ void droid_hl2_set(int field, double v) { post((cmd){ .type = CMD_HL2, .a = fiel
 void droid_set_band_rx_ant(int band, int ant) { post((cmd){ .type = CMD_ANT, .a = band, .b = ant }); }
 void droid_set_rit_step(int hz) { post((cmd){ .type = CMD_RIT_STEP, .a = hz }); }
 int droid_band_rx_ant(int band) { return band >= 0 && band < BANDS ? band_get_band(band)->alexRxAntenna : 0; }
+/* the region's 60 m channels, copied on the loop thread when the region changes (radio_change_region()
+ * writes the count and the table pointer separately), read by the UI under the lock */
+static pthread_mutex_t ch60_lock = PTHREAD_MUTEX_INITIALIZER;
+static long long ch60_f[16], ch60_w[16];
+static int ch60_n;
+static void snapshot_60m(void) {
+  pthread_mutex_lock(&ch60_lock);
+  ch60_n = 0;
+  if (region != REGION_VFO && band_channels_60m != NULL)   /* "NONE (VFO)": no markers (rx_panadapter.c) */
+    for (int i = 0; i < channel_entries && i < 16; i++, ch60_n++) {
+      ch60_f[i] = band_channels_60m[i].frequency;
+      ch60_w[i] = band_channels_60m[i].width;
+    }
+  pthread_mutex_unlock(&ch60_lock);
+}
 int droid_channels_60m(long long *freq, long long *width, int max) {
-  if (region == REGION_VFO || band_channels_60m == NULL) return 0;   /* "NONE (VFO)": no markers (rx_panadapter.c) */
-  int n = channel_entries < max ? channel_entries : max;
-  for (int i = 0; i < n; i++) { freq[i] = band_channels_60m[i].frequency; width[i] = band_channels_60m[i].width; }
+  pthread_mutex_lock(&ch60_lock);
+  int n = ch60_n < max ? ch60_n : max;
+  for (int i = 0; i < n; i++) { freq[i] = ch60_f[i]; width[i] = ch60_w[i]; }
+  pthread_mutex_unlock(&ch60_lock);
   return n;
 }
 void droid_filter_preset(int index) { post((cmd){ .type = CMD_FILTER_PRESET, .a = index }); }
@@ -344,6 +360,7 @@ static void run(const cmd *c) {
     case HL2_SPLIT_OFF_BAND: disable_split_on_band_change = c->d != 0; break;   /* vfo.c reads it */
     case HL2_REGION_60M:   /* radio_menu.c's region_cb: 60 m channel markers and the 60 m band stack */
       if (c->d >= REGION_VFO && c->d <= REGION_CA && (int)c->d != region) radio_change_region((int)c->d);
+      snapshot_60m();
       break;
     case HL2_IARU_REGION:   /* radio_menu.c's iaru_region_cb: the 80 m / 40 m band stacks follow it */
       if (c->d >= 1 && c->d <= 3 && (int)c->d != iaru_region) { iaru_region = (int)c->d; band_apply_iaru_region(); }

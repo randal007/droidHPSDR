@@ -410,7 +410,8 @@ private fun SpectrumOverlay(modifier: Modifier) {
                 drawLine(edge, Offset(x(b), 0f), Offset(x(b), splitY), 1.dp.toPx())
             }
         }
-        for ((cf, cw) in ch60) mark(cf - cw / 2.0, cf + cw / 2.0, Color(0x47FFBE3C), Color(0xCCFFBE3C))
+        if (status.phase == Phase.RUNNING && !Radio.playback.value)
+            for ((cf, cw) in ch60) mark(cf - cw / 2.0, cf + cw / 2.0, Color(0x47FFBE3C), Color(0xCCFFBE3C))
         if (region == 1) {
             val pink = Color(0x73FF59A6)
             if (contestOn) {
@@ -760,7 +761,9 @@ private fun VfoPanel(freq: Long, st: Status, close: () -> Unit) {
                 Column(Modifier.weight(1f)) {
                     Text("RIT / XIT step", color = Dim, fontSize = 10.sp)
                     val steps = listOf(1, 10, 100)
-                    Seg(steps.map { "$it Hz" }, steps.indexOf(st.ritStep), h = 30) { Radio.setRitStep(steps[it]) }
+                    Seg(steps.map { "$it Hz" }, steps.indexOf(st.ritStep), enabled = Radio.running && !Radio.playback.value, h = 30) {
+                        Radio.setRitStep(steps[it])
+                    }
                 }
                 val so by Hl2.splitOff.collectAsState()
                 Toggle("Split off on band change", so, Modifier.weight(1f)) { Hl2.setSplitOff(it) }
