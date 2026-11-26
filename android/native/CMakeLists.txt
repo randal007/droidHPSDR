@@ -32,7 +32,8 @@ add_library(droidcore STATIC
   compat/glib_compat.c
   headless/radio_state.c
   headless/stubs.c
-  headless/net_target.c)
+  headless/net_target.c
+  headless/n2adr.c)
 # compat/ first so <gtk/gtk.h>, <glib.h>, <gdk/gdk.h>, <cairo.h> are the shims.
 target_include_directories(droidcore PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/compat

@@ -286,6 +286,13 @@ RX equalizer with its graph, and the remaining Display/FFT/Screen items.
 
 ### M6 — Hardware: HL2, IO board, HL2+, PA
 
+**Started 2026-11-25 (Randal):** step 1 done, `docs/M6-INVENTORY.md`
+(what each control does on an HL2, proposals, 7 questions for Randal).
+Found and fixed on the way: the HL2 filter board's per-band OC bits were
+never set (deskHPSDR's `n2adr_oc_settings()`, now `headless/n2adr.c`);
+radio check: relays click on band changes. M5 still waits for its radio
+tests and ticks.
+
 The two must-haves get their full UI here (the protocol side already works).
 
 - IO board: status, antenna selection, tuner (TUNE_IOB, AH-4), the Pico LPF

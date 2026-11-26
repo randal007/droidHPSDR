@@ -49,6 +49,7 @@
 #include "old_discovery.h"
 #include "old_protocol.h"
 #include "radio.h"
+#include "radio_menu.h"
 #include "receiver.h"
 #include "transmitter.h"
 #include "vfo.h"
@@ -188,6 +189,7 @@ int main(int argc, char **argv) {
   protocol = radio->protocol;
   n_adc = 1;
   filter_board = N2ADR;
+  n2adr_oc_settings();   /* radio.c does this for every HL2: the filter board follows the band */
   hl2_audio_codec = codec ? HL2_CODEC_AK4951 : HL2_CODEC_OFF;
   receivers = 1;
   PS_TX_FEEDBACK = 2;

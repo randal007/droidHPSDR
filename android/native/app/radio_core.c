@@ -43,6 +43,7 @@
 #include "old_discovery.h"
 #include "old_protocol.h"
 #include "radio.h"
+#include "radio_menu.h"
 #include "receiver.h"
 #include "transmitter.h"
 #include "vfo.h"
@@ -468,6 +469,8 @@ setup:
     }
     filterRestoreState();
     bandRestoreState();
+    /* like radio.c after the props file: the HL2's N2ADR filter board switches with the band */
+    n2adr_oc_settings();
     memRestoreState();
     vfo_restore_state();
     if (!have_props) {
