@@ -132,7 +132,9 @@ object Tx {
         v.value = a
         lastSetMs = System.currentTimeMillis()
         if (running) Native.txSet(field, value)
-        else if (field != PTT && field != TUNE && field != PA_FILE && field < LIVE) synchronized(pending) { pending.add(field) }
+        // events and the VFO's XIT are never kept for later: they'd land on the radio at the next start
+        else if (field != PTT && field != TUNE && field != PA_FILE && field != XIT && field != XIT_ON && field < LIVE)
+            synchronized(pending) { pending.add(field) }
     }
 
     fun setEnabled(on: Boolean) {
@@ -254,7 +256,7 @@ object Tx {
     /** Why the last PTT/TUNE didn't transmit (transmit.c TXR_*); read once per press. */
     fun refusal(): String = when (v.value[REFUSED].toInt()) {
         1 -> "Transmit is off: turn it on in ☰ → TX"
-        2 -> "TX inhibit input from the IO board"
+        2 -> "External TX inhibit input (IO1) is active: see ☰ → TX"
         3 -> "CW transmit comes with M7 step 3: switch to SSB"
         4 -> "Out of band: no transmit here"
         5 -> "TX timeout: let go of PTT, then press again"
@@ -550,12 +552,18 @@ internal fun PaSheet() {
                 color = Dim, fontSize = 10.5.sp)
             SmallButton("Reset to 38.8", Modifier.fillMaxWidth()) { Tx.PA_BANDS.forEach { (_, b) -> Tx.set(Tx.PA_CAL0 + b, 38.8) } }
             // pa_menu.c Save / Import with band.c's own file (pa_calibration_<radio>.props, in the app's folder)
+            val live = Radio.running && !Radio.playback.value
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                SmallButton("Save", Modifier.weight(1f)) { Tx.set(Tx.PA_FILE, 1.0) }
-                SmallButton("Load saved", Modifier.weight(1f)) { Tx.set(Tx.PA_FILE, 2.0) }
+                SmallButton("Save", Modifier.weight(1f)) {
+                    if (live) Tx.set(Tx.PA_FILE, 1.0) else Tx.note.value = "Start the radio to save or load" to System.currentTimeMillis()
+                }
+                SmallButton("Load saved", Modifier.weight(1f)) {
+                    if (live) Tx.set(Tx.PA_FILE, 2.0) else Tx.note.value = "Start the radio to save or load" to System.currentTimeMillis()
+                }
             }
             when (v[Tx.PA_FILE_OK].toInt()) {
                 1 -> Text("Saved", color = Grn, fontSize = 10.5.sp)
+                -1 -> Text("Could not save the file", color = Red, fontSize = 10.5.sp)
                 2 -> Text("Loaded", color = Grn, fontSize = 10.5.sp)
                 -2 -> Text("No saved calibration for this radio", color = Amb, fontSize = 10.5.sp)
             }

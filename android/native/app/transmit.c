@@ -107,8 +107,8 @@ static atomic_int timeouts;            /* times the timeout ended a transmission
 static atomic_int refused;             /* last refusal reason, for the UI (TXR_*) */
 static long long tx_since_us;          /* when this transmission started (loop thread) */
 static atomic_int tx_since_s;          /* seconds on the air, for the UI */
-static atomic_int timed_out;
-static atomic_int pa_file_ok;          /* last PA calibration Save (1) / Load (2, -2 failed) */           /* the timeout ended a screen PTT: no TX until it is released */
+static atomic_int timed_out;           /* the timeout ended a screen PTT: no TX until it is released */
+static atomic_int pa_file_ok;          /* last PA calibration Save (1, -1 failed) / Load (2, -2 failed) */
 
 static long long now_us(void) { return g_get_monotonic_time(); }
 
@@ -846,6 +846,8 @@ void droid_tx_create(int pixels) {
   GetPropI0("OCmemory_tune_time", OCmemory_tune_time);
   GetPropI0("droid_tx_timeout_s", tx_timeout_s);
   GetPropI0("enable_tx_inhibit", enable_tx_inhibit);
+  int split_saved = 0;
+  GetPropI0("split", split_saved);   /* radio.c restores it; applied once the transmitter exists */
   if (pa_power < PA_1W || pa_power > PA_5W + 12) pa_power = PA_5W;
   transmitter = tx_create_transmitter(CHANNEL_TX, pixels, pixels, 200);
   can_transmit = 1;
@@ -860,6 +862,7 @@ void droid_tx_create(int pixels) {
   g_strlcpy(transmitter->microphone_name, "phone", sizeof transmitter->microphone_name);
   if (device == DEVICE_HERMES_LITE2) reassign_pa_trim();
   radio_calc_drive_level();
+  if (split_saved) radio_set_split(1);
   droid_log("transmitter: drive %d, tune drive %d, PA %s, mic gain %.1f dB, TX filter %d..%d, timeout %d s",
             transmitter->drive, transmitter->tune_drive, pa_enabled ? "on" : "off", transmitter->mic_gain,
             transmitter->filter_low, transmitter->filter_high, atomic_load(&tx_timeout_s));
@@ -879,6 +882,7 @@ void droid_tx_save(void) {
   SetPropI0("OCmemory_tune_time", OCmemory_tune_time);
   SetPropI0("droid_tx_timeout_s", atomic_load(&tx_timeout_s));
   SetPropI0("enable_tx_inhibit", enable_tx_inhibit);
+  SetPropI0("split", split);
   tx_save_state(transmitter);
 }
 
@@ -991,14 +995,15 @@ void droid_tx_apply(int field, double v) {
   case TX_XIT_ON: vfo_xit_onoff(v != 0); break;
   case TX_XIT: vfo_xit_value((long long)clampd(v, -9999, 9999)); break;
   case TX_PA_FILE: {   /* pa_menu.c Save / Import, with band.c's own functions and file name */
+    char name[64], file[128];
+    snprintf(name, sizeof name, "%s", radio->name);
+    for (size_t i = 0; name[i]; i++) if (!isalnum((unsigned char)name[i])) name[i] = '_';
+    snprintf(file, sizeof file, "pa_calibration_%s.props", name);   /* band.c make_pa_calibration_filename() */
     if (v == 1) {
+      unlink(file);   /* so only a fresh write counts as saved */
       PaCalibrationSave();
-      atomic_store(&pa_file_ok, 1);
+      atomic_store(&pa_file_ok, access(file, R_OK) == 0 ? 1 : -1);
     } else if (v == 2) {
-      char name[64], file[128];
-      snprintf(name, sizeof name, "%s", radio->name);
-      for (size_t i = 0; name[i]; i++) if (!isalnum((unsigned char)name[i])) name[i] = '_';
-      snprintf(file, sizeof file, "pa_calibration_%s.props", name);   /* band.c make_pa_calibration_filename() */
       int ok = PaCalibrationLoad(file);
       atomic_store(&pa_file_ok, ok ? 2 : -2);
       radio_calc_drive_level();
@@ -1010,6 +1015,7 @@ void droid_tx_apply(int field, double v) {
       BAND *b = band_get_band(field - TX_PA_CAL0);
       b->pa_calibration = clampd(v, 38.8, 70.0);
       radio_calc_drive_level();
+      atomic_store(&pa_file_ok, 0);   /* "Saved" / "Loaded" no longer describes what's set */
     }
     break;
   }
