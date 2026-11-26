@@ -11,6 +11,7 @@
  */
 #ifndef DROID_APP_H
 #define DROID_APP_H
+#include <stdatomic.h>
 #include <stdint.h>
 
 /* ---- spectrum rows: display_bridge.c fills, the renderer drains ---- */
@@ -65,7 +66,14 @@ typedef struct {
   int fps;             /* spectrum rows per second */
   char radio_ip[64];   /* empty: broadcast discovery */
   char props_dir[256]; /* where deskHPSDR's <MAC>.props file lives */
+  char playback[512];  /* an IQ recording (WAV) to play instead of the radio; freq = its centre */
 } droid_start_opts;
+
+/* playback.c: an IQ recording in place of the radio (the demo band) */
+int droid_playback_open(const char *path, int *sample_rate, char *msg, int msglen);
+void droid_playback_run(void);
+void droid_playback_stop(void);
+extern atomic_int droid_playback_on;
 
 /* Discovery, receiver set-up as radio.c does for an HL2, stream start.
  * Returns 0 when streaming, else a negative error (see radio_core.c). */

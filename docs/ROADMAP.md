@@ -294,6 +294,18 @@ radio check: relays click on band changes. Picks B (settings) and E2 fix
 B built the same day (see M6-INVENTORY.md); gateware flashing is a
 separate step. M5 still waits for its radio tests and ticks.
 
+**Demo band from an IQ recording (Randal, 2026-11-25):** ☰ → Discovery →
+Demo band plays the first .wav in the app's folder on the phone
+(`Android/data/io.github.randal007.droidhpsdr/files`) through deskHPSDR's
+real receiver (`android/native/app/playback.c`, fed through
+rx_add_iq_samples, looping, tuned inside the recording like CTUN, sound on
+the phone; HL2+ audio diverted with `-Wl,--wrap=old_protocol_audio_samples`).
+No .wav there: the old made-up band. Test file: RFSPACE's 20 m demo
+recording (2004, 14.225 MHz, busy SSB), converted to 192 kHz by
+`tools/iq_convert.py`, put on the phone by `tools/push-demo-iq.sh`. **It
+has no licence: test only, never in git or the APK; remove before a
+release.** A "choose IQ file" button waits for a picture. Not run yet.
+
 The two must-haves get their full UI here (the protocol side already works).
 
 - IO board: status, antenna selection, tuner (TUNE_IOB, AH-4), the Pico LPF

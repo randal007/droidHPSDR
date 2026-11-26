@@ -219,11 +219,13 @@ object Radio {
     val wifiIp = MutableStateFlow("")
 
     private lateinit var prefs: SharedPreferences
+    private lateinit var appCtx: Context
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var poll: Job? = null
 
     fun init(ctx: Context) {
         if (::prefs.isInitialized) return
+        appCtx = ctx.applicationContext
         prefs = ctx.getSharedPreferences("radio", Context.MODE_PRIVATE)
         freq.value = prefs.getLong("freq", 14_074_000L)
         Disp.init(ctx)
@@ -272,7 +274,7 @@ object Radio {
         freq.value = f
         if (running) Native.setFrequency(f)
         if (status.value.phase == Phase.DEMO) Native.demoSetFrequency(f)
-        prefs.edit().putLong("freq", f).apply()
+        if (!playback.value) prefs.edit().putLong("freq", f).apply()   // tuning inside a recording isn't the radio's frequency
     }
 
     /** deskHPSDR's mode change: the mode brings back its own filter, AGC and step (vfo.c). */
@@ -337,7 +339,7 @@ object Radio {
      * row, so ~4 screens of real data to drag into instead of black.
      */
     /** The sample rate the stream runs at: just after a restart the poll hasn't caught up yet. */
-    private fun rate() = if (running) sampleRate.value.toDouble() else status.value.sampleRate.toDouble()
+    private fun rate() = if (running && !playback.value) sampleRate.value.toDouble() else status.value.sampleRate.toDouble()
 
     fun applyZoom() {
         if (!running) return
@@ -446,9 +448,24 @@ object Radio {
         if (p == Phase.RUNNING || p == Phase.DEMO) startPolling() else poll?.cancel()
     }
 
-    /** The made-up band, so the display can be worked on with the radio off. */
+    /** The demo band is playing an IQ recording (playback.c) instead of the radio. */
+    val playback = MutableStateFlow(false)
+    private var freqBeforePlayback = 0L
+
+    /**
+     * The demo's IQ recording: the first .wav in the app's own folder on the phone
+     * (Android/data/io.github.randal007.droidhpsdr/files). Its centre comes from the
+     * file name, as SDR++ and SDR# write it (..._14225000Hz_...).
+     */
+    fun iqFile(): java.io.File? =
+        appCtx.getExternalFilesDir(null)?.listFiles { f -> f.name.endsWith(".wav", ignoreCase = true) }
+            ?.sortedBy { it.name }?.firstOrNull()
+
+    /** The demo band: the saved IQ recording if there is one, else the made-up band (display work, no sound). */
     fun startDemo() {
-        if (running) return
+        if (running || status.value.phase == Phase.CONNECTING) return
+        val file = iqFile()
+        if (file != null) { startPlayback(file); return }
         Native.demoSetFrequency(freq.value)
         Native.demoSetFps(fps.value)
         Native.demoStart()
@@ -456,7 +473,37 @@ object Radio {
         applyModeFilter()
     }
 
+    private fun startPlayback(file: java.io.File) {
+        val centre = Regex("(\\d{6,9})Hz", RegexOption.IGNORE_CASE).find(file.name)?.groupValues?.get(1)?.toLong()
+            ?: freq.value
+        val mode = if (centre >= 10_000_000) Modes.USB else Modes.LSB
+        setPhase(Phase.CONNECTING, "IQ recording ${file.name}")
+        scope.launch {
+            val err = Native.startPlayback(file.absolutePath, centre, mode, PIXELS, fps.value, appCtx.filesDir.absolutePath)
+            if (err.isNotEmpty()) { setPhase(Phase.ERROR, err); return@launch }
+            freqBeforePlayback = freq.value
+            playback.value = true
+            lastTuneMs = 0
+            freq.value = centre
+            val a = DoubleArray(26)
+            Native.status(a)   // the recording's own sample rate, before the span is fitted to it
+            status.value = status.value.copy(sampleRate = a[5].toInt())
+            Native.setVolumeDb(volumeDb.value)
+            setPhase(Phase.RUNNING, "", "IQ recording")
+            Native.setPhoneAudio(true)   // there's no HL2+ speaker: the recording plays on the phone
+            setSpan(span.value)
+            setDisplay()
+        }
+    }
+
     fun stopDemo() {
+        if (playback.value) {
+            Native.stop()
+            playback.value = false
+            freq.value = freqBeforePlayback
+            setPhase(Phase.IDLE)
+            return
+        }
         if (status.value.phase == Phase.DEMO) setPhase(Phase.IDLE)
     }
 

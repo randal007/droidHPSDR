@@ -168,8 +168,9 @@ fun Screen(onStart: () -> Unit, onStop: () -> Unit) {
 
             if (showChips) ChipRow(status, { sheet = it; fromMenu = false }, Modifier.align(Alignment.BottomStart).padding(10.dp))
 
-            if (status.phase == Phase.DEMO) {
-                Text("DEMO · no radio", color = Amb, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+            val playing by Radio.playback.collectAsState()
+            if (status.phase == Phase.DEMO || playing) {
+                Text(if (playing) "DEMO · IQ recording" else "DEMO · no radio", color = Amb, fontSize = 12.sp, fontWeight = FontWeight.Bold,
                     modifier = Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 112.dp)
                         .glass(8).padding(horizontal = 8.dp, vertical = 3.dp))
             } else if (status.phase != Phase.RUNNING) {
@@ -1282,12 +1283,12 @@ private fun DiscoverySheet(st: Status, onStart: () -> Unit, onStop: () -> Unit, 
         IpField(wifi, "radio's IP on your WiFi", Modifier.weight(1f)) { Radio.setWifiIp(it) }
     }
     GridButtons(
-        listOf(if (st.phase == Phase.RUNNING) "Stop radio" else "Start radio",
-            if (st.phase == Phase.DEMO) "Stop demo" else "Demo band"), null, 2,
+        listOf(if (st.phase == Phase.RUNNING && !Radio.playback.value) "Stop radio" else "Start radio",
+            if (st.phase == Phase.DEMO || Radio.playback.value) "Stop demo" else "Demo band"), null, 2,
     ) {
         when (it) {
-            0 -> { if (st.phase == Phase.RUNNING) onStop() else onStart(); close() }
-            else -> { if (st.phase == Phase.DEMO) Radio.stopDemo() else Radio.startDemo(); close() }
+            0 -> { if (st.phase == Phase.RUNNING && !Radio.playback.value) onStop() else onStart(); close() }
+            else -> { if (st.phase == Phase.DEMO || Radio.playback.value) Radio.stopDemo() else Radio.startDemo(); close() }
         }
     }
     val pm = ctx.getSystemService(PowerManager::class.java)

@@ -64,6 +64,8 @@ object Native {
     external fun demoStop()
     external fun demoSetFrequency(hz: Long)
     external fun demoSetFps(fps: Int)
+    /** The demo band from an IQ recording (playback.c): "" when playing, else why not. */
+    external fun startPlayback(path: String, centreHz: Long, mode: Int, pixels: Int, fps: Int, propsDir: String): String
 
     // M6: the HL2's settings (field: droid_app.h HL2_*), IO board status "iob|pico|lpf|gateware",
     // and HL2 setup over UDP 1025 (blocking: call off the main thread; "" = done, else the error)

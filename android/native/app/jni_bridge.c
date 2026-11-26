@@ -103,6 +103,24 @@ JNIEXPORT jstring JNICALL FN(start)(JNIEnv *env, jobject self, jlong freq, jint 
   return (*env)->NewStringUTF(env, rc == 0 ? "" : msg);
 }
 
+/* the demo band: an IQ recording in place of the radio (playback.c); freq = the recording's centre */
+JNIEXPORT jstring JNICALL FN(startPlayback)(JNIEnv *env, jobject self, jstring path, jlong freq, jint mode,
+                                            jint pixels, jint fps, jstring props_dir) {
+  (void)self;
+  droid_start_opts o = { .freq = freq, .mode = mode, .lna_db = 0, .codec = 0, .sample_rate = 192000,
+                         .pixels = pixels, .fps = fps };
+  const char *s = (*env)->GetStringUTFChars(env, path, NULL);
+  snprintf(o.playback, sizeof o.playback, "%s", s);
+  (*env)->ReleaseStringUTFChars(env, path, s);
+  s = (*env)->GetStringUTFChars(env, props_dir, NULL);
+  snprintf(o.props_dir, sizeof o.props_dir, "%s", s);
+  (*env)->ReleaseStringUTFChars(env, props_dir, s);
+  char msg[256] = "";
+  int rc = droid_radio_start(&o, msg, sizeof msg);
+  droid_log("playback: %d %s", rc, msg);
+  return (*env)->NewStringUTF(env, rc == 0 ? "" : msg);
+}
+
 JNIEXPORT void JNICALL FN(stop)(JNIEnv *env, jobject self) { (void)env; (void)self; droid_radio_stop(); }
 
 JNIEXPORT void JNICALL FN(setFrequency)(JNIEnv *env, jobject self, jlong hz) {

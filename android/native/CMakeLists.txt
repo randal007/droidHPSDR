@@ -70,9 +70,12 @@ add_library(droidhpsdr SHARED
   app/display_bridge.c
   app/gl_render.c
   app/jni_bridge.c
-  app/hl2.c)
+  app/hl2.c
+  app/playback.c)
 target_include_directories(droidhpsdr PRIVATE app)
 target_compile_options(droidhpsdr PRIVATE -Wall -Wno-unused-parameter)
 target_link_libraries(droidhpsdr droidcore GLESv3 aaudio)
+# playback.c: no HL2+ audio while an IQ recording plays (receiver.c's call goes through playback.c)
+target_link_options(droidhpsdr PRIVATE -Wl,--wrap=old_protocol_audio_samples)
 # 16 KB page devices (Android 15+): NDK 27 still links for 4 KB by default.
 target_link_options(droidhpsdr PRIVATE "-Wl,-z,max-page-size=16384")

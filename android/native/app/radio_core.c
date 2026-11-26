@@ -177,6 +177,25 @@ static void droid_radio_save_now(void) {
 }
 
 static void run(const cmd *c) {
+  /* An IQ recording can't be retuned: tune inside it like CTUN, and leave
+   * out what would move its centre (band, band stack, memories, VFO swaps). */
+  if (atomic_load(&droid_playback_on)) {
+    switch (c->type) {
+    case CMD_FREQ: {
+      long long half = receiver[0]->sample_rate / 2 - 3000, f = c->i;
+      if (f < vfo[0].frequency - half) f = vfo[0].frequency - half;
+      if (f > vfo[0].frequency + half) f = vfo[0].frequency + half;
+      vfo[0].ctun = 1;
+      vfo[0].ctun_frequency = f;
+      rx_frequency_changed(receiver[0]);
+      return;
+    }
+    case CMD_BAND: case CMD_BANDSTACK: case CMD_VFO_OP: case CMD_CTUN: case CMD_MEMORY:
+      return;
+    default:
+      break;
+    }
+  }
   RECEIVER *rx = receiver[0];
   switch (c->type) {
   case CMD_FREQ:
@@ -330,7 +349,9 @@ static void run(const cmd *c) {
 
 static atomic_int running;
 static pthread_t loop_thread;
-static int p1_started;   /* old_protocol_init done: the radio is found and the protocol set up */
+static int p1_started;
+static DISCOVERED *real_radio;   /* the HL2 discovery found (radio points elsewhere while a recording plays) */
+static DISCOVERED pb_radio;      /* the recording, as a radio */   /* old_protocol_init done: the radio is found and the protocol set up */
 
 static void *loop(void *arg) {
   (void)arg;
@@ -415,6 +436,20 @@ static int radio_start_locked(const droid_start_opts *o, char *msg, int msglen) 
   if (atomic_load(&running)) return 0;
   droid_demo_stop();   /* the demo never feeds the display while the radio does */
 
+  /* ---- an IQ recording instead of the radio (the demo band) ---- */
+  int pb_rate = 0;
+  const int pb = o->playback[0] != 0;
+  if (pb) {
+    if (droid_playback_open(o->playback, &pb_rate, msg, msglen) != 0) return -1;
+    memset(&pb_radio, 0, sizeof pb_radio);
+    pb_radio.device = DEVICE_HERMES_LITE2;
+    pb_radio.protocol = ORIGINAL_PROTOCOL;
+    snprintf(pb_radio.name, sizeof pb_radio.name, "IQ recording");
+    radio = &pb_radio;
+    goto setup;
+  }
+  if (real_radio) radio = real_radio;
+
   /* ---- discovery: deskHPSDR's own; once, like old_protocol_init ---- */
   if (p1_started) {
     /* old_protocol.c keeps the radio's address from its one-time init
@@ -448,6 +483,7 @@ static int radio_start_locked(const droid_start_opts *o, char *msg, int msglen) 
     return -1;
   }
   radio = &discovered[pick];   /* kept for every later start */
+  real_radio = radio;
 
 setup:
   /* ---- what radio.c's start_radio() sets for an HL2 (see m1_main.c) ---- */
@@ -508,10 +544,19 @@ setup:
   }
   active_receiver = receiver[0];
   can_transmit = 0;
-  if (o->sample_rate != receiver[0]->sample_rate) {
+  const int sample_rate = pb ? pb_rate : o->sample_rate;
+  if (sample_rate != receiver[0]->sample_rate) {
     /* radio.c's radio_change_sample_rate(), with the stream stopped */
-    rx_change_sample_rate(receiver[0], o->sample_rate);
-    if (p1_started) old_protocol_set_mic_sample_rate(o->sample_rate);
+    rx_change_sample_rate(receiver[0], sample_rate);
+    if (p1_started) old_protocol_set_mic_sample_rate(sample_rate);
+  }
+  if (pb) {
+    /* the recording's centre stays put: listen inside it like CTUN */
+    vfo[0].frequency = o->freq;
+    vfo[0].ctun = 1;
+    vfo[0].ctun_frequency = o->freq;
+    vfo[0].band = get_band_from_frequency(o->freq);
+    vfo[0].mode = o->mode;
   }
   vfo_apply_mode_settings(receiver[0]);
   rx_mode_changed(receiver[0]);
@@ -537,6 +582,13 @@ setup:
            radio->software_version / 10, radio->software_version % 10);
 
   fhist_add(vfo[0].frequency);
+  if (pb) {
+    snprintf(msg, msglen, "IQ recording at %.3f MHz, %d kHz wide", o->freq / 1e6, sample_rate / 1000);
+    droid_playback_run();
+    atomic_store(&running, 1);
+    pthread_create(&loop_thread, NULL, loop, NULL);
+    return 0;
+  }
   /* old_protocol.c: "old_protocol_init is only called ONCE. old_protocol_stop
    * and old_protocol_run just send start/stop packets" - so a restart (new
    * sample rate, Stop then Start) only runs it again. */
@@ -564,7 +616,8 @@ void droid_radio_stop(void) {
     audio_close_output(receiver[0]);
   }
   droid_radio_save_now();   /* the loop thread has stopped: safe here */
-  old_protocol_stop();
+  if (atomic_load(&droid_playback_on)) droid_playback_stop();
+  else old_protocol_stop();
   droid_log("stream stopped");
   pthread_mutex_unlock(&life_lock);
   /* The receivers stay allocated: WDSP channels cannot be reopened cleanly in
