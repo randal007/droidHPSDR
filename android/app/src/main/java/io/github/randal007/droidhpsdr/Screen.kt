@@ -264,7 +264,11 @@ private fun SpectrumOverlay(modifier: Modifier) {
                 val nx = ((d0[Dsp.MNF_FREQ] - lo) / hzpx).toFloat()
                 val nHalfReal = (d0[Dsp.MNF_WIDTH] / 2 / hzpx).toFloat()
                 val nHalf = maxOf(nHalfReal, 16.dp.toPx())
-                val notchEdge = nHalfReal >= 20.dp.toPx() && abs(abs(down.position.x - nx) - nHalfReal) < 12.dp.toPx()
+                // its width: two handles on its edges, or just outside a narrow notch (NOTCH_HANDLE), so
+                // they can be grabbed at any zoom; a drag moves the edge by as much as the finger moves
+                val handleX = maxOf(nHalfReal, NOTCH_HANDLE.dp.toPx())
+                val notchEdge = notchOn && down.position.y < splitY &&
+                    abs(abs(down.position.x - nx) - handleX) < 14.dp.toPx()
                 // the squelch line (D6): drag it up and down inside the passband
                 val sqlOn = d0[Dsp.SQL_ON] != 0.0
                 val sy = sqlLineY(st.mode, d0[Dsp.SQL], splitY, top, gap, nf)
@@ -285,7 +289,7 @@ private fun SpectrumOverlay(modifier: Modifier) {
                         down.position.x > minOf(xa, xb) - 20.dp.toPx() && down.position.x < maxOf(xa, xb) + 20.dp.toPx() -> 6
                     st.agc != 0 && down.position.x < handleW && abs(down.position.y - agcY) < 16.dp.toPx() -> 7
                     (st.agc == 1 || st.agc == 2) && down.position.x < handleW && abs(down.position.y - hangY) < 16.dp.toPx() -> 8
-                    notchOn && abs(down.position.x - nx) < nHalf -> 5
+                    notchEdge || (notchOn && abs(down.position.x - nx) < nHalf) -> 5
                     minOf(dA, dB) <= edgeTol -> if (dA < dB) 1 else 2
                     st.ritOn && down.position.x > xa && down.position.x < xb -> 3
                     else -> 0
@@ -337,7 +341,8 @@ private fun SpectrumOverlay(modifier: Modifier) {
                                 Radio.setDsp(Dsp.MNF, 0.0)   // pushed off the top: gone
                             } else if (Radio.dsp.value[Dsp.MNF] != 0.0) {
                                 if (notchEdge) {
-                                    val wHz = (2 * abs(c.position.x - nx) * hzpx).coerceIn(10.0, 15000.0)
+                                    val halfPx = nHalfReal + abs(c.position.x - nx) - abs(down.position.x - nx)
+                                    val wHz = (2 * halfPx * hzpx).coerceIn(10.0, 15000.0)
                                     Radio.setDsp(Dsp.MNF_WIDTH, (wHz / 10).roundToInt() * 10.0)
                                 } else {
                                     Radio.setDsp(Dsp.MNF_FREQ, (d0[Dsp.MNF_FREQ] + dx * hzpx).roundToLong().toDouble())
@@ -432,6 +437,18 @@ private fun SpectrumOverlay(modifier: Modifier) {
             drawRect(Color(0x38FF4D4D), Offset(cx - half, 0f), Size(2 * half, h))
             drawLine(Color(0xD9FF5A5A), Offset(cx - half, 0f), Offset(cx - half, h), 1.5.dp.toPx())
             drawLine(Color(0xD9FF5A5A), Offset(cx + half, 0f), Offset(cx + half, h), 1.5.dp.toPx())
+            // width handles: on the edges, or just outside when the notch is narrower than them
+            val hx = maxOf(half, NOTCH_HANDLE.dp.toPx())
+            val hy = splitY * 0.55f
+            for (sx in floatArrayOf(cx - hx, cx + hx)) {
+                if (hx > half) drawLine(Color(0x99FF5A5A), Offset(if (sx < cx) sx else cx + half, hy),
+                    Offset(if (sx < cx) cx - half else sx, hy), 1.dp.toPx())
+                drawRoundRect(Color(0xFFFF5A5A), Offset(sx - 3.dp.toPx(), hy - 13.dp.toPx()), Size(6.dp.toPx(), 26.dp.toPx()),
+                    CornerRadius(3.dp.toPx()))
+                drawRoundRect(Color.White.copy(alpha = 0.8f), Offset(sx - 3.dp.toPx(), hy - 13.dp.toPx()),
+                    Size(6.dp.toPx(), 26.dp.toPx()), CornerRadius(3.dp.toPx()),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(1.dp.toPx()))
+            }
         }
 
         // the squelch line across the passband, with its level (dBm only in AM: see sqlLabel)
@@ -560,6 +577,9 @@ private fun SpectrumOverlay(modifier: Modifier) {
         }
     }
 }
+
+// the notch's width handles sit at least this far (dp) from its centre
+private const val NOTCH_HANDLE = 22
 
 // E2: the dB scale strip (dp): its width, and its top (under the round buttons)
 private const val SCALE_W = 46
