@@ -13,8 +13,9 @@ next, what's waiting on whom. Session history lives in git and in
   reviewed and installed (60 m band bar follows the channel set, RIT drag
   in RIT steps, bottom row scrolls, toolbar editor, replug: faster retry +
   "Waiting for the HL2" note; the ~20 s is the HL2's DHCP wait). Check them
-  on the radio in passing. **Next session:** (1) tag `m5-done` and
-  `m6-done` once Randal agrees; (2) **start M7** (transmit, Randal 2026-11-25): its plan is the
+  on the radio in passing. **Randal 2026-11-25: everything up to
+  M7 is done and he's happy** (tweaks later, once the app is complete);
+  tagged `m5-done` and `m6-done`. **Next session: start M7** (transmit, Randal 2026-11-25): its plan is the
   M7 section below; step 1 of "How each section is done" is the inventory.
   Gateware flashing from the phone goes on the later list (Randal: not
   needed now, scary). Only explicitly checked items are ticked in FEATURES.md.
@@ -34,7 +35,8 @@ next, what's waiting on whom. Session history lives in git and in
   findings fixed in the next commit). **Next review starts after the
   2026-11-25 offload commit.** Workflow
   (Randal): build → `/code-review` the new commits → fix → install.
-  Tags: `m1-done` (master tip), `m3-done` (e580fa6).
+  Tags: `m1-done` (master tip), `m3-done` (e580fa6), `m5-done` and
+  `m6-done` (2026-11-25, the offload commit; M4 is inside m5-done).
 - **Waiting on Randal:** the radio test; his own background pictures (an
   ESO set was tried and reverted: too similar); gateware flashing from the
   phone (own step, with him watching); whether to delete the empty repo
@@ -214,7 +216,7 @@ silent stream, tap the frequency to type one.
   profile can be copied over.
 - FEATURES.md: VFO, Band, Bandstack, Mode, Filter, AGC, Meter, Store, RX.
 
-### M5 — Receive DSP *(built 2026-11-25; radio test pending)*
+### M5 — Receive DSP *(done 2026-11-25, tag m5-done)*
 
 **What:** deskHPSDR's Noise menu (NB/NB2, NR/NR2/NR3/NR4, NNR with its
 models, ANF, SNB, MNF notches, NR position pre/post AGC, all the NR2/NR4/NB
@@ -253,7 +255,7 @@ the LEVELS chip's side panel (pick A, picture G1) as too hard to use. AGC
 lines fade 3 s after a change. 2D background pictures (Thetis-style): 10
 NASA photos, Display → Look. All built, none tried on the radio yet.
 
-### M6 — Hardware: HL2, IO board, HL2+, PA *(built 2026-11-25 except gateware flashing; radio test pending)*
+### M6 — Hardware: HL2, IO board, HL2+, PA *(done 2026-11-25, tag m6-done; gateware flashing later)*
 
 **Started 2026-11-25 (Randal):** step 1 done, `docs/M6-INVENTORY.md`
 (what each control does on an HL2, proposals, 7 questions for Randal).
