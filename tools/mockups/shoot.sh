@@ -6,7 +6,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 out=${1:?outdir}; shift
 mkdir -p "$out"
 ids=("$@")
-[ ${#ids[@]} -eq 0 ] && ids=($(grep -hoE '^  [LPWVXYZKTDEF][0-9]+:' "$here"/layouts*.js | tr -d ' :'))
+[ ${#ids[@]} -eq 0 ] && ids=($(grep -hoE '^  [LPWVXYZKTDEFG][0-9]+:' "$here"/layouts*.js | tr -d ' :'))
 for id in "${ids[@]}"; do
   if [[ $id == P* ]]; then size=384,832; else size=832,384; fi
   chromium --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=3.75 \
