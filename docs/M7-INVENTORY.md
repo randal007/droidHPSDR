@@ -44,7 +44,8 @@ settings, off by default.
    the real receiver (`playback.c`). **Proposed:** MOX, TUNE, VOX and the
    mic PTT are refused while the demo runs, and the demo refuses to start
    while transmitting.
-3. **What the HL2 does when the app stops mid-transmission is unknown.**
+3. **Answered 2026-11-25 (Randal, on the air): the HL2 unkeys when the app is
+   force-stopped and when the Ethernet adapter is pulled.** Was: what the HL2 does when the app stops mid-transmission is unknown.
    It could happen if the app is killed, the Ethernet adapter is pulled or
    the phone reboots. old_protocol.c sends 20 ms PTT hang and 40 ms TX
    latency (12 ms in CW) to the HL2 (register 0x2E). I don't know from the

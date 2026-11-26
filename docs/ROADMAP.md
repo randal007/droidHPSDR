@@ -339,8 +339,10 @@ input. **Not run on the radio yet.**
 TUNE works and stays on (after the watchdog fix), 3.2 W at tune drive 18 %.
 Phone mic: after raising MIC GAIN, ALC peaks -0.7..-5 dB, HL2 fwd 0.1-0.17 W
 (averaged meter, SSB). Bluetooth mic: ALC 0.0 dB, WDSP mic +1..+1.6 dB (a
-little hot: one mic gain for all sources, as deskHPSDR). HL2+ jack, the
-timeout and the force-stop / adapter-pull checks: not done yet.
+little hot: one mic gain for all sources, as deskHPSDR). **Force-stopping the
+app or pulling the Ethernet adapter while transmitting: the HL2 unkeys** (Randal).
+Not done yet: the HL2+ jack mic (no mic at hand: skipped for now), the
+timeout, the HL2+ mic PTT.
 
 **First on-air check (low drive, Randal watching the XPA125B):**
 1. TX page: Transmit enabled off → PTT shows the lock and refuses.

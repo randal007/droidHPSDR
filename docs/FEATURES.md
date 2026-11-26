@@ -399,7 +399,7 @@ Which milestone each section belongs to: docs/ROADMAP.md.
 - [ ] BIAS Enabled
 - [ ] Split operation
 - [ ] Mute RX when TX
-- [ ] HL2 5W PA enable
+- [x] HL2 5W PA enable (checked on the radio 2026-11-25)
 - [ ] PA enable
 - [ ] Duplex operation
 - [ ] HL2 Force IO Board
@@ -494,7 +494,7 @@ Which milestone each section belongs to: docs/ROADMAP.md.
 - [ ] Save
 - [ ] Import file
 - [ ] Export file
-- [ ] Use computer audio input
+- [x] Use computer audio input (the phone / Bluetooth mic) (checked on the radio 2026-11-25)
 - [ ] SDR Radio Input
 - [ ] Mic In  _(choice)_
 - [ ] Mic Boost  _(choice)_
@@ -505,7 +505,7 @@ Which milestone each section belongs to: docs/ROADMAP.md.
 - [ ] Local Mic PreAmp Gain
 - [ ] TX Filter High
 - [ ] Tune Drive ≙ TX drive
-- [ ] Tune Drive level
+- [x] Tune Drive level (checked on the radio 2026-11-25)
 - [ ] Use Drive levels per Band
 - [ ] Tune Drive Stepping
 - [ ] Panadapter High
@@ -843,14 +843,14 @@ Each needs a home in the phone UI (button, gesture, slider, menu entry) or a "no
 - [ ] Lock
 - [ ] Main Menu
 - [ ] Memory Menu
-- [ ] Mic Gain
+- [x] Mic Gain (checked on the radio 2026-11-25)
 - [ ] MNF On/Off
 - [ ] MNF Center
 - [ ] MNF BW
 - [ ] Mode -
 - [ ] Mode +
 - [ ] Mode Menu
-- [ ] MOX
+- [x] MOX (the PTT chip, held) (checked on the radio 2026-11-25)
 - [ ] Multi
 - [ ] Multi Action Select
 - [ ] Multi Toggle
@@ -886,7 +886,7 @@ Each needs a home in the phone UI (button, gesture, slider, menu entry) or a "no
 - [ ] Preamp On/Off
 - [ ] PS On/Off
 - [ ] PS Menu
-- [ ] PTT
+- [x] PTT (screen PTT; the HL2+ mic PTT not tried yet) (checked on the radio 2026-11-25)
 - [ ] Quick Split
 - [ ] Rcl 0
 - [ ] Rcl 1
@@ -943,15 +943,15 @@ Each needs a home in the phone UI (button, gesture, slider, menu entry) or a "no
 - [ ] ToolBar6
 - [ ] ToolBar7
 - [ ] ToolBar8
-- [ ] Tune
-- [ ] Tune (toggle)
+- [x] Tune (checked on the radio 2026-11-25)
+- [x] Tune (toggle) (the TUNE button) (checked on the radio 2026-11-25)
 - [ ] Tune IOB
-- [ ] Tune Drv
+- [x] Tune Drv (checked on the radio 2026-11-25)
 - [ ] Tune Full
 - [ ] Tune Mem
 - [ ] AH-4 Run
 - [ ] AH-4 Bypass
-- [ ] TX Drive
+- [x] TX Drive (checked on the radio 2026-11-25)
 - [ ] Two-Tone
 - [ ] TX Menu
 - [ ] VFO

@@ -57,6 +57,17 @@ droidHPSDR needs only the right settings in the headless radio state (for
 example `hl2_audio_codec = HL2_CODEC_AK4951`, filter board) and a UI for the
 IO board status. The wire protocol comes with the unchanged file.
 
+## Found on the air in M7 (2026-11-25)
+
+- **The HL2 unkeys by itself when the host goes away**: force-stopping the app
+  or pulling the USB Ethernet adapter while transmitting ends the
+  transmission (Randal, HL2 → XPA125B → antenna). old_protocol.c sends 20 ms
+  PTT hang and 40 ms TX latency (12 ms in CW) in register 0x2E.
+- TUNE with the Pico (XPA125B controller) present also writes IO board
+  register 7 = 1 (deskHPSDR's TUNE); TUNE itself was fine on the air.
+- The HL2's own power meter reads the HL2's output (the XPA125B's input):
+  3.2 W at tune drive 18 %; SSB reads low on it (averaged).
+
 ## Found while building M6 (2026-11-25)
 
 - **Filter board OC bits.** On an HL2 the N2ADR filter board's relays
