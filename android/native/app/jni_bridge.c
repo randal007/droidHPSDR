@@ -167,7 +167,7 @@ JNIEXPORT void JNICALL FN(setLnaDb)(JNIEnv *env, jobject self, jdouble db) {
 /* [running, freq, mode, filterLow, filterHigh, sampleRate, meterDbm, lostPackets, adcOverloads, lna, volume,
  *  noiseFloor, phoneAudio, freqB, modeB, ritOn, rit, ctun, locked, split, step, band, bandstack, filter, agc,
  *  rows] */
-#define STATUS_N 26
+#define STATUS_N 27
 JNIEXPORT void JNICALL FN(status)(JNIEnv *env, jobject self, jdoubleArray out) {
   (void)self;
   droid_status s;
@@ -175,7 +175,7 @@ JNIEXPORT void JNICALL FN(status)(JNIEnv *env, jobject self, jdoubleArray out) {
   jdouble v[STATUS_N] = { s.running, (double)s.freq, s.mode, s.filter_low, s.filter_high, s.sample_rate,
                           s.meter_dbm, s.lost_packets, s.adc_overloads, s.lna_db, s.volume_db, s.noise_floor,
                           s.phone_audio, (double)s.freq_b, s.mode_b, s.rit_on, (double)s.rit, s.ctun, s.locked,
-                          s.split, s.step, s.band, s.bandstack, s.filter, s.agc, (double)s.rows };
+                          s.split, s.step, s.band, s.bandstack, s.filter, s.agc, (double)s.rows, s.rit_step };
   (*env)->SetDoubleArrayRegion(env, out, 0, STATUS_N, v);
 }
 
@@ -199,6 +199,25 @@ JNIEXPORT void JNICALL FN(memory)(JNIEnv *env, jobject self, jboolean store, jin
   droid_memory(store, slot);
 }
 JNIEXPORT void JNICALL FN(save)(JNIEnv *env, jobject self) { (void)env; (void)self; droid_save(); }
+
+/* M6: ANT menu, RIT step, 60 m channels */
+JNIEXPORT jint JNICALL FN(bandRxAnt)(JNIEnv *env, jobject self, jint band) { (void)env; (void)self; return droid_band_rx_ant(band); }
+JNIEXPORT void JNICALL FN(setBandRxAnt)(JNIEnv *env, jobject self, jint band, jint ant) {
+  (void)env; (void)self;
+  droid_set_band_rx_ant(band, ant);
+}
+JNIEXPORT void JNICALL FN(ritStep)(JNIEnv *env, jobject self, jint hz) { (void)env; (void)self; droid_set_rit_step(hz); }
+JNIEXPORT jstring JNICALL FN(channels60m)(JNIEnv *env, jobject self) {   /* "freq:width;..." */
+  (void)self;
+  long long f[16], w[16];
+  int n = droid_channels_60m(f, w, 16);
+  char out[512] = "";
+  for (int i = 0; i < n; i++) {
+    size_t l = strlen(out);
+    snprintf(out + l, sizeof out - l, "%s%lld:%lld", i ? ";" : "", f[i], w[i]);
+  }
+  return (*env)->NewStringUTF(env, out);
+}
 
 /* M6: HL2 settings and setup */
 JNIEXPORT void JNICALL FN(hl2Set)(JNIEnv *env, jobject self, jint field, jdouble value) {

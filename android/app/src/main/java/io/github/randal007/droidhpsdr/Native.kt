@@ -70,6 +70,12 @@ object Native {
     // M6: the HL2's settings (field: droid_app.h HL2_*), IO board status "iob|pico|lpf|gateware",
     // and HL2 setup over UDP 1025 (blocking: call off the main thread; "" = done, else the error)
     external fun hl2Set(field: Int, value: Double)
+    /** ANT menu: a band's RX antenna (0 ANT1 .. 3 EXT1 ..), deskHPSDR's band numbers. */
+    external fun bandRxAnt(band: Int): Int
+    external fun setBandRxAnt(band: Int, ant: Int)
+    external fun ritStep(hz: Int)
+    /** The 60 m channels of the chosen region: "freq:width;..." ("" for none). */
+    external fun channels60m(): String
     external fun hl2Info(): String
     external fun hl2Reboot(): String
     external fun hl2Dhcp(): String

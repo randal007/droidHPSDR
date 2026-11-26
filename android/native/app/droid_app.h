@@ -98,8 +98,14 @@ void droid_set_window(int type);       /* FFT window, Screen menu order */
 void droid_set_detector(int det);      /* 0 Peak, 1 Average, 2 Rosenfell, 3 Sample */
 void droid_set_pan_fft(int size);
 /* M6: the HL2 settings of the SDR Device sheet (radio_core.c, on the radio loop) */
-enum { HL2_CODEC, HL2_FILTER_BOARD, HL2_HPF, HL2_PPM, HL2_ADC_CAL, HL2_FORCE_IOB };
+enum { HL2_CODEC, HL2_FILTER_BOARD, HL2_HPF, HL2_PPM, HL2_ADC_CAL, HL2_FORCE_IOB,
+       HL2_SPLIT_OFF_BAND, HL2_REGION_60M, HL2_IARU_REGION };
 void droid_hl2_set(int field, double v);
+/* ANT menu: a band's RX antenna (0 ANT1, 1 ANT2, 2 ANT3, 3 EXT1, 4 EXT2, 5 XVTR) */
+int droid_band_rx_ant(int band);
+void droid_set_band_rx_ant(int band, int ant);
+void droid_set_rit_step(int hz);       /* 1, 10 or 100 (vfo.c, per mode) */
+int droid_channels_60m(long long *freq, long long *width, int max);   /* the region's 60 m channels */
 /* hl2.c: IO board detection, and HL2 setup over UDP 1025 (errors as text) */
 void droid_hl2_info(int *iob, int *pico, char *lpf, int lpf_len, int *gateware);
 int droid_hl2_read_flags(int *flags, char *error, int error_len);
@@ -154,6 +160,7 @@ typedef struct {
   long long rit;
   unsigned long long rows;   /* spectrum rows so far: data is arriving while this grows */
   int running;
+  int rit_step;
 } droid_status;
 void droid_get_status(droid_status *s);
 

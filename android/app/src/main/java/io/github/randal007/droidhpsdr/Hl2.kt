@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -56,6 +57,12 @@ internal object Hl2 {
     val ppm = MutableStateFlow(0.0)           // Freq. Calibration (ppm factor)
     val adcCal = MutableStateFlow(0)          // ADC Gain Calibration (dB)
     val forceIob = MutableStateFlow(false)    // HL2 Force IO Board
+    val splitOff = MutableStateFlow(false)    // Disable Split on Band Change
+    val region60 = MutableStateFlow(0)        // 60 m channel markers: 0 None (VFO), 1 UK, 2 US, 3 WRC-15, 4 CA
+    val beacons = MutableStateFlow(false)     // IARU protected beacon areas (Region 1)
+    val contestFree = MutableStateFlow(false) // IARU contest-free areas (Region 1)
+    /** The 60 m channels on the spectrum (Hz centre to Hz width), read from deskHPSDR's table. */
+    val channels60 = MutableStateFlow<List<Pair<Long, Long>>>(emptyList())
 
     // Native.hl2Set fields (droid_app.h)
     private const val F_CODEC = 0
@@ -64,6 +71,9 @@ internal object Hl2 {
     private const val F_PPM = 3
     private const val F_ADC = 4
     private const val F_FORCE = 5
+    private const val F_SPLIT_OFF = 6
+    private const val F_REGION60 = 7
+    private const val F_IARU = 8
 
     fun init(ctx: Context) {
         prefs = ctx.getSharedPreferences("radio", Context.MODE_PRIVATE)
@@ -73,6 +83,10 @@ internal object Hl2 {
         ppm.value = prefs.getFloat("hl2.ppm", 0f).toDouble()
         adcCal.value = prefs.getInt("hl2.adcCal", 0)
         forceIob.value = prefs.getBoolean("hl2.forceIob", false)
+        splitOff.value = prefs.getBoolean("hl2.splitOff", false)
+        region60.value = prefs.getInt("hl2.region60", 0)
+        beacons.value = prefs.getBoolean("hl2.beacons", false)
+        contestFree.value = prefs.getBoolean("hl2.contestFree", false)
     }
 
     /** After every start: the radio core begins with deskHPSDR's HL2 defaults. */
@@ -83,7 +97,22 @@ internal object Hl2 {
         Native.hl2Set(F_FILTER, if (txOnly.value) 1.0 else 0.0)
         Native.hl2Set(F_PPM, ppm.value)
         Native.hl2Set(F_ADC, adcCal.value.toDouble())
+        Native.hl2Set(F_SPLIT_OFF, if (splitOff.value) 1.0 else 0.0)
+        Native.hl2Set(F_IARU, Radio.region.value.toDouble())
+        Native.hl2Set(F_REGION60, region60.value.toDouble())
+        refreshChannels()
     }
+
+    /** The command queue runs them in order: read the table once the region change has been applied. */
+    private fun refreshChannels() {
+        Thread {
+            Thread.sleep(300)
+            channels60.value = Native.channels60m().split(";").filter { it.contains(':') }
+                .map { it.substringBefore(':').toLong() to it.substringAfter(':').toLong() }
+        }.start()
+    }
+
+    fun sendIaru() { send(F_IARU, Radio.region.value.toDouble()) }
 
     private fun send(f: Int, v: Double) { if (Radio.running) Native.hl2Set(f, v) }
     fun setCodec(on: Boolean) { codec.value = on; prefs.edit().putBoolean("hl2.codec", on).apply(); send(F_CODEC, if (on) 1.0 else 0.0) }
@@ -91,6 +120,14 @@ internal object Hl2 {
     fun setHpf(on: Boolean) { hpf.value = on; prefs.edit().putBoolean("hl2.hpf", on).apply(); send(F_HPF, if (on) 1.0 else 0.0) }
     fun setPpm(v: Double) { ppm.value = v; prefs.edit().putFloat("hl2.ppm", v.toFloat()).apply(); send(F_PPM, v) }
     fun setAdcCal(v: Int) { adcCal.value = v; prefs.edit().putInt("hl2.adcCal", v).apply(); send(F_ADC, v.toDouble()) }
+    fun setSplitOff(on: Boolean) { splitOff.value = on; prefs.edit().putBoolean("hl2.splitOff", on).apply(); send(F_SPLIT_OFF, if (on) 1.0 else 0.0) }
+    fun setRegion60(r: Int) {
+        region60.value = r
+        prefs.edit().putInt("hl2.region60", r).apply()
+        if (Radio.running) { Native.hl2Set(F_REGION60, r.toDouble()); refreshChannels() }
+    }
+    fun setBeacons(on: Boolean) { beacons.value = on; prefs.edit().putBoolean("hl2.beacons", on).apply() }
+    fun setContestFree(on: Boolean) { contestFree.value = on; prefs.edit().putBoolean("hl2.contestFree", on).apply() }
     fun setForceIob(on: Boolean) { forceIob.value = on; prefs.edit().putBoolean("hl2.forceIob", on).apply(); send(F_FORCE, if (on) 1.0 else 0.0) }
 }
 
@@ -119,6 +156,15 @@ internal fun SdrDeviceSheet(st: Status, openSetup: () -> Unit) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Label("BAND PLAN REGION")
             Seg(listOf("Region 1", "Region 2", "Region 3"), region - 1, h = 30) { Radio.setRegion(it + 1) }
+            val r60 by Hl2.region60.collectAsState()
+            val bea by Hl2.beacons.collectAsState()
+            val cf by Hl2.contestFree.collectAsState()
+            Label("60 M CHANNEL MARKERS")
+            Seg(listOf("None", "UK", "US", "WRC-15", "CA"), r60, h = 30) { Hl2.setRegion60(it) }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Toggle("Beacon areas", bea, Modifier.weight(1f), enabled = region == 1, sub = "Region 1") { Hl2.setBeacons(it) }
+                Toggle("Contest-free", cf, Modifier.weight(1f), enabled = region == 1, sub = "Region 1") { Hl2.setContestFree(it) }
+            }
             Label("HL2 · IO BOARD")
             IoStatus(st, io, force)
             Toggle("Force IO board", force, Modifier.fillMaxWidth(), sub = "if it isn't found") { Hl2.setForceIob(it) }
@@ -264,5 +310,40 @@ internal fun Hl2SetupSheet(st: Status, onStart: () -> Unit, onStop: () -> Unit) 
             },
             dismissButton = { TextButton({ ask = null }) { Text("Cancel") } },
         )
+    }
+}
+
+/**
+ * deskHPSDR's ANT menu for an HL2 with its IO board (picture H1): per band,
+ * the main antenna or the board's separate RX input (any RX antenna but ANT1
+ * switches the board's RF mode, old_protocol.c). Kept in the props file.
+ */
+@Composable
+internal fun AntSheet() {
+    SheetTitle("Ant")
+    if (!Radio.running || Radio.playback.value) {
+        Text("Start the radio first: the antennas are deskHPSDR's band settings.", color = Dim, fontSize = 12.sp)
+        return
+    }
+    Text("Your IO board switches receive to its separate RX input on the bands set to \"RX in\". TX antenna comes with M7.",
+        color = Dim, fontSize = 11.sp)
+    val hf = remember { Radio.bands().filter { it.fmin in 1_800_000L..54_000_000L && it.title.endsWith("m") } }
+    var ants by remember { mutableStateOf(hf.associate { it.index to Native.bandRxAnt(it.index) }) }
+    hf.chunked(2).forEach { pair ->
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            pair.forEach { b ->
+                Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(b.title, color = Txt, fontSize = 12.sp, modifier = Modifier.width(40.dp))
+                    Box(Modifier.weight(1f)) {
+                        Seg(listOf("ANT1", "RX in"), if ((ants[b.index] ?: 0) == 0) 0 else 1, h = 28) {
+                            val a = if (it == 0) 0 else 3   // EXT1: any non-ANT1 choice is the IO board's RX input
+                            Native.setBandRxAnt(b.index, a)
+                            ants = ants + (b.index to a)
+                        }
+                    }
+                }
+            }
+            if (pair.size == 1) Box(Modifier.weight(1f))
+        }
     }
 }

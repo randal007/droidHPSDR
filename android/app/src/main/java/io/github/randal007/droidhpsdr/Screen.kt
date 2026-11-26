@@ -111,7 +111,7 @@ internal val Grn = Color(0xFF3EE07A)
 internal val Red = Color(0xFFFF5A50)
 
 
-internal enum class Sheet { LEVELS, HL2SETUP, SCREEN, BAND, MODE, AF, LNA, FILTER, MENU, DISPLAY, FREQ, VFO, AGC, SDR, DISCOVERY, ABOUT, NOISE, EQ, DSP, TOOLBAR, RX, METER }
+internal enum class Sheet { ANT, LEVELS, HL2SETUP, SCREEN, BAND, MODE, AF, LNA, FILTER, MENU, DISPLAY, FREQ, VFO, AGC, SDR, DISCOVERY, ABOUT, NOISE, EQ, DSP, TOOLBAR, RX, METER }
 
 internal fun Modifier.glass(r: Int = 14) =
     clip(RoundedCornerShape(r.dp)).background(Glass).border(1.dp, Line, RoundedCornerShape(r.dp))
@@ -206,6 +206,9 @@ private fun SpectrumOverlay(modifier: Modifier) {
     val style by Radio.style.collectAsState()
     val dsp by Radio.dsp.collectAsState()
     val showAxis by Disp.showAxis.collectAsState()
+    val ch60 by Hl2.channels60.collectAsState()
+    val beaconsOn by Hl2.beacons.collectAsState()
+    val contestOn by Hl2.contestFree.collectAsState()
     val showBandBar by Disp.showBandBar.collectAsState()
     val measurer = rememberTextMeasurer()
     val scope = rememberCoroutineScope()
@@ -396,6 +399,28 @@ private fun SpectrumOverlay(modifier: Modifier) {
         val hzpx = span / w
         fun x(f: Double) = ((f - lo) / hzpx).toFloat()
 
+        // band-plan markers under everything (rx_panadapter.c): the region's 60 m channels, and in
+        // IARU Region 1 the contest-free areas (CW or SSB, for the mode in use) and beacon segments
+        fun mark(a: Double, b: Double, col: Color, edge: Color?) {
+            val xa = x(a).coerceAtLeast(0f); val xb = x(b).coerceAtMost(w)
+            if (xb <= 0f || xa >= w) return
+            drawRect(col, Offset(xa, 0f), Size(maxOf(xb - xa, 1f), splitY))
+            if (edge != null) {
+                drawLine(edge, Offset(x(a), 0f), Offset(x(a), splitY), 1.dp.toPx())
+                drawLine(edge, Offset(x(b), 0f), Offset(x(b), splitY), 1.dp.toPx())
+            }
+        }
+        for ((cf, cw) in ch60) mark(cf - cw / 2.0, cf + cw / 2.0, Color(0x47FFBE3C), Color(0xCCFFBE3C))
+        if (region == 1) {
+            val pink = Color(0x73FF59A6)
+            if (contestOn) {
+                val cwMode = status.mode == Modes.CWU || status.mode == Modes.CWL
+                val ssbMode = status.mode == Modes.USB || status.mode == Modes.LSB
+                for ((a, b, cwArea) in CONTEST_FREE) if ((cwArea && cwMode) || (!cwArea && ssbMode)) mark(a, b, pink, null)
+            }
+            if (beaconsOn) for ((a, b) in BEACON_AREAS) mark(a, b, pink, null)
+        }
+
         // passband and VFO line
         val rit = if (status.ritOn) status.rit.toDouble() else 0.0   // RIT moves what you hear
         val pa = x(freq + rit + status.filterLow.toDouble())
@@ -508,6 +533,22 @@ private fun SpectrumOverlay(modifier: Modifier) {
         }
     }
 }
+
+// IARU Region 1 overlays, copied from rx_panadapter.c (deskHPSDR, (C) 2024-2026 Heiko Amft DL1BZ,
+// GPL-3.0-or-later): contest-free guidance (low, high, true = CW / false = SSB) and the
+// beacon-exclusive segments of the IARU Region 1 HF band plan (16 Oct 2020). Guidance only.
+private val CONTEST_FREE = listOf(
+    Triple(3_560_000.0, 3_800_000.0, true), Triple(3_650_000.0, 3_700_000.0, false),
+    Triple(7_040_000.0, 7_200_000.0, true), Triple(7_080_000.0, 7_130_000.0, false),
+    Triple(14_060_000.0, 14_350_000.0, true), Triple(14_100_000.0, 14_125_000.0, false),
+    Triple(14_280_000.0, 14_350_000.0, false), Triple(21_350_000.0, 21_450_000.0, false),
+    Triple(28_225_000.0, 28_400_000.0, false),
+)
+private val BEACON_AREAS = listOf(
+    14_099_000.0 to 14_101_000.0, 18_109_000.0 to 18_111_000.0, 21_149_000.0 to 21_151_000.0,
+    24_929_000.0 to 24_931_000.0, 28_190_000.0 to 28_199_000.0, 28_199_000.0 to 28_201_000.0,
+    28_201_000.0 to 28_225_000.0,
+)
 
 // the notch's width handles sit at least this far (dp) from its centre
 private const val NOTCH_HANDLE = 22
@@ -715,6 +756,15 @@ private fun VfoPanel(freq: Long, st: Status, close: () -> Unit) {
                     Radio.setStep(steps[(steps.indexOf(step) + 1) % steps.size])
                 }
             }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("RIT / XIT step", color = Dim, fontSize = 10.sp)
+                    val steps = listOf(1, 10, 100)
+                    Seg(steps.map { "$it Hz" }, steps.indexOf(st.ritStep), h = 30) { Radio.setRitStep(steps[it]) }
+                }
+                val so by Hl2.splitOff.collectAsState()
+                Toggle("Split off on band change", so, Modifier.weight(1f)) { Hl2.setSplitOff(it) }
+            }
             Text("RIT on: drag the middle of the passband · tap outside to close", color = Dim, fontSize = 10.sp,
                 modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
         }
@@ -915,6 +965,7 @@ private fun SheetHost(
                 Sheet.NOISE, Sheet.EQ, Sheet.TOOLBAR -> {}
                 Sheet.DISPLAY -> DisplaySheet()
                 Sheet.SCREEN -> ScreenSheet()
+                Sheet.ANT -> AntSheet()
                 Sheet.FREQ -> FreqSheet(close)
                 Sheet.AGC -> AgcSheet(st, close)
                 Sheet.VFO, Sheet.MENU, Sheet.LEVELS -> {}
@@ -1131,7 +1182,7 @@ private val MENU_COLUMNS = listOf(
         MenuItem("AGC", Sheet.AGC)),
     listOf(MenuItem("TX", later = "M7"), MenuItem("PA", later = "M6"), MenuItem("VOX", later = "M7"),
         MenuItem("PS", later = "M7"), MenuItem("CW", later = "M7")),
-    listOf(MenuItem("DSP", Sheet.DSP), MenuItem("WDSP EQ", Sheet.EQ), MenuItem("Ant", later = "M6"),
+    listOf(MenuItem("DSP", Sheet.DSP), MenuItem("WDSP EQ", Sheet.EQ), MenuItem("Ant", Sheet.ANT),
         MenuItem("OC Output", later = "M6"), MenuItem("Extras", later = "M8")),
     listOf(MenuItem("Toolbar", Sheet.TOOLBAR), MenuItem("CAT/TCI", later = "M8"), MenuItem("MIDI", later = "M8")),
 )
@@ -1215,7 +1266,7 @@ private fun MenuButton(label: String, modifier: Modifier, later: String? = null,
     }
 }
 
-private val WIDE_SHEETS = setOf(Sheet.DISPLAY, Sheet.SCREEN, Sheet.SDR, Sheet.HL2SETUP)
+private val WIDE_SHEETS = setOf(Sheet.DISPLAY, Sheet.SCREEN, Sheet.SDR, Sheet.HL2SETUP, Sheet.ANT)
 
 /** deskHPSDR's Discovery: where the radio is, start/stop, and the demo band. */
 @Composable

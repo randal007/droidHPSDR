@@ -41,6 +41,7 @@
 #include "discovered.h"
 #include "discovery.h"
 #include "filter.h"
+#include "main.h"
 #include "mode.h"
 #include "old_discovery.h"
 #include "old_protocol.h"
@@ -59,7 +60,7 @@
 
 /* ---- requests from the UI, run on the loop thread ---- */
 
-enum { CMD_FREQ, CMD_MODE, CMD_FILTER, CMD_VOLUME, CMD_LNA, CMD_PHONE_AUDIO, CMD_ZOOM, CMD_FPS, CMD_WINDOW, CMD_DETECTOR, CMD_PAN_FFT, CMD_HL2,
+enum { CMD_FREQ, CMD_MODE, CMD_FILTER, CMD_VOLUME, CMD_LNA, CMD_PHONE_AUDIO, CMD_ZOOM, CMD_FPS, CMD_WINDOW, CMD_DETECTOR, CMD_PAN_FFT, CMD_HL2, CMD_ANT, CMD_RIT_STEP,
        CMD_FILTER_PRESET, CMD_BAND, CMD_BANDSTACK, CMD_VFO_OP, CMD_RIT, CMD_CTUN, CMD_LOCK, CMD_STEP, CMD_MEMORY,
        CMD_AGC, CMD_SAVE, CMD_DSP, CMD_NONE };
 typedef struct { int type; long long i; double d; int a, b; } cmd;
@@ -116,6 +117,15 @@ void droid_set_window(int type) { post((cmd){ .type = CMD_WINDOW, .a = type }); 
 void droid_set_detector(int det) { post((cmd){ .type = CMD_DETECTOR, .a = det }); }
 void droid_set_pan_fft(int size) { post((cmd){ .type = CMD_PAN_FFT, .a = size }); }
 void droid_hl2_set(int field, double v) { post((cmd){ .type = CMD_HL2, .a = field, .d = v }); }
+void droid_set_band_rx_ant(int band, int ant) { post((cmd){ .type = CMD_ANT, .a = band, .b = ant }); }
+void droid_set_rit_step(int hz) { post((cmd){ .type = CMD_RIT_STEP, .a = hz }); }
+int droid_band_rx_ant(int band) { return band >= 0 && band < BANDS ? band_get_band(band)->alexRxAntenna : 0; }
+int droid_channels_60m(long long *freq, long long *width, int max) {
+  if (region == REGION_VFO || band_channels_60m == NULL) return 0;   /* "NONE (VFO)": no markers (rx_panadapter.c) */
+  int n = channel_entries < max ? channel_entries : max;
+  for (int i = 0; i < n; i++) { freq[i] = band_channels_60m[i].frequency; width[i] = band_channels_60m[i].width; }
+  return n;
+}
 void droid_filter_preset(int index) { post((cmd){ .type = CMD_FILTER_PRESET, .a = index }); }
 void droid_band(int band) { post((cmd){ .type = CMD_BAND, .a = band }); }
 void droid_bandstack(int entry) { post((cmd){ .type = CMD_BANDSTACK, .a = entry }); }
@@ -331,7 +341,23 @@ static void run(const cmd *c) {
     case HL2_PPM: ppm_factor = c->d < -100 ? -100 : c->d > 100 ? 100 : c->d; break;
     case HL2_ADC_CAL: rx_gain_calibration = (int)lround(c->d); break;
     case HL2_FORCE_IOB: force_iob = c->d != 0; break;
+    case HL2_SPLIT_OFF_BAND: disable_split_on_band_change = c->d != 0; break;   /* vfo.c reads it */
+    case HL2_REGION_60M:   /* radio_menu.c's region_cb: 60 m channel markers and the 60 m band stack */
+      if (c->d >= REGION_VFO && c->d <= REGION_CA && (int)c->d != region) radio_change_region((int)c->d);
+      break;
+    case HL2_IARU_REGION:   /* radio_menu.c's iaru_region_cb: the 80 m / 40 m band stacks follow it */
+      if (c->d >= 1 && c->d <= 3 && (int)c->d != iaru_region) { iaru_region = (int)c->d; band_apply_iaru_region(); }
+      break;
     }
+    break;
+  case CMD_ANT:   /* ant_menu.c's rx_ant_cb: the band's RX antenna, applied now if it is the band in use */
+    if (c->a < 0 || c->a >= BANDS || c->b < 0 || c->b > 5) break;
+    band_get_band(c->a)->alexRxAntenna = c->b;
+    if (vfo[VFO_A].band == c->a) radio_set_alex_antennas();
+    break;
+  case CMD_RIT_STEP:   /* radio_menu.c's rit_cb */
+    if (c->a != 1 && c->a != 10 && c->a != 100) break;
+    vfo_set_rit_step(c->a);
     break;
   case CMD_PAN_FFT:   /* Screen menu "FFT size": 0 Auto (upstream picks from width x zoom), or a fixed size */
     if (c->a != 0 && c->a != 16384 && c->a != 32768 && c->a != 65536 && c->a != 131072 && c->a != 262144) break;
@@ -621,6 +647,7 @@ setup:
     vfo[0].mode = o->mode;
   }
   vfo_apply_mode_settings(receiver[0]);
+  radio_set_alex_antennas();   /* the band's RX antenna (IO board RX input), as radio.c's start does */
   rx_mode_changed(receiver[0]);
   for (int i = 0; i < 2; i++) rx_frequency_changed(receiver[i]);
 
@@ -736,6 +763,7 @@ void droid_get_status(droid_status *s) {
   s->filter = vfo[0].filter;
   s->agc = receiver[0]->agc;
   s->rows = droid_rows_count();
+  s->rit_step = vfo[0].rit_step;
 }
 
 /* ---- deskHPSDR's tables for the UI (read-only; small races are harmless) ---- */

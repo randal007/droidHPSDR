@@ -142,6 +142,7 @@ data class Status(
     val filter: Int = 0,
     val agc: Int = 3,
     val rows: Long = 0,
+    val ritStep: Int = 10,
 )
 
 /**
@@ -370,6 +371,11 @@ object Radio {
     fun filterPreset(i: Int) { if (running) Native.filterPreset(i) }
     fun band(b: Int) { if (running) { lastTuneMs = 0; Native.band(b) } }
     fun bandstack(i: Int) { if (running) { lastTuneMs = 0; Native.bandstack(i) } }
+    /** deskHPSDR's RIT/XIT step (Radio menu), 1, 10 or 100 Hz, kept per mode. */
+    fun setRitStep(hz: Int) {
+        if (running) Native.ritStep(hz)
+        status.value = status.value.copy(ritStep = hz)
+    }
     fun vfoOp(op: Int) { if (running) { lastTuneMs = 0; Native.vfoOp(op) } }
     fun rit(on: Boolean, hz: Long = status.value.rit) {
         status.value = status.value.copy(ritOn = on, rit = hz)
@@ -445,6 +451,7 @@ object Radio {
     fun setRegion(r: Int) {
         region.value = r
         prefs.edit().putInt("region", r).apply()
+        Hl2.sendIaru()   // deskHPSDR's band stacks (80 m, 40 m) follow the IARU region
     }
 
     fun setPhase(p: Phase, msg: String = "", network: String? = null) {
@@ -511,7 +518,7 @@ object Radio {
             pbQuietSince = System.currentTimeMillis()
             lastTuneMs = 0
             freq.value = centre
-            val a = DoubleArray(26)
+            val a = DoubleArray(27)
             Native.status(a)   // the recording's own sample rate, before the span is fitted to it
             status.value = status.value.copy(sampleRate = a[5].toInt())
             Native.setVolumeDb(volumeDb.value)
@@ -559,7 +566,7 @@ object Radio {
     private fun startPolling() {
         poll?.cancel()
         poll = scope.launch {
-            val a = DoubleArray(26)
+            val a = DoubleArray(27)
             val pk = DoubleArray(64)
             val dv = DoubleArray(Dsp.COUNT)
             var tick = 0
@@ -574,7 +581,7 @@ object Radio {
                         adcOverloads = a[8].toInt(), noiseFloor = a[11],
                         freqB = a[13].toLong(), modeB = a[14].toInt(), ritOn = a[15] != 0.0, rit = a[16].toLong(),
                         ctun = a[17] != 0.0, locked = a[18] != 0.0, split = a[19] != 0.0, band = a[21].toInt(),
-                        bandstack = a[22].toInt(), filter = a[23].toInt(), agc = a[24].toInt(), rows = a[25].toLong(),
+                        bandstack = a[22].toInt(), filter = a[23].toInt(), agc = a[24].toInt(), rows = a[25].toLong(), ritStep = a[26].toInt(),
                     )
                     // The radio moves the frequency itself on band changes, A/B swaps and memory
                     // recalls: follow it, unless the user is tuning right now.

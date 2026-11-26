@@ -23,6 +23,7 @@
 
 #include "actions.h"
 #include "audio.h"
+#include "band.h"
 #include "discovery.h"
 #include "ext.h"
 #include "iambic.h"
@@ -69,7 +70,33 @@ long long apply_ppm_ll(long long f_hz) {
 }
 int radio_get_drive_as_int(void) { return 0; }
 int radio_is_transmitting(void) { return 0; }             /* RX ONLY */
-void radio_set_alex_antennas(void) {}
+/* radio.c ((C) 2015 John Melton G0ORX/N6LYT, 2024-2026 Heiko Amft DL1BZ
+ * (Project deskHPSDR); GPL-3.0-or-later), copied unchanged: the band's RX
+ * antenna (ANT menu) and step attenuator; vfo.c calls it on every band
+ * change. On an HL2 with an IO board, an RX antenna other than ANT1 switches
+ * the board to its separate RX input (old_protocol.c, RF mode). */
+void radio_set_alex_antennas(void) {
+  //
+  // Obtain band of VFO-A and transmitter, set ALEX RX/TX antennas
+  // and the step attenuator
+  // This function also takes care of updating the PA dis/enable
+  // status for P2.
+  //
+  const BAND *band;
+  if (protocol == ORIGINAL_PROTOCOL || protocol == NEW_PROTOCOL) {
+    band = band_get_band(vfo[VFO_A].band);
+    receiver[0]->alex_antenna = band->alexRxAntenna;
+    if (filter_board != CHARLY25) {
+      receiver[0]->alex_attenuation = band->alexAttenuation;
+    }
+    if (can_transmit) {
+      band = band_get_band(vfo[vfo_get_tx_vfo()].band);
+      transmitter->alex_antenna = band->alexTxAntenna;
+    }
+  }
+  schedule_high_priority();         // possibly update RX/TX antennas
+  schedule_general();               // possibly update PA disable
+}
 void radio_set_hardware_tx_inhibit(int state) { (void)state; }
 void radio_start_auto_tune(void) {}
 void radio_tx_vfo_changed(void) {}

@@ -122,6 +122,18 @@ the radio): reboot then start again after 15 s, prefer DHCP, alternate MAC.
 **Gateware flashing not built yet**: its own step, tested with Randal.
 Not run on the radio yet.
 
+**Round 2 (pictures H1-H3, `layouts10.js`), built 2026-11-25:** ANT menu
+(☰ → Ant): per band ANT1 or the IO board's RX input (EXT1; upstream's
+`radio_set_alex_antennas()` copied into stubs.c, it was an empty stub, so a
+band's RX antenna was never applied); VFO panel: RIT/XIT step 1/10/100 Hz
+(`vfo_set_rit_step`, per mode) and "Split off on band change"
+(`disable_split_on_band_change`); SDR Device: 60 m channel markers None /
+UK / US / WRC-15 / CA (`radio_change_region()` from band.c, also the 60 m
+band stack; drawn amber on the spectrum), IARU Region 1 beacon and
+contest-free overlays (tables from rx_panadapter.c; greyed outside Region
+1); the IARU region now reaches deskHPSDR (`iaru_region` +
+`band_apply_iaru_region()`: 80 m / 40 m band stacks). Not run on the radio.
+
 ## Questions for Randal (asked 2026-11-25)
 
 1. **Where the IO board status goes:** a small line in the info bar gaps
