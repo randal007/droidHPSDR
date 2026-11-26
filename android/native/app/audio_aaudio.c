@@ -182,9 +182,11 @@ void droid_mic_route(int device_id, int bluetooth) {
 static aaudio_data_callback_result_t on_mic(AAudioStream *s, void *user, void *data, int32_t frames) {
   (void)s; (void)user;
   const float *f = data;
-  float pk = atomic_load(&mic_peak);
+  float pk = 0.0f;
   for (int32_t i = 0; i < frames; i++) { float a = f[i] < 0 ? -f[i] : f[i]; if (a > pk) pk = a; }
-  atomic_store(&mic_peak, pk);
+  /* max into the shared peak; a reset (droid_mic_peak) in between is not undone */
+  float cur = atomic_load(&mic_peak);
+  while (pk > cur && !atomic_compare_exchange_weak(&mic_peak, &cur, pk)) {}
   atomic_fetch_add(&mic_frames, (unsigned)frames);
   audio_process_local_mic_input(f, (unsigned)frames);
   return AAUDIO_CALLBACK_RESULT_CONTINUE;

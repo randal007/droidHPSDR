@@ -1053,7 +1053,10 @@ void droid_tx_poll(void) {
     else if (t - fifo_seen_us > 2000000) { tx_fifo_underrun = 0; tx_fifo_overrun = 0; fifo_seen_us = 0; }
   }
   int on = radio_is_transmitting();
+  static long long log_us;
+  static unsigned frames_then;
   if (!on) {
+    log_us = 0;   /* the next transmission's log starts fresh */
     tx_since_us = 0;
     atomic_store(&tx_since_s, 0);
     return;
@@ -1061,18 +1064,21 @@ void droid_tx_poll(void) {
   if (tx_since_us == 0) tx_since_us = t;
   atomic_store(&tx_since_s, (int)((t - tx_since_us) / 1000000));
   /* once a second on the air: what goes out, for checking on the radio (logcat droidHPSDR) */
-  static long long log_us;
-  static unsigned frames_then;
-  if (t - log_us >= 1000000) {
+  if (log_us == 0) {   /* first moment on the air: a baseline, nothing from the receive gap */
+    log_us = t;
+    frames_then = droid_mic_frames();
+    (void)droid_mic_peak();
+  } else if (t - log_us >= 1000000) {
     unsigned fr = droid_mic_frames();
     float pk = droid_mic_peak();
+    double secs = (t - log_us) / 1e6;
     droid_log("TX %s: fwd %.2f W, SWR %.2f, ALC %.1f dB, WDSP mic %.1f dB, %s mic%s, drive %d (level %d), PA %s",
               tune ? "TUNE" : mox ? "MOX" : "VOX", transmitter->fwd, transmitter->swr, transmitter->alc,
               GetTXAMeter(transmitter->id, TXA_MIC_PK),
               transmitter->local_microphone ? "phone" : "HL2+", "", transmitter->drive, transmitter->drive_level,
               pa_enabled ? "on" : "OFF");
     if (transmitter->local_microphone)
-      droid_log("TX phone mic: %u frames/s, peak %.3f", log_us ? fr - frames_then : 0, pk);
+      droid_log("TX phone mic: %.0f frames/s, peak %.3f", (fr - frames_then) / secs, pk);
     frames_then = fr;
     log_us = t;
   }
