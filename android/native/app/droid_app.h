@@ -146,7 +146,7 @@ enum {
   TX_COUNT = 72
 };
 /* why the last PTT / TUNE did not transmit */
-enum { TXR_NONE, TXR_DISABLED, TXR_INHIBIT, TXR_CW, TXR_BAND };
+enum { TXR_NONE, TXR_DISABLED, TXR_INHIBIT, TXR_CW, TXR_BAND, TXR_TIMEOUT };
 void droid_tx_set(int field, double value);    /* queued to the loop thread */
 void droid_tx_apply(int field, double value);  /* on the loop thread */
 void droid_tx_get(double *out);                /* TX_COUNT values */

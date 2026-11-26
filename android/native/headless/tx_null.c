@@ -10,7 +10,9 @@
  * The app links upstream's transmitter.c, tx_off.c, vox.c and
  * app/transmit.c instead (M7). Prototypes come from the upstream headers.
  *
- * GPL v3 or later, like the rest of droidHPSDR.
+ * ctcss_frequencies is copied from src/transmitter.c: (C) 2015 John Melton
+ * G0ORX/N6LYT, 2024-2026 Heiko Amft DL1BZ (Project deskHPSDR),
+ * GPL-3.0-or-later. The rest: GPL v3 or later, like the rest of droidHPSDR.
  */
 #include <gtk/gtk.h>
 

@@ -70,6 +70,12 @@ static cmd cmds[CMD_MAX];
 static int cmd_head, cmd_tail;
 static pthread_mutex_t cmd_lock = PTHREAD_MUTEX_INITIALIZER;
 
+/* TX fields that are events, not settings: every one runs, in order (code review: a PTT 1 in
+ * flight replaced a queued release; a mic close + open merged into one no-op open) */
+static int tx_event(const cmd *c) {
+  return c->type == CMD_TX && (c->a == TX_PTT || c->a == TX_TUNE || c->a == TX_MIC_LOCAL || c->a == TX_ENABLED);
+}
+
 static void post(cmd c) {
   pthread_mutex_lock(&cmd_lock);
   /* A newer frequency replaces one still waiting, so a fast drag never lags.
@@ -81,7 +87,7 @@ static void post(cmd c) {
       c.type == CMD_DSP || c.type == CMD_TX) {
     int last = (cmd_head + CMD_MAX - 1) % CMD_MAX;
     for (int k = cmd_tail; k != cmd_head; k = (k + 1) % CMD_MAX) {
-      if (cmds[k].type == c.type && ((c.type != CMD_DSP && c.type != CMD_TX) || cmds[k].a == c.a)) {
+      if (cmds[k].type == c.type && ((c.type != CMD_DSP && c.type != CMD_TX) || cmds[k].a == c.a) && !tx_event(&c)) {
         if (!room) {
           /* full: take the old one out, closing the gap, so the new one still goes to the end */
           for (int j = k; j != last; j = (j + 1) % CMD_MAX) cmds[j] = cmds[(j + 1) % CMD_MAX];

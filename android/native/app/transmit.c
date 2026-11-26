@@ -105,6 +105,7 @@ static atomic_int timeouts;            /* times the timeout ended a transmission
 static atomic_int refused;             /* last refusal reason, for the UI (TXR_*) */
 static long long tx_since_us;          /* when this transmission started (loop thread) */
 static atomic_int tx_since_s;          /* seconds on the air, for the UI */
+static atomic_int timed_out;           /* the timeout ended a screen PTT: no TX until it is released */
 
 static long long now_us(void) { return g_get_monotonic_time(); }
 
@@ -903,15 +904,20 @@ void droid_tx_apply(int field, double v) {
     if (v != 0) {
       atomic_store(&ptt_seen_us, now_us());
       if (atomic_load(&ptt_screen) && mox) break;   /* a repeat while held */
+      /* still the finger the timeout stopped: wait for a release (code review: the repeats re-keyed) */
+      if (atomic_load(&timed_out)) { atomic_store(&refused, TXR_TIMEOUT); break; }
       if (radio_get_tx_inhibit()) { atomic_store(&refused, droid_blocked() ? TXR_DISABLED : TXR_INHIBIT); break; }
       if (cw_mode_refused()) break;
       if (!TransmitAllowed() && !tx_out_of_band_allowed) { atomic_store(&refused, TXR_BAND); break; }
       atomic_store(&refused, TXR_NONE);
       atomic_store(&ptt_screen, 1);
       radio_mox_update(1);
-    } else if (atomic_load(&ptt_screen)) {
-      atomic_store(&ptt_screen, 0);
-      radio_mox_update(0);
+    } else {
+      atomic_store(&timed_out, 0);   /* released: the next press may transmit */
+      if (atomic_load(&ptt_screen)) {
+        atomic_store(&ptt_screen, 0);
+        radio_mox_update(0);
+      }
     }
     break;
   case TX_TUNE: {   /* actions.c TUNE_T: TUNE, and with the Pico the IO board's tuner start/stop */
@@ -1056,6 +1062,7 @@ void droid_tx_poll(void) {
   if (limit > 0 && t - tx_since_us > (long long)limit * 1000000) {
     droid_log("TX timeout (%d s): back to receive", limit);
     atomic_fetch_add(&timeouts, 1);
+    if (atomic_load(&ptt_screen)) atomic_store(&timed_out, 1);
     droid_tx_off_now();
     tx_since_us = 0;
   }

@@ -322,7 +322,27 @@ it also starts the XPA125B's tuner, as in deskHPSDR. Tune IOB not shown.
 One **TX** chip (shows the drive %) opens the transmit panel, instead of
 separate MIC / DRIVE / TUNE chips (Randal).
 **Randal happy with round 1 (2026-11-25):** A, M1, M5b, M6, M7, M8 as
-drawn. Next: build step 1.
+drawn. **Step 1 built the same day** (29424fb): upstream transmitter.c /
+tx_off.c / vox.c compiled unchanged, radio.c's TX functions in
+`android/native/app/transmit.c`, PTT chip (hold, repeats every 250 ms,
+back to RX after 1.5 s without one), TX chip + panel, TX and PA pages, TX
+meter card (A), orange TX spectrum over the dimmed waterfall, phone /
+Bluetooth mic (AAudio input), TX timeout, warnings. Not built yet: watt
+meter calibration, PA Save/Import, XIT, TX antenna, external TX inhibit
+input. **Not run on the radio yet.**
+
+**First on-air check (low drive, Randal watching the XPA125B):**
+1. TX page: Transmit enabled off → PTT shows the lock and refuses.
+2. On, drive ~10 %, 20 m SSB: hold PTT, speak into the HL2+ mic: meter
+   card shows power/ALC/MIC, orange spectrum; release → receive.
+3. HL2+ mic PTT keys and unkeys.
+4. TUNE at 10 %: carrier, and does the XPA125B's tuner start (Pico
+   register 7)?
+5. Timeout: set 1 min, hold PTT past it.
+6. Force-stop the app while transmitting at low drive; pull the Ethernet
+   adapter while transmitting: what does the HL2 do? (unknown, M7-INVENTORY
+   safety 3)
+7. Phone mic and Bluetooth mic.
 
 Strict order, each step tested before the next (on the antenna through
 the XPA125B, low drive first, Randal watching: no dummy load, 2026-11-25):

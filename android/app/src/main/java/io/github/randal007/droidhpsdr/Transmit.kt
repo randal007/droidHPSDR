@@ -106,7 +106,12 @@ object Tx {
     private lateinit var appCtx: Context
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     @Volatile private var lastSetMs = 0L
+    /** settings changed while the radio was stopped: sent at the next start (code review) */
+    private val pending = mutableSetOf<Int>()
     private var pttJob: Job? = null
+    /** the finger is down; checked and sent under [pttLock], so a repeat can't follow the release */
+    private var pttHeld = false
+    private val pttLock = Any()
     private var lastTimeouts = 0
     private var lastRefusedAt = 0.0
 
@@ -126,6 +131,7 @@ object Tx {
         v.value = a
         lastSetMs = System.currentTimeMillis()
         if (running) Native.txSet(field, value)
+        else if (field != PTT && field != TUNE && field < LIVE) synchronized(pending) { pending.add(field) }
     }
 
     fun setEnabled(on: Boolean) {
@@ -137,7 +143,24 @@ object Tx {
     /** After every start: the safety switch and the mic (the rest comes back from deskHPSDR's props file). */
     fun apply() {
         Native.txSet(ENABLED, if (enabled.value) 1.0 else 0.0)
+        val a = v.value
+        synchronized(pending) { pending.forEach { Native.txSet(it, a[it]) }; pending.clear() }
+        lastSetMs = System.currentTimeMillis()   // the poll doesn't overwrite them with the props' values meanwhile
         applyMic()
+    }
+
+    /** The radio stopped (service): no Bluetooth call mode left behind, no on-air state on the screen. */
+    fun stopped() {
+        runCatching { appCtx.getSystemService(AudioManager::class.java).clearCommunicationDevice() }
+        clearLive()
+    }
+
+    private fun clearLive() {
+        val a = v.value.copyOf()
+        if (a[ON_AIR] == 0.0 && a[PTT] == 0.0 && a[TUNE] == 0.0 && a[FWD] == 0.0) return
+        for (i in LIVE until COUNT) if (i != MAX_W && i != TIMEOUTS) a[i] = 0.0
+        a[PTT] = 0.0; a[TUNE] = 0.0; a[SWR] = 1.0; a[ALC] = -100.0; a[MIC] = -100.0
+        v.value = a
     }
 
     // ---- the microphone: HL2+ jack, the phone's, or a Bluetooth headset ----
@@ -158,6 +181,7 @@ object Tx {
             am.clearCommunicationDevice()
             if (running) Native.txSet(MIC_LOCAL, 0.0)
             if (src != 0) note.value = "The phone mic needs the microphone permission" to System.currentTimeMillis()
+            RadioService.micInUse(appCtx)   // the service drops the microphone type again
             return
         }
         var id = 0
@@ -192,25 +216,32 @@ object Tx {
 
     fun pttDown() {
         if (pttJob?.isActive == true) return
+        synchronized(pttLock) { pttHeld = true }
         pttJob = scope.launch {
             while (isActive) {
-                if (running) Native.txSet(PTT, 1.0)
+                synchronized(pttLock) { if (pttHeld && running) Native.txSet(PTT, 1.0) }
                 delay(250)
             }
         }
     }
 
     fun pttUp() {
+        // the release goes after any repeat already on its way (the native queue keeps PTT events in order)
+        synchronized(pttLock) {
+            val was = pttHeld
+            pttHeld = false
+            if (was && running) Native.txSet(PTT, 0.0)
+        }
         pttJob?.cancel()
         pttJob = null
-        if (running) Native.txSet(PTT, 0.0)
     }
 
     fun tune(on: Boolean) = set(TUNE, if (on) 1.0 else 0.0)
 
     /** Radio's poll loop (every 50 ms while running). */
     fun poll(buf: DoubleArray) {
-        if (!running || Native.txGet(buf) != COUNT) return
+        if (!running) { clearLive(); return }
+        if (Native.txGet(buf) != COUNT) return
         val fresh = System.currentTimeMillis() - lastSetMs > 800
         val a = if (fresh) buf.copyOf() else v.value.copyOf().also { for (i in LIVE until COUNT) it[i] = buf[i]; it[PTT] = buf[PTT]; it[TUNE] = buf[TUNE] }
         val t = a[TIMEOUTS].toInt()
@@ -225,6 +256,7 @@ object Tx {
         2 -> "TX inhibit input from the IO board"
         3 -> "CW transmit comes with M7 step 3: switch to SSB"
         4 -> "Out of band: no transmit here"
+        5 -> "TX timeout: let go of PTT, then press again"
         else -> ""
     }
 
@@ -243,6 +275,7 @@ internal fun PttChip(modifier: Modifier = Modifier) {
     val onAir = v[Tx.ON_AIR] != 0.0
     val held = v[Tx.PTT] != 0.0 || v[Tx.RADIO_PTT] != 0.0
     val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val ui = rememberCoroutineScope()
     // the app going to the background with the finger down, or the chip leaving the screen: release
     DisposableEffect(lifecycle) {
         val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_PAUSE) Tx.pttUp() }
@@ -260,10 +293,20 @@ internal fun PttChip(modifier: Modifier = Modifier) {
         look.pointerInput(Unit) {
             detectTapGestures(onPress = {
                 Tx.pttDown()
+                // refused (transmit off, out of band, CW, timeout): say why once the radio has answered
+                val check = ui.launch {
+                    delay(400)
+                    if (Tx.v.value[Tx.ON_AIR] == 0.0) Tx.refusal().takeIf { it.isNotEmpty() }?.let { Tx.note.value = it to System.currentTimeMillis() }
+                }
                 tryAwaitRelease()
                 Tx.pttUp()
-                val why = Tx.refusal()
-                if (why.isNotEmpty()) Tx.note.value = why to System.currentTimeMillis()
+                if (check.isActive) {   // a quick tap: still say why, after the radio answered
+                    check.cancel()
+                    ui.launch {
+                        delay(300)
+                        Tx.refusal().takeIf { it.isNotEmpty() }?.let { Tx.note.value = it to System.currentTimeMillis() }
+                    }
+                }
             })
         },
         horizontalAlignment = Alignment.CenterHorizontally,

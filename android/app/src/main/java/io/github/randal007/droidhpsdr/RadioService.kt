@@ -65,6 +65,9 @@ class RadioService : Service() {
         }
     }
 
+    /** The notification's text now (the microphone type change posts it again). */
+    @Volatile private var lastNote = "Receiving"
+
     /** When the adapter last came back: for a minute after, the watchdog retries sooner (the HL2 is
      *  usually looking for a DHCP server first, ~15-20 s, as after power-on). */
     @Volatile private var replugAt = 0L
@@ -84,7 +87,7 @@ class RadioService : Service() {
         Radio.init(this)
         if (intent?.action == ACTION_MIC) {
             // the foreground types again, now with (or without) the microphone
-            runCatching { startForeground(1, notification("Receiving"), fgsType(this)) }
+            runCatching { startForeground(1, notification(lastNote), fgsType(this)) }
                 .onFailure { Log.w("droidHPSDR", "microphone foreground type refused", it) }
             return START_STICKY
         }
@@ -102,7 +105,9 @@ class RadioService : Service() {
             startRadio()
             return START_STICKY
         }
-        startForeground(1, notification("Starting"), fgsType(this))
+        // the microphone type is refused when started from the background (a sticky restart): connectedDevice then
+        runCatching { startForeground(1, notification("Starting"), fgsType(this)) }
+            .onFailure { startForeground(1, notification("Starting"), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE) }
         if (!wanted) {
             wanted = true
             getSystemService(ConnectivityManager::class.java).registerNetworkCallback(
@@ -198,7 +203,8 @@ class RadioService : Service() {
                     Radio.setDisplay()
                     Hl2.apply()   // M6: the HL2 settings of the SDR Device sheet
                     Tx.apply()    // M7: the TX safety switch and the microphone
-                    getSystemService(NotificationManager::class.java).notify(1, notification("Receiving on $net"))
+                    lastNote = "Receiving on $net"
+                    getSystemService(NotificationManager::class.java).notify(1, notification(lastNote))
                 } else {
                     Radio.setPhase(Phase.ERROR, err)
                     getSystemService(NotificationManager::class.java).notify(1, notification("Not connected: $err"))
@@ -242,6 +248,7 @@ class RadioService : Service() {
         main.removeCallbacks(replugStart)
         Radio.waitingForHl2.value = false
         stopStream()   // also writes deskHPSDR's props file
+        Tx.stopped()   // no Bluetooth call mode left behind
         Radio.setPhase(Phase.IDLE)
         releaseLocks()
         stopForeground(STOP_FOREGROUND_REMOVE)
