@@ -597,8 +597,10 @@ internal fun ChipFor(id: String, st: Status, open: (Sheet) -> Unit, modifier: Mo
         // M7 step 2 (pick N1): the TX audio drawer. PROC opens it; VOX and MON switch, hold for their settings
         "PROC" -> {
             val tx by Tx.v.collectAsState()
-            val v = procLabel(tx)
-            Chip("PROC", v, v != "Off", modifier, { open(Sheet.TXAUDIO) }) { open(Sheet.TXAUDIO) }
+            val pb by Radio.playback.collectAsState()
+            // stopped: the values are the last run's (the drawer says "start the radio"), so no state shown (code review)
+            val v = if (st.phase == Phase.RUNNING && !pb) procLabel(tx) else "—"
+            Chip("PROC", v, v != "Off" && v != "—", modifier, { open(Sheet.TXAUDIO) }) { open(Sheet.TXAUDIO) }
         }
         "VOX" -> {
             val tx by Tx.v.collectAsState()
@@ -606,7 +608,8 @@ internal fun ChipFor(id: String, st: Status, open: (Sheet) -> Unit, modifier: Mo
         }
         "MON" -> {
             val tx by Tx.v.collectAsState()
-            val mon = tx[Tx.MON] != 0.0
+            val pb by Radio.playback.collectAsState()
+            val mon = tx[Tx.MON] != 0.0 && st.phase == Phase.RUNNING && !pb
             Chip("MON", if (mon) "On" else "Off", mon, modifier, { open(Sheet.TXVOX) }) {
                 if (Radio.running && !Radio.playback.value) Tx.set(Tx.MON, if (mon) 0.0 else 1.0)
                 else Tx.note.value = "Start the radio to use the monitor" to System.currentTimeMillis()

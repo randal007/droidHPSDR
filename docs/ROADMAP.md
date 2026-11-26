@@ -355,8 +355,34 @@ watt meter calibration, TX antenna. Not run on the radio yet.
 N1 A drawer (like the Noise drawer), N2 B chain strip with live stage
 levels while transmitting, N3 C tabs on the TX page; N4 CFC curves, N5 TX
 EQ graph, N6 VOX + noise gate + monitor. Settings are per mode
-(mode_settings, copy_mode_settings), as deskHPSDR's tx_menu.c. Waiting on
-Randal's pick.
+(mode_settings, copy_mode_settings), as deskHPSDR's tx_menu.c. **Randal
+picked A (the drawer) and N4-N6 as drawn (2026-11-26).** Built the same
+day (820b539): `TxAudio.kt` (drawer, CFC / TX EQ / VOX-gate-monitor pages,
+chips PROC, VOX, MON added once before TX; ☰ TX audio, VOX),
+`transmit.c` tx_audio_apply() (tx_menu.c / equalizer_menu.c / vox_menu.c's
+lines). VOX: off at every start, threshold and hang in the props file,
+refused out of band (with a note), the timeout switches it off; switched
+off while keyed it unkeys at once. Also fixed: vfo.c's update_noise() /
+update_eq() after a mode change were empty stubs (the new mode's NR/NB/EQ
+waited for a control to be touched); dsp.c has the real ones. Code review
+`4597c58..820b539`: 8 findings (graph drag crash on unloaded points, silent
+out-of-band VOX refusal, VOX chip flicker, wrong mode label with split,
+graphs ate page scrolls, PROC/MON chips stale after stop, NULL guard,
+this paragraph), all fixed in the next commit; **next review starts after
+that fix commit**. Not run on the radio yet.
+
+**Step 2 radio check (low drive, Randal watching the XPA125B):**
+1. Drawer: processor on, LEVEL 5-10 dB: ALC/meter on voice peaks, does it
+   sound right on the monitor (MON, Post)?
+2. TX EQ: drag a point, hear it on the monitor; switch LSB → USB → LSB:
+   the same curve (SSB modes share it); DIGU has its own.
+3. CFC on with Post EQ: hear it on the monitor.
+4. VOX page: the mic bar moves while talking (HL2+ jack and phone mic);
+   drag the VOX marker above the background, VOX on: talk = TX, silence =
+   back to RX after the hang; Transmit enabled off = no TX; TX timeout ends
+   it and switches VOX off.
+5. Noise gate: on, trigger above the room noise: gaps go quiet.
+6. Restart the app: VOX is off, the rest kept.
 
 **First on-air check (low drive, Randal watching the XPA125B):**
 1. TX page: Transmit enabled off → PTT shows the lock and refuses.

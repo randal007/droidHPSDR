@@ -79,6 +79,7 @@ object Tx {
     const val MIC = 53; const val HIGH_SWR = 54; const val SECONDS = 55; const val TIMEOUTS = 56; const val REFUSED = 57
     const val RADIO_PTT = 58; const val UNDERRUN = 59; const val OVERRUN = 60; const val OUT_OF_BAND_NOW = 61
     const val MAX_W = 62; const val PICO = 63; const val INHIBITED = 64; const val PA_FILE_OK = 65; const val VOX_PEAK = 66
+    const val VOX_REFUSED = 67; const val TX_MODE = 68
     /** the live fields, the radio's and never the UI's: [LIVE] until [LIVE_END] */
     private const val LIVE = ON_AIR
     private const val LIVE_END = 72
@@ -131,6 +132,9 @@ object Tx {
     private var pttHeld = false
     private val pttLock = Any()
     private var lastTimeouts = 0
+    private var lastVoxRefused = 0
+    /** VOX as the radio last reported it: only its own switch-off (timeout, stop) overrides a fresh tap (code review) */
+    private var nativeVox = 0.0
     private var lastRefusedAt = 0.0
 
     fun init(ctx: Context) {
@@ -266,8 +270,13 @@ object Tx {
         val fresh = System.currentTimeMillis() - lastSetMs > 800
         val a = if (fresh) buf.copyOf() else v.value.copyOf().also {
             for (i in LIVE until LIVE_END) it[i] = buf[i]
-            it[PTT] = buf[PTT]; it[TUNE] = buf[TUNE]; it[VOX] = buf[VOX]   // VOX: the timeout and a stop switch it off
+            it[PTT] = buf[PTT]; it[TUNE] = buf[TUNE]
+            if (nativeVox != 0.0 && buf[VOX] == 0.0) it[VOX] = 0.0   // the timeout switched VOX off
         }
+        nativeVox = buf[VOX]
+        val vr = a[VOX_REFUSED].toInt()
+        if (vr > lastVoxRefused) note.value = "Out of band: VOX can't key the radio here" to System.currentTimeMillis()
+        lastVoxRefused = vr
         val t = a[TIMEOUTS].toInt()
         if (t > lastTimeouts) note.value = "TX timeout (${timeoutLabel(a[TIMEOUT])}): back to receive" +
             (if (v.value[VOX] != 0.0) ", VOX off" else "") to System.currentTimeMillis()

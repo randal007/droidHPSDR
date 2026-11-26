@@ -42,6 +42,7 @@ static int nr_allowed(const RECEIVER *rx) {
 
 /* noise_menu.c update_noise_for_rx(), without the dialog and slider updates */
 static void noise_apply(RECEIVER *rx) {
+  if (rx == NULL) return;   /* as upstream's update_noise_for_rx() (code review) */
   int mode = vfo[rx->id].mode;
   if (!nr_allowed(rx)) {
     rx->nr = 0;

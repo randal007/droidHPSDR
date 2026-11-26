@@ -13,7 +13,9 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -48,10 +50,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.abs
@@ -70,6 +75,26 @@ private val live get() = Radio.running && !Radio.playback.value
 /** vox_threshold is linear (vox_menu.c's 0..1000 / 1000); the page shows it in dB like the mic bar. */
 internal fun linToDb(x: Double) = if (x <= 1e-6) -120.0 else 20 * log10(x)
 internal fun dbToLin(db: Double) = 10.0.pow(db / 20)
+
+/** The mode the settings belong to: the TX VFO's (with split it isn't the RX one). */
+private fun txModeName(v: DoubleArray, st: Status) = Modes.name(if (live) v[Tx.TX_MODE].toInt() else st.mode)
+
+/**
+ * A drag that only starts on something to drag: [start] says whether the
+ * finger came down on one. Otherwise the touch is left alone, so the page
+ * around it still scrolls (code review: detectDragGestures took every drag).
+ */
+private fun Modifier.dragOn(enabled: Boolean, start: (Offset) -> Boolean, move: (Offset) -> Unit, end: () -> Unit) =
+    pointerInput(enabled) {
+        if (!enabled) return@pointerInput
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            if (!start(down.position)) return@awaitEachGesture
+            down.consume()
+            drag(down.id) { ch -> move(ch.position); ch.consume() }
+            end()
+        }
+    }
 
 /** The VOX chip's tap: VOX keys the radio from the mic, so it says when it can't. */
 internal fun voxToggle() {
@@ -110,7 +135,7 @@ internal fun TxAudioDrawer(st: Status, start: String?, close: () -> Unit) {
         ) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 SheetTitle("TX audio")
-                Text("${Modes.name(st.mode)} · kept per mode", color = Dim, fontSize = 10.sp)
+                Text("${txModeName(v, st)} · kept per mode", color = Dim, fontSize = 10.sp)
             }
             if (!live) Text("Start the radio to change these: they belong to the mode it is in.", color = Amb, fontSize = 10.5.sp)
             val en = live
@@ -174,6 +199,15 @@ private fun Page(title: String, back: () -> Unit, right: @Composable () -> Unit 
 private const val G_FMIN = 30.0
 private const val G_FMAX = 16000.0
 
+/** The graph's scales, the same for drawing and for the finger. */
+private class Geo(val w: Float, val h: Float, val padL: Float, val padR: Float, val padT: Float, val padB: Float,
+                  val ymin: Double, val ymax: Double) {
+    fun gx(f: Double) = padL + (log10(f.coerceAtLeast(G_FMIN) / G_FMIN) / log10(G_FMAX / G_FMIN)).toFloat() * (w - padL - padR)
+    fun gy(g: Double) = padT + ((ymax - g) / (ymax - ymin)).toFloat() * (h - padT - padB)
+    fun fx(x: Float) = G_FMIN * 10.0.pow(((x - padL) / (w - padL - padR)).toDouble() * log10(G_FMAX / G_FMIN))
+    fun gyInv(y: Float) = ymax - (y - padT) / (h - padT - padB) * (ymax - ymin)
+}
+
 /** One curve of points 1..12: frequencies from [freq0], values from [val0] (fields of Tx.v). */
 private class Curve(val freq0: Int, val val0: Int, val color: Color, val lo: Double, val hi: Double)
 
@@ -188,42 +222,43 @@ private fun PointGraph(v: DoubleArray, curves: List<Curve>, ymin: Double, ymax: 
     var sel by remember { mutableStateOf<Pair<Int, Int>?>(null) }   // curve, point
     val measurer = rememberTextMeasurer()
     val span = ymax - ymin
+    val dens = LocalDensity.current
+    var sz by remember { mutableStateOf(IntSize.Zero) }
+    val hitPx = with(dens) { 36.dp.toPx() }
+    val geo = Geo(sz.width.toFloat(), sz.height.toFloat(), with(dens) { 34.dp.toPx() }, with(dens) { 10.dp.toPx() },
+        with(dens) { 8.dp.toPx() }, with(dens) { 18.dp.toPx() }, ymin, ymax)
+    val geoNow by rememberUpdatedState(geo)   // the drag keeps its lambdas: they read the current size through this
     Canvas(
-        Modifier.fillMaxWidth().height(190.dp).pointerInput(enabled) {
-            if (!enabled) return@pointerInput
-            val padL = 34.dp.toPx(); val padR = 10.dp.toPx(); val padT = 8.dp.toPx(); val padB = 18.dp.toPx()
-            fun gx(f: Double) = padL + (log10(f.coerceAtLeast(G_FMIN) / G_FMIN) / log10(G_FMAX / G_FMIN)).toFloat() * (size.width - padL - padR)
-            fun gy(g: Double) = padT + ((ymax - g) / span).toFloat() * (size.height - padT - padB)
-            fun fx(x: Float) = G_FMIN * 10.0.pow(((x - padL) / (size.width - padL - padR)).toDouble() * log10(G_FMAX / G_FMIN))
-            fun gyInv(y: Float) = ymax - (y - padT) / (size.height - padT - padB) * span
-            detectDragGestures(
-                onDragStart = { p ->
-                    val d = vRef
-                    var best: Pair<Int, Int>? = null
-                    var bestD = 36.dp.toPx()
-                    curves.forEachIndexed { ci, c ->
-                        for (k in 1..12) {
-                            val dist = (Offset(gx(d[c.freq0 + k]), gy(d[c.val0 + k])) - p).getDistance()
-                            if (dist < bestD) { bestD = dist; best = ci to k }
-                        }
+        Modifier.fillMaxWidth().height(190.dp).onSizeChanged { sz = it }.dragOn(enabled,
+            start = { p ->
+                val d = vRef
+                var best: Pair<Int, Int>? = null
+                var bestD = hitPx
+                curves.forEachIndexed { ci, c ->
+                    for (k in 1..12) {
+                        val dist = (Offset(geoNow.gx(d[c.freq0 + k]), geoNow.gy(d[c.val0 + k])) - p).getDistance()
+                        if (dist < bestD) { bestD = dist; best = ci to k }
                     }
-                    sel = best
-                },
-                onDragEnd = { sel = null },
-                onDragCancel = { sel = null },
-            ) { ch, _ ->
-                val (ci, k) = sel ?: return@detectDragGestures
+                }
+                sel = best
+                best != null
+            },
+            move = { p ->
+                val (ci, k) = sel ?: return@dragOn
                 val c = curves[ci]
                 val d = vRef
-                val g = gyInv(ch.position.y).coerceIn(c.lo, c.hi).roundToInt().toDouble()
+                val g = geoNow.gyInv(p.y).coerceIn(c.lo, c.hi).roundToInt().toDouble()
                 if (g != d[c.val0 + k]) Tx.set(c.val0 + k, g)
                 val lo = if (k > 1) d[c.freq0 + k - 1] + 10 else 10.0
                 val hi = if (k < 12) d[c.freq0 + k + 1] - 10 else G_FMAX
-                val f = ((fx(ch.position.x) / 10).roundToInt() * 10.0).coerceIn(lo, hi)
-                if (abs(f - d[c.freq0 + k]) >= 10) Tx.set(c.freq0 + k, f)
-                ch.consume()
-            }
-        },
+                // neighbours not 20 Hz apart (or not loaded yet): leave the frequency (code review: coerceIn threw)
+                if (lo <= hi) {
+                    val f = ((geoNow.fx(p.x) / 10).roundToInt() * 10.0).coerceIn(lo, hi)
+                    if (abs(f - d[c.freq0 + k]) >= 10) Tx.set(c.freq0 + k, f)
+                }
+            },
+            end = { sel = null },
+        ),
     ) {
         val padL = 34.dp.toPx(); val padR = 10.dp.toPx(); val padT = 8.dp.toPx(); val padB = 18.dp.toPx()
         fun gx(f: Double) = padL + (log10(f.coerceAtLeast(G_FMIN) / G_FMIN) / log10(G_FMAX / G_FMIN)).toFloat() * (size.width - padL - padR)
@@ -269,7 +304,7 @@ private fun PointGraph(v: DoubleArray, curves: List<Curve>, ymin: Double, ymax: 
 @Composable
 private fun CfcPage(v: DoubleArray, st: Status, back: () -> Unit) {
     val en = live
-    Page("CFC · ${Modes.name(st.mode)}", back, right = {
+    Page("CFC · ${txModeName(v, st)}", back, right = {
         Toggle("CFC", on(v, Tx.CFC), Modifier.width(96.dp), enabled = en) { setOn(Tx.CFC, it) }
         Toggle("Post EQ", on(v, Tx.CFC_EQ), Modifier.width(118.dp), enabled = en) { setOn(Tx.CFC_EQ, it) }
         SmallButton("Flat") {
@@ -302,7 +337,7 @@ private fun CfcPage(v: DoubleArray, st: Status, back: () -> Unit) {
 @Composable
 private fun TxEqPage(v: DoubleArray, st: Status, back: () -> Unit) {
     val en = live
-    Page("TX equalizer · ${Modes.name(st.mode)}", back, right = {
+    Page("TX equalizer · ${txModeName(v, st)}", back, right = {
         Toggle("Enable", on(v, Tx.EQ), Modifier.width(116.dp), enabled = en) { setOn(Tx.EQ, it) }
         SmallButton("Flat") { if (en) for (k in 1..12) Tx.set(Tx.EQ_GAIN0 + k, 0.0) }
     }) {
@@ -327,32 +362,31 @@ private fun MicBar(v: DoubleArray, enabled: Boolean) {
     val vRef by rememberUpdatedState(v)
     var drag by remember { mutableIntStateOf(0) }   // 1 VOX, 2 gate
     val measurer = rememberTextMeasurer()
+    var bw by remember { mutableStateOf(1f) }
+    val hitPx = with(LocalDensity.current) { 40.dp.toPx() }
     Canvas(
-        Modifier.fillMaxWidth().height(58.dp).pointerInput(enabled) {
-            if (!enabled) return@pointerInput
-            fun xOf(db: Double) = ((db - BAR_MIN) / -BAR_MIN).toFloat().coerceIn(0f, 1f) * size.width
-            fun dbOf(x: Float) = BAR_MIN + (x / size.width).coerceIn(0f, 1f) * -BAR_MIN
-            detectDragGestures(
-                onDragStart = { p ->
-                    val d = vRef
-                    val dv = abs(p.x - xOf(linToDb(d[Tx.VOX_THRESH])))
-                    val dg = abs(p.x - xOf(d[Tx.DEXP_TRIGGER]))
-                    drag = when {
-                        dv <= dg && dv < 40.dp.toPx() -> 1
-                        dg < 40.dp.toPx() -> 2
-                        else -> 0
-                    }
-                },
-                onDragEnd = { drag = 0 }, onDragCancel = { drag = 0 },
-            ) { ch, _ ->
-                val db = dbOf(ch.position.x)
+        Modifier.fillMaxWidth().height(58.dp).onSizeChanged { bw = it.width.toFloat() }.dragOn(enabled,
+            start = { p ->
+                fun xOf(db: Double) = ((db - BAR_MIN) / -BAR_MIN).toFloat().coerceIn(0f, 1f) * bw
+                val d = vRef
+                val dv = abs(p.x - xOf(linToDb(d[Tx.VOX_THRESH])))
+                val dg = abs(p.x - xOf(d[Tx.DEXP_TRIGGER]))
+                drag = when {
+                    dv <= dg && dv < hitPx -> 1
+                    dg < hitPx -> 2
+                    else -> 0
+                }
+                drag != 0
+            },
+            move = { p ->
+                val db = BAR_MIN + (p.x / bw).coerceIn(0f, 1f) * -BAR_MIN
                 when (drag) {
                     1 -> Tx.set(Tx.VOX_THRESH, dbToLin(db.roundToInt().toDouble()).coerceIn(0.0, 1.0))
                     2 -> Tx.set(Tx.DEXP_TRIGGER, db.roundToInt().toDouble().coerceIn(-40.0, -10.0))
                 }
-                ch.consume()
-            }
-        },
+            },
+            end = { drag = 0 },
+        ),
     ) {
         val top = 16.dp.toPx(); val h = 16.dp.toPx()
         fun xOf(db: Double) = ((db - BAR_MIN) / -BAR_MIN).toFloat().coerceIn(0f, 1f) * size.width

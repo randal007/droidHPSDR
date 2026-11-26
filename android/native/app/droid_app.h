@@ -148,6 +148,8 @@ enum {
   TXS_REFUSED, TXS_RADIO_PTT, TXS_UNDERRUN, TXS_OVERRUN, TXS_OUT_OF_BAND, TXS_MAX_W, TXS_PICO,
   TXS_INHIBITED, TXS_PA_FILE_OK,
   TXS_VOX_PEAK,                    /* vox.c's detector level (DEXP), 0..1: the mic bar of the VOX page */
+  TXS_VOX_REFUSED,                 /* times VOX was refused out of band (the UI says so when it grows) */
+  TXS_TX_MODE,                     /* the TX VFO's mode: the per-mode settings are that mode's */
   TXS_LIVE_END = 72,               /* the live fields are TXS_ON_AIR .. TXS_LIVE_END-1 */
   /* M7 step 2, the TX audio chain (tx_menu.c, equalizer_menu.c, vox_menu.c, the TX monitor).
    * deskHPSDR keeps the ones marked "per mode" in mode_settings[] (copy_mode_settings). */

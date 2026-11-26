@@ -117,6 +117,7 @@ static atomic_int refused;             /* last refusal reason, for the UI (TXR_*
 static long long tx_since_us;          /* when this transmission started (loop thread) */
 static atomic_int tx_since_s;          /* seconds on the air, for the UI */
 static atomic_int timed_out;           /* the timeout ended a screen PTT: no TX until it is released */
+static atomic_int vox_refusals;        /* VOX refused out of band, for the UI */
 static atomic_int pa_file_ok;          /* last PA calibration Save (1, -1 failed) / Load (2, -2 failed) */
 
 static long long now_us(void) { return g_get_monotonic_time(); }
@@ -750,6 +751,7 @@ int ext_set_vox(void *data) {
   /* droidHPSDR: out of band, VOX is refused like the screen PTT */
   if (GPOINTER_TO_INT(data) && !TransmitAllowed() && !tx_out_of_band_allowed) {
     atomic_store(&refused, TXR_BAND);
+    atomic_fetch_add(&vox_refusals, 1);
     return G_SOURCE_REMOVE;
   }
   radio_set_vox(GPOINTER_TO_INT(data));
@@ -1072,6 +1074,8 @@ static void tx_audio_get(const TRANSMITTER *tx, double *o) {
     o[TXA_CFC_POST0 + k] = tx->cfc_post[k];
   }
   o[TXS_VOX_PEAK] = vox_get_peak();
+  o[TXS_VOX_REFUSED] = atomic_load(&vox_refusals);
+  o[TXS_TX_MODE] = vfo_get_tx_mode();
 }
 
 /* On the loop thread (radio_core.c CMD_TX). */
