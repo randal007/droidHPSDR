@@ -198,11 +198,13 @@ typedef struct {
   float grid_db;             /* 2D: dB between grid lines (deskHPSDR's panadapter step) */
   int preserve;              /* 2D: deskHPSDR's "Preserve Narrow Peaks" (max of 3 analyzer pixels) */
   float peak_rgb[3];         /* 2D: peak-hold line colour */
+  float bg_alpha;            /* 2D: how much of the background picture shows (0: none) */
 } droid_view;
 
 void droid_gl_init(void);
 void droid_gl_resize(int w, int h);
 void droid_gl_draw(const droid_view *v);
+void droid_gl_set_background(unsigned tex, int w, int h);
 
 void droid_log(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 

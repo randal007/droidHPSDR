@@ -89,8 +89,10 @@ object Native {
         floorDb: Float, rangeDb: Float, wfLo: Float, wfHi: Float,
         flat: Boolean, panLo: Float, panHi: Float, wfTheme: Int, depthRows: Int,
         peakHold: Boolean, holdS: Float, dropDbS: Float, avgRows: Int,
-        avgMode: Int, gridDb: Float, preserve: Boolean, peakArgb: Int,
+        avgMode: Int, gridDb: Float, preserve: Boolean, peakArgb: Int, bgAlpha: Float,
     )
+    /** The 2D view's background picture: a texture made in the GL context (0 = none) and its size. */
+    external fun glSetBackground(tex: Int, w: Int, h: Int)
 
     /** Peak labels the way deskHPSDR finds them: out = [f0, dB0, f1, dB1, ...]; returns how many. */
     external fun peaks(

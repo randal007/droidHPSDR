@@ -40,6 +40,9 @@
 #define NR 1024            /* rows of history (~34 s at 30 rows/s) */
 #define WF_THEMES 6        /* waterfall colour themes, see the palettes */
 
+/* 2D background picture: a texture the app uploads (SpectrumView.kt), its size for the cover crop */
+static GLuint bg_tex;
+static int bg_w, bg_h;
 static GLuint height_tex, meta_tex, peak_tex, pal_wf[WF_THEMES], pal_surf[4], pal_line, vao;
 static GLuint prog_wf, prog_3d, prog_2d;
 static int vw, vh;
@@ -172,6 +175,9 @@ static const char *SP_FS =
   "uniform vec3 uPeakCol;\n"
   "uniform float uGrid;\n"   /* dB between grid lines */
   "uniform int uPreserve;\n"
+  "uniform sampler2D uBg;\n"
+  "uniform float uBgAlpha;\n"   /* 0: no picture */
+  "uniform vec2 uBgScale;\n"
   "in vec2 vUv;\n"
   "out vec4 o;\n"
   "float yOf(float db) { return 1.0 - clamp((db - uLo) / (uHi - uLo), 0.0, 1.0); }\n"
@@ -209,6 +215,8 @@ static const char *SP_FS =
   "  vec2 px = 1.0 / uPlotPx;\n"
   "  float y0 = traceY(vUv.x), yl = traceY(vUv.x - px.x), yr = traceY(vUv.x + px.x);\n"
   "  vec3 c = mix(vec3(0.010, 0.020, 0.048), vec3(0.020, 0.040, 0.085), vUv.y);\n"
+  /* a background picture under everything (Thetis-style), cropped to cover the plot */
+  "  if (uBgAlpha > 0.0) c = mix(c, texture(uBg, vec2(0.5) + (vUv - vec2(0.5)) * uBgScale).rgb, uBgAlpha);\n"
   "  float db = uHi - vUv.y * (uHi - uLo);\n"
   "  float g = abs(fract(db / uGrid + 0.5) - 0.5) * uGrid;\n"   /* dB to the nearest grid line */
   "  if (g < (uHi - uLo) / uPlotPx.y * 0.6) c += vec3(0.035);\n"
@@ -429,6 +437,7 @@ static void take_row(const droid_row *row, void *ctx) {
 
 void droid_gl_init(void) {
   /* A new EGL context: everything is created again, history restarts. */
+  bg_tex = 0;   /* the app uploads its picture again */
   head = -1;
   valid = 0;
   seq = 0;
@@ -539,6 +548,17 @@ void droid_gl_draw(const droid_view *v) {
     glUniform1f(U(prog_2d, "uGrid"), v->grid_db < 2.0f ? 10.0f : v->grid_db);
     glUniform1i(U(prog_2d, "uPreserve"), v->preserve != 0);
     glUniform3f(U(prog_2d, "uPeakCol"), v->peak_rgb[0], v->peak_rgb[1], v->peak_rgb[2]);
+    if (bg_tex && v->bg_alpha > 0.0f && bg_w > 0 && bg_h > 0) {
+      /* cover: the picture fills the plot, cropped on the long side */
+      float plot_a = (float)vw / plot_h, img_a = (float)bg_w / bg_h;
+      glActiveTexture(GL_TEXTURE4);
+      glBindTexture(GL_TEXTURE_2D, bg_tex);
+      glUniform1i(U(prog_2d, "uBg"), 4);
+      glUniform2f(U(prog_2d, "uBgScale"), img_a > plot_a ? plot_a / img_a : 1.0f, img_a > plot_a ? 1.0f : img_a / plot_a);
+      glUniform1f(U(prog_2d, "uBgAlpha"), v->bg_alpha);
+    } else {
+      glUniform1f(U(prog_2d, "uBgAlpha"), 0.0f);
+    }
     glUniform1f(U(prog_2d, "uLo"), v->pan_lo);
     glUniform1f(U(prog_2d, "uHi"), v->pan_hi);
     glUniform2f(U(prog_2d, "uPlotPx"), (float)vw, plot_h);
@@ -589,4 +609,11 @@ void droid_gl_draw(const droid_view *v) {
     glDrawArrays(GL_TRIANGLE_STRIP, 0, cols * 2);
   }
   glDisable(GL_BLEND);
+}
+
+/* The app's background picture for the 2D view: a texture it made in this GL context (0 = none). */
+void droid_gl_set_background(unsigned tex, int w, int h) {
+  bg_tex = tex;
+  bg_w = w;
+  bg_h = h;
 }

@@ -1316,4 +1316,9 @@ private fun AboutSheet() {
         color = Dim, fontSize = 12.sp,
     )
     Text("github.com/randal007/droidHPSDR", color = Acc, fontSize = 12.sp)
+    Text(
+        "2D background pictures: NASA (ISS crews, STS-39, SDO, JPL-Caltech/DSN, Apollo 8 / Bill Anders); " +
+            "Cosmic Cliffs: NASA, ESA, CSA, STScI. NASA does not endorse this app.",
+        color = Dim, fontSize = 10.5.sp,
+    )
 }

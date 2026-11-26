@@ -18,14 +18,48 @@ class SpectrumView(ctx: Context) : GLSurfaceView(ctx) {
     init {
         setEGLContextClientVersion(3)
         preserveEGLContextOnPause = true
-        setRenderer(Renderer())
+        setRenderer(Renderer(ctx.applicationContext))
         renderMode = RENDERMODE_CONTINUOUSLY
     }
 
-    private class Renderer : GLSurfaceView.Renderer {
+    private class Renderer(private val ctx: Context) : GLSurfaceView.Renderer {
         private var floor = Double.NaN
+        private var bgLoaded = -1   // which picture the texture holds (-1: none uploaded in this context)
+        private var bgTex = 0
 
-        override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) = Native.glInit()
+        override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
+            Native.glInit()
+            bgLoaded = -1; bgTex = 0   // a new GL context: the old texture is gone
+        }
+
+        /** The picture chosen in Display → Look, as a GL texture (decoded and uploaded here, on the GL thread). */
+        private fun syncBackground() {
+            val want = Disp.bgImage.value
+            if (want == bgLoaded) return
+            if (bgTex != 0) { android.opengl.GLES30.glDeleteTextures(1, intArrayOf(bgTex), 0); bgTex = 0 }
+            var w = 0; var h = 0
+            val file = backgroundFiles(ctx).getOrNull(want - 1)
+            if (file != null) {
+                val bmp = ctx.assets.open("backgrounds/$file").use { android.graphics.BitmapFactory.decodeStream(it) }
+                if (bmp != null) {
+                    val t = IntArray(1)
+                    android.opengl.GLES30.glGenTextures(1, t, 0)
+                    bgTex = t[0]
+                    android.opengl.GLES30.glBindTexture(android.opengl.GLES30.GL_TEXTURE_2D, bgTex)
+                    for ((p, v) in listOf(
+                        android.opengl.GLES30.GL_TEXTURE_MIN_FILTER to android.opengl.GLES30.GL_LINEAR,
+                        android.opengl.GLES30.GL_TEXTURE_MAG_FILTER to android.opengl.GLES30.GL_LINEAR,
+                        android.opengl.GLES30.GL_TEXTURE_WRAP_S to android.opengl.GLES30.GL_CLAMP_TO_EDGE,
+                        android.opengl.GLES30.GL_TEXTURE_WRAP_T to android.opengl.GLES30.GL_CLAMP_TO_EDGE,
+                    )) android.opengl.GLES30.glTexParameteri(android.opengl.GLES30.GL_TEXTURE_2D, p, v)
+                    android.opengl.GLUtils.texImage2D(android.opengl.GLES30.GL_TEXTURE_2D, 0, bmp, 0)
+                    w = bmp.width; h = bmp.height
+                    bmp.recycle()
+                }
+            }
+            Native.glSetBackground(bgTex, w, h)
+            bgLoaded = want
+        }
         override fun onSurfaceChanged(gl: GL10?, w: Int, h: Int) = Native.glResize(w, h)
 
         override fun onDrawFrame(gl: GL10?) {
@@ -45,6 +79,8 @@ class SpectrumView(ctx: Context) : GLSurfaceView(ctx) {
             val (panLo, panHi) = Disp.panLevels(nf)
             // peaks & hold: Hold never drops, Decay holds then falls (Display → Averaging)
             val pk = Disp.peakMode.value
+            syncBackground()
+            val bgAlpha = if (Radio.flat.value && Disp.bgImage.value > 0) Disp.bgStrength.value / 100f else 0f
             Native.glDraw(
                 f - half, f + half, Radio.split.value.toDouble(), style,
                 floor3.toFloat(), range3.toFloat(), wfLo.toFloat(), wfHi.toFloat(),
@@ -52,7 +88,7 @@ class SpectrumView(ctx: Context) : GLSurfaceView(ctx) {
                 Radio.wfTheme.value, Radio.depthRows.value,
                 pk != Disp.PEAK_OFF, if (pk == Disp.PEAK_HOLD) 1e9f else Disp.holdS.value.toFloat(),
                 if (pk == Disp.PEAK_HOLD) 0f else Disp.dropDbS.value.toFloat(), Radio.avgRows(),
-                Disp.avgMode.value, Disp.panStep.value.toFloat(), Disp.preserve.value, Disp.peakArgb(),
+                Disp.avgMode.value, Disp.panStep.value.toFloat(), Disp.preserve.value, Disp.peakArgb(), bgAlpha,
             )
         }
     }

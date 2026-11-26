@@ -327,6 +327,14 @@ that doesn't dim the screen: spectrum and waterfall Automatic / HIGH / LOW,
 same settings as Display → Levels. AGC lines fade to a quarter 3 s after
 their last change.
 
+**2D background pictures (Randal, 2026-11-25, Thetis-style):** Display →
+Look: None or one of 10 NASA pictures (public domain; aurora x4, city
+lights x2, Webb Cosmic Cliffs, SDO Sun, DSN Goldstone, Earthrise; files
+and credits in `android/app/src/main/assets/backgrounds/`, credit line in
+About), with a strength slider (10-80 %, default 40). Drawn by the 2D
+shader under the grid, fill and trace, cropped to cover. Code-generated
+ones were tried and dropped (Randal). Not run on the phone yet.
+
 **Demo band from an IQ recording (Randal, 2026-11-25):** ☰ → Discovery →
 Demo band plays the first .wav in the app's folder on the phone
 (`Android/data/io.github.randal007.droidhpsdr/files`) through deskHPSDR's

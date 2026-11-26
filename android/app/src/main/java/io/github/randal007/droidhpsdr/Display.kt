@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.fillMaxSize
@@ -39,6 +40,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -72,6 +75,10 @@ internal object Disp {
     val dropDbS = MutableStateFlow(6.0)
     val peakColor = MutableStateFlow(0)
 
+    // the 2D view's background picture (Thetis-style): 0 none, else 1.. = assets/backgrounds, sorted
+    val bgImage = MutableStateFlow(0)
+    val bgStrength = MutableStateFlow(40)     // percent of the picture that shows through
+
     // Screen (E6)
     val fftSize = MutableStateFlow(0)            // 0 Auto
     val saveZoom = MutableStateFlow(true)
@@ -90,7 +97,7 @@ internal object Disp {
 
     private val ints = listOf(
         "panHi" to panHi, "panLo" to panLo, "panStep" to panStep, "panMargin" to panMargin, "wfHi" to wfHi,
-        "wfLo" to wfLo, "avgMode" to avgMode, "peakMode" to peakMode, "peakColor" to peakColor, "fftSize" to fftSize,
+        "wfLo" to wfLo, "avgMode" to avgMode, "bgImage" to bgImage, "bgStrength" to bgStrength, "peakMode" to peakMode, "peakColor" to peakColor, "fftSize" to fftSize,
     )
     private val bools = listOf(
         "panAuto" to panAuto, "wfAuto" to wfAuto, "saveZoom" to saveZoom, "preserve" to preserve,
@@ -183,6 +190,7 @@ private fun LookTab() {
     GridButtons(listOf("2D spectrum"), if (flat) "2D spectrum" else null, 1) { Radio.setFlat(true) }
     Label("Waterfall colours")
     GridButtons(SpectrumView.WF_THEMES, SpectrumView.WF_THEMES[theme], 6) { Radio.setWfTheme(it) }
+    BackgroundPicker()
     Label("3D history (rows)")
     val depths = listOf(40, 80, 120, 160)
     GridButtons(depths.map { "$it" }, "$depth", 4) { Radio.setDepthRows(depths[it]) }
@@ -479,4 +487,50 @@ internal fun LevelsPanel(close: () -> Unit) {
             Setting("LOW", wl.toDouble(), -160f..-60f, 1.0, dbm, !wa) { Disp.set(Disp.wfLo, minOf(it.toInt(), wh - 10)) }
         }
     }
+}
+
+// ---------------------------------------------------------------- 2D background pictures (NASA, Randal 2026-11-25)
+
+/** The pictures in assets/backgrounds (NASA's, see CREDITS.md there), in file order. */
+internal fun backgroundFiles(ctx: android.content.Context): List<String> =
+    (ctx.assets.list("backgrounds") ?: emptyArray()).filter { it.endsWith(".jpg") }.sorted()
+
+/** Display → Look: the picture behind the 2D spectrum, as thumbnails, and how much of it shows. */
+@Composable
+private fun BackgroundPicker() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val sel by Disp.bgImage.collectAsState()
+    val strength by Disp.bgStrength.collectAsState()
+    val files = remember { backgroundFiles(ctx) }
+    val thumbs: List<ImageBitmap?> = remember {
+        files.map { f ->
+            val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = 16 }
+            val bmp: android.graphics.Bitmap? = ctx.assets.open("backgrounds/$f").use { android.graphics.BitmapFactory.decodeStream(it, null, opts) }
+            bmp?.asImageBitmap()
+        }
+    }
+    Label("2D background picture (NASA)")
+    val tiles: List<ImageBitmap?> = listOf<ImageBitmap?>(null) + thumbs
+    tiles.chunked(6).forEachIndexed { row, chunk ->
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            chunk.forEachIndexed { col, img ->
+                val i = row * 6 + col
+                Box(
+                    Modifier.weight(1f).height(40.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF0F1624))
+                        .border(if (i == sel) 2.dp else 1.dp, if (i == sel) Acc else Line, RoundedCornerShape(8.dp))
+                        .clickable { Disp.set(Disp.bgImage, i) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (img != null) androidx.compose.foundation.Image(img, null, Modifier.fillMaxSize(),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+                    else Text("None", color = Dim, fontSize = 11.sp)
+                }
+            }
+            repeat(6 - chunk.size) { Box(Modifier.weight(1f)) }
+        }
+    }
+    Setting("Picture strength", strength.toDouble(), 10f..80f, 5.0, { "%.0f %%".format(it) }, sel > 0) {
+        Disp.set(Disp.bgStrength, it.toInt())
+    }
+    Text("Shows in the 2D view, under the trace. Pictures: NASA (credits in About).", color = Dim, fontSize = 10.5.sp)
 }
