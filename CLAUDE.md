@@ -73,9 +73,16 @@ the main path and always plays. A PHONE switch also plays the receiver on the
 phone (and so on Bluetooth headphones). It is deskHPSDR's own "local audio":
 upstream `src/buffered_audio.c` compiled unchanged, with
 `android/native/app/audio_aaudio.c` as its backend on Android's built-in
-AAudio. Still no Oboe or other audio library, and the microphone stays the
-HL2+'s. "Phone only" (HL2+ speaker muted) is not built: there is no clean
-upstream way to mute only the AK4951 speaker; ask before adding one.
+AAudio. Still no Oboe or other audio library. "Phone only" (HL2+ speaker
+muted) is not built: there is no clean upstream way to mute only the
+AK4951 speaker; ask before adding one.
+
+**Microphone, changed by Randal 2026-11-25 (M7):** a setting picks the
+HL2+ mic jack or the phone's mic (built-in or Bluetooth). The phone mic
+is upstream's own local microphone (`transmitter->local_microphone`,
+buffered_audio.c's mic ring) with an AAudio input stream in
+`audio_aaudio.c`; still no audio library. On the HL2+ the "Line In" bit
+is the ATU enable, not an audio input (docs/M7-INVENTORY.md).
 
 ### 2. WDSP stays
 
@@ -201,7 +208,7 @@ tools/mockups/    the UI pictures (HTML/canvas; shoot.sh renders at 3120x1440)
 tools/iq_convert.py, push-demo-iq.sh   the demo's IQ recording (convert, put on the phone)
 docs/             ROADMAP.md (status), RADIO-TEST.md (the test before M7),
                   FEATURES.md, PORTING-NOTES.md, HARDWARE.md,
-                  M4/M5/M6-INVENTORY.md, M1-PLAN.md (history)
+                  M4-M7-INVENTORY.md, M1-PLAN.md (history)
 build-android/    build output, ignored
 ```
 
@@ -243,7 +250,7 @@ Decided; don't widen these without a reason.
 - **Transmit: Randal asked for M7 on 2026-11-25** (after the radio-test
   fixes). Until M7's steps build it, everything stays receive-only (the
   headless build is receive-only by construction, `headless/stubs.c`; keep
-  that). M7 goes step by step, each on a dummy load first (ROADMAP M7).
+  that). M7 goes step by step, each tested before the next: on the antenna through the XPA125B, low drive first, Randal watching (no dummy load, his call 2026-11-25; ROADMAP M7).
 
 ## Building and running (today)
 

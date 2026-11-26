@@ -30,6 +30,11 @@ Setting: `hl2_audio_codec` (radio.h: `HL2_CODEC_OFF` 0, `HL2_CODEC_AK4951` 1,
   decimated to 48 kHz (old_protocol.c ~2023) and passed to
   `tx_add_mic_sample()`. Unless `transmitter->local_microphone` is set, the
   radio's own mic is used and Android audio is never involved.
+- **Mic jack (V4.x board):** 3.5 mm TRS, mic on the tip, PTT ring to
+  sleeve (a mono plug = continuous TX). Analog mic amp fixed at 18 dB;
+  deskHPSDR's Mic Boost bit = +20.25 dB in the codec's digital block. The
+  "Line In" bit is **not** a line input: since gateware 74p2 it switches
+  the HL2+'s AH-4 ATU support. Details and sources: docs/M7-INVENTORY.md.
 - Traps from the Zeus HL2+ work (station-engine, 2026-09): the FPGA CW keyer
   only arms in a CW mode, and the paddle goes in the KEY jack, not MIC.
 

@@ -12,11 +12,12 @@
 <script src="layouts8.js"></script>
 <script src="layouts9.js"></script>
 <script src="layouts10.js"></script>
+<script src="layouts11.js"></script>
 </head><body><div id="screen"></div>
 <script>
   const id = new URLSearchParams(location.search).get('l') || 'L1';
   const L = LAYOUTS[id]();
   document.getElementById('screen').innerHTML = L.html;
-  for (const [sel, spec] of L.canvases) R.paint(document.querySelector(sel), spec);
+  for (const [sel, spec] of L.canvases) (spec.custom || R.paint)(document.querySelector(sel), spec);
   document.title = 'done';
 </script></body></html>

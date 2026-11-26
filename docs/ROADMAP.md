@@ -304,7 +304,28 @@ The two must-haves get their full UI here (the protocol side already works).
 
 ### M7 — Transmit *(Randal asked 2026-11-25: next, after the radio-test fixes)*
 
-Strict order, each step tested on a dummy load first:
+**Started 2026-11-25:** step 1 done, `docs/M7-INVENTORY.md` (what each
+control does on an HL2, the build plan, 6 safety findings, 9 questions for
+Randal). **His answers (same day):** hold-to-transmit PTT/MOX chip; mic
+source setting HL2+ / phone / Bluetooth; VOX off at every start; TX
+timeout, default 2 min; CW paddle with all deskHPSDR settings (keyboard
+CW and digital-mode "apps" later); voice keyer yes; duplex no (PureSignal
+instead). Setup: HL2 → XPA125B → antenna, no dummy load (Randal watches the
+amp; low drive first). HL2+ mic researched (inventory). **Pictures round 1** (step 1):
+M1-M8 in `~/Pictures/droidhpsdr-mockups/m7-round1` (`tools/mockups/layouts11.js`):
+PTT chip, three TX views (A meter card grows, B big meter mid-screen,
+C red frame + tall bars), drive/mic/TUNE panel, TX page, PA page,
+warnings. **Randal picked A** (meter card becomes the TX meter); asked
+how tune % is changed → M5b adds a TUNE DRIVE slider to the panel.
+One button labelled just TUNE (Randal: no XPA125B on it); with the Pico
+it also starts the XPA125B's tuner, as in deskHPSDR. Tune IOB not shown.
+One **TX** chip (shows the drive %) opens the transmit panel, instead of
+separate MIC / DRIVE / TUNE chips (Randal).
+**Randal happy with round 1 (2026-11-25):** A, M1, M5b, M6, M7, M8 as
+drawn. Next: build step 1.
+
+Strict order, each step tested before the next (on the antenna through
+the XPA125B, low drive first, Randal watching: no dummy load, 2026-11-25):
 
 1. SSB voice with the HL2+ mic (the M2 mic half: EP6 mic samples), drive,
    mic gain, TX filter, PTT from the screen and the HL2+ mic PTT, TUNE.
