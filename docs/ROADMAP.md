@@ -45,8 +45,13 @@ next, what's waiting on whom. Session history lives in git and in
 - **M5 round 2 pictures sent** (E1-E6, `tools/mockups/layouts6.js`):
   Display tabs + manual levels (E1) or dragging the dB scale (E2),
   averaging + peaks & hold (E3), info bar as a top strip (E4) or in the
-  meter card with an overload alarm (E5), the Screen page (E6). Waiting on
-  Randal's picks.
+  meter card with an overload alarm (E5), the Screen page (E6).
+  **Randal 2026-11-25: E1 (Levels tab with sliders), E3 and E6 OK as drawn;
+  info bar: E4's strip, but the screen must not get smaller and the view
+  must not be blocked.** Round 3 pictures for that (`layouts7.js`): E7
+  see-through strip over the top edge (cards 12 dp lower), E8 items in the
+  gaps between the floating cards, E9 see-through strip along the bottom
+  edge. Waiting on his pick; E1/E3/E6 can be built meanwhile.
 - Branch `m3-app` (pushed) holds M3-M5; `master` is still at M1.
 - No transmit until Randal asks for it (M7). One receiver; RX2 later.
 - **Decided 2026-11-24:** no "not doing" lines: what isn't an HL2 item goes
