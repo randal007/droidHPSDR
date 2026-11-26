@@ -130,7 +130,9 @@ static void *run(void *arg) {
         memcpy(&sq, buf + k * 4 + 2, 2);
         i = si / 32768.0; q = sq / 32768.0;
       }
-      rx_add_iq_samples(receiver[0], i, q);
+      /* I and Q swapped: a WAV recorder's I + jQ (SDR#, SDR++, SpectraVue) comes out mirrored
+       * through the HL2 path (USB heard as LSB, signals at their mirror frequencies) */
+      rx_add_iq_samples(receiver[0], q, i);
     }
     /* real time: the next 10 ms when they are due */
     next.tv_nsec += (long)n * 1000000000L / rate;
