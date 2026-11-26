@@ -30,6 +30,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.AnimationState
 import androidx.compose.animation.core.animateDecay
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -217,6 +218,14 @@ private fun SpectrumOverlay(modifier: Modifier) {
     val lastScaleTap = remember { floatArrayOf(-1f) }
     val panLoS by Disp.panLo.collectAsState(); val panHiS by Disp.panHi.collectAsState()
     val panAutoS by Disp.panAuto.collectAsState()
+    // the AGC lines fade 3 s after their last change, and come back while dragged or when the AGC changes
+    var agcTouch by remember { mutableStateOf(0L) }
+    // (AGC Automatic moves the gain itself every 5 s: that alone doesn't bring them back)
+    val userGain = if (dsp[Dsp.AGC_AUTO] == 0.0) dsp[Dsp.AGC_GAIN] else Double.NaN
+    LaunchedEffect(userGain, dsp[Dsp.AGC_HANG_TH], dsp[Dsp.AGC_AUTO], status.agc) { agcTouch = System.nanoTime() }
+    var agcActive by remember { mutableStateOf(true) }
+    LaunchedEffect(agcTouch) { agcActive = true; delay(3000); agcActive = false }
+    val agcAlpha by animateFloatAsState(if (agcActive) 1f else 0.25f, tween(if (agcActive) 150 else 900), label = "agc")
 
     /** Where the squelch line is (px from the top), as the peak labels place a level. */
     fun sqlY(splitY: Float, nf: Double, dbm: Double): Float = levelToY(splitY, nf, dbm, Radio.flat.value, Radio.style.value)
@@ -350,6 +359,7 @@ private fun SpectrumOverlay(modifier: Modifier) {
                             }
                             6 -> Radio.setDsp(Dsp.SQL, sqlAt(st.mode, c.position.y, splitY, top, gap, nf).roundToInt().toDouble())
                             7 -> {
+                                agcTouch = System.nanoTime()
                                 // more AGC gain = a lower line (WDSP's AGC top and its knee)
                                 val target = dbmAt(splitY, top, gap, nf, c.position.y)
                                 val g = (d0[Dsp.AGC_GAIN] - (target - d0[Dsp.AGC_LINE])).coerceIn(-20.0, 120.0).roundToInt().toDouble()
@@ -357,6 +367,7 @@ private fun SpectrumOverlay(modifier: Modifier) {
                                 Radio.setDsp(Dsp.AGC_LINE, d0[Dsp.AGC_LINE] - (g - d0[Dsp.AGC_GAIN]))   // until the radio says
                             }
                             8 -> {
+                                agcTouch = System.nanoTime()
                                 val th = (d0[Dsp.AGC_HANG_TH] - (c.position.y - down.position.y) / 3.dp.toPx()).coerceIn(0.0, 100.0)
                                 Radio.setDsp(Dsp.AGC_HANG_TH, th.roundToInt().toDouble())
                                 Radio.setDsp(Dsp.AGC_HANG_LINE, dbmAt(splitY, top, gap, nf, c.position.y))
@@ -454,17 +465,17 @@ private fun SpectrumOverlay(modifier: Modifier) {
         // the squelch line across the passband, with its level (dBm only in AM: see sqlLabel)
         val top = 90.dp.toPx(); val gap = 12.dp.toPx()
         // deskHPSDR's AGC lines (rx_panadapter.c): the AGC gain knee, and for Long/Slow the hang threshold
-        fun hline(y: Float, col: Color, text: String) {
+        fun hline(y: Float, col: Color, text: String, fade: Float = 1f) {
             val dash = 12.dp.toPx()
             var xx = 12.dp.toPx()
             while (xx < w - 12.dp.toPx()) {
-                drawLine(col.copy(alpha = 0.85f), Offset(xx, y), Offset(xx + dash, y), 1.8.dp.toPx()); xx += dash * 1.7f
+                drawLine(col.copy(alpha = 0.85f * fade), Offset(xx, y), Offset(xx + dash, y), 1.8.dp.toPx()); xx += dash * 1.7f
             }
-            val t = measurer.measure(text, TextStyle(color = col, fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold))
+            val t = measurer.measure(text, TextStyle(color = col.copy(alpha = fade), fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold))
             val bx = 12.dp.toPx()
-            drawRoundRect(Color(0xE008101E), Offset(bx, y - t.size.height / 2 - 5.dp.toPx()),
+            drawRoundRect(Color(0xE008101E).copy(alpha = 0.88f * fade), Offset(bx, y - t.size.height / 2 - 5.dp.toPx()),
                 Size(t.size.width + 18.dp.toPx(), t.size.height + 10.dp.toPx()), CornerRadius(13.dp.toPx()))
-            drawRoundRect(col.copy(alpha = 0.6f), Offset(bx, y - t.size.height / 2 - 5.dp.toPx()),
+            drawRoundRect(col.copy(alpha = 0.6f * fade), Offset(bx, y - t.size.height / 2 - 5.dp.toPx()),
                 Size(t.size.width + 18.dp.toPx(), t.size.height + 10.dp.toPx()), CornerRadius(13.dp.toPx()),
                 style = androidx.compose.ui.graphics.drawscope.Stroke(1.dp.toPx()))
             drawText(t, topLeft = Offset(bx + 9.dp.toPx(), y - t.size.height / 2))
@@ -473,9 +484,9 @@ private fun SpectrumOverlay(modifier: Modifier) {
             val nf = Radio.displayFloor
             if (status.agc == 1 || status.agc == 2) {
                 hline(levelY(splitY, top, gap, nf, dsp[Dsp.AGC_HANG_LINE]), Color(0xFFFF7F50),
-                    "AGC-Th %.0f dBm  ↕".format(dsp[Dsp.AGC_HANG_LINE]))
+                    "AGC-Th %.0f dBm  ↕".format(dsp[Dsp.AGC_HANG_LINE]), agcAlpha)
             }
-            hline(levelY(splitY, top, gap, nf, dsp[Dsp.AGC_LINE]), Amb, "AGC-G %.0f dBm  ↕".format(dsp[Dsp.AGC_LINE]))
+            hline(levelY(splitY, top, gap, nf, dsp[Dsp.AGC_LINE]), Amb, "AGC-G %.0f dBm  ↕".format(dsp[Dsp.AGC_LINE]), agcAlpha)
         }
         if (dsp[Dsp.SQL_ON] != 0.0) {
             val sy = sqlLineY(status.mode, dsp[Dsp.SQL], splitY, top, gap, Radio.displayFloor)
