@@ -335,6 +335,13 @@ Bluetooth mic (AAudio input), TX timeout, warnings. Not built yet: watt
 meter calibration, PA Save/Import, XIT, TX antenna, external TX inhibit
 input. **Not run on the radio yet.**
 
+**On the air 2026-11-25 (Randal, HL2 → XPA125B → antenna, 40 m LSB, drive 20 %):**
+TUNE works and stays on (after the watchdog fix), 3.2 W at tune drive 18 %.
+Phone mic: after raising MIC GAIN, ALC peaks -0.7..-5 dB, HL2 fwd 0.1-0.17 W
+(averaged meter, SSB). Bluetooth mic: ALC 0.0 dB, WDSP mic +1..+1.6 dB (a
+little hot: one mic gain for all sources, as deskHPSDR). HL2+ jack, the
+timeout and the force-stop / adapter-pull checks: not done yet.
+
 **First on-air check (low drive, Randal watching the XPA125B):**
 1. TX page: Transmit enabled off → PTT shows the lock and refuses.
 2. On, drive ~10 %, 20 m SSB: hold PTT, speak into the HL2+ mic: meter
