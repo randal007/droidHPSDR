@@ -57,7 +57,7 @@
 
 /* ---- requests from the UI, run on the loop thread ---- */
 
-enum { CMD_FREQ, CMD_MODE, CMD_FILTER, CMD_VOLUME, CMD_LNA, CMD_PHONE_AUDIO, CMD_ZOOM, CMD_FPS, CMD_WINDOW, CMD_DETECTOR, CMD_PAN_FFT,
+enum { CMD_FREQ, CMD_MODE, CMD_FILTER, CMD_VOLUME, CMD_LNA, CMD_PHONE_AUDIO, CMD_ZOOM, CMD_FPS, CMD_WINDOW, CMD_DETECTOR, CMD_PAN_FFT, CMD_HL2,
        CMD_FILTER_PRESET, CMD_BAND, CMD_BANDSTACK, CMD_VFO_OP, CMD_RIT, CMD_CTUN, CMD_LOCK, CMD_STEP, CMD_MEMORY,
        CMD_AGC, CMD_SAVE, CMD_DSP, CMD_NONE };
 typedef struct { int type; long long i; double d; int a, b; } cmd;
@@ -106,6 +106,7 @@ void droid_set_fps(int fps) { post((cmd){ .type = CMD_FPS, .a = fps }); }
 void droid_set_window(int type) { post((cmd){ .type = CMD_WINDOW, .a = type }); }
 void droid_set_detector(int det) { post((cmd){ .type = CMD_DETECTOR, .a = det }); }
 void droid_set_pan_fft(int size) { post((cmd){ .type = CMD_PAN_FFT, .a = size }); }
+void droid_hl2_set(int field, double v) { post((cmd){ .type = CMD_HL2, .a = field, .d = v }); }
 void droid_filter_preset(int index) { post((cmd){ .type = CMD_FILTER_PRESET, .a = index }); }
 void droid_band(int band) { post((cmd){ .type = CMD_BAND, .a = band }); }
 void droid_bandstack(int entry) { post((cmd){ .type = CMD_BANDSTACK, .a = entry }); }
@@ -285,6 +286,22 @@ static void run(const cmd *c) {
     if (c->a < 0 || c->a > 3) break;
     rx->display_detector_mode = DET_PEAK + c->a;
     rx_set_detector(rx);
+    break;
+  case CMD_HL2:   /* the HL2's lines of deskHPSDR's Radio menu (M6, picture F1) */
+    switch (c->a) {
+    case HL2_CODEC: hl2_audio_codec = c->d != 0 ? HL2_CODEC_AK4951 : HL2_CODEC_OFF; break;
+    case HL2_FILTER_BOARD:   /* like radio_menu.c's filter_cb: the board choice sets the OC bits */
+      filter_board = c->d != 0 ? N2ADR_TX : N2ADR;
+      if (filter_board == N2ADR) n2adr_oc_settings(); else n2adr_oc_settings_tx();
+      break;
+    case HL2_HPF:
+      n2adr_hpf_enable = c->d != 0;
+      if (filter_board == N2ADR_TX) n2adr_oc_settings_tx();
+      break;
+    case HL2_PPM: ppm_factor = c->d < -100 ? -100 : c->d > 100 ? 100 : c->d; break;
+    case HL2_ADC_CAL: rx_gain_calibration = (int)lround(c->d); break;
+    case HL2_FORCE_IOB: force_iob = c->d != 0; break;
+    }
     break;
   case CMD_PAN_FFT:   /* Screen menu "FFT size": 0 Auto (upstream picks from width x zoom), or a fixed size */
     if (c->a != 0 && c->a != 16384 && c->a != 32768 && c->a != 65536 && c->a != 131072 && c->a != 262144) break;

@@ -290,8 +290,9 @@ RX equalizer with its graph, and the remaining Display/FFT/Screen items.
 (what each control does on an HL2, proposals, 7 questions for Randal).
 Found and fixed on the way: the HL2 filter board's per-band OC bits were
 never set (deskHPSDR's `n2adr_oc_settings()`, now `headless/n2adr.c`);
-radio check: relays click on band changes. M5 still waits for its radio
-tests and ticks.
+radio check: relays click on band changes. Picks B (settings) and E2 fix
+B built the same day (see M6-INVENTORY.md); gateware flashing is a
+separate step. M5 still waits for its radio tests and ticks.
 
 The two must-haves get their full UI here (the protocol side already works).
 

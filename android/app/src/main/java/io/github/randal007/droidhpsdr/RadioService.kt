@@ -154,7 +154,7 @@ class RadioService : Service() {
                 Radio.setPhase(Phase.CONNECTING, "Looking for the HL2 on $net${ip?.let { " at $it" } ?: ""}")
                 val s = Radio.status.value
                 val err = Native.start(
-                    Radio.freq.value, s.mode, Radio.lnaDb.value, true,
+                    Radio.freq.value, s.mode, Radio.lnaDb.value, Hl2.codec.value,
                     Radio.sampleRate.value, Radio.PIXELS, Radio.FPS, ip, filesDir.absolutePath,
                 )
                 if (err.isEmpty() && !wanted) {
@@ -171,6 +171,7 @@ class RadioService : Service() {
                     Radio.setPhoneAudio(Radio.phoneAudio.value)   // via Radio (needs RUNNING): the poll waits for it
                     Radio.setSpan(Radio.span.value)   // re-clamped and zoomed for the (new) sample rate
                     Radio.setDisplay()
+                    Hl2.apply()   // M6: the HL2 settings of the SDR Device sheet
                     getSystemService(NotificationManager::class.java).notify(1, notification("Receiving on $net"))
                 } else {
                     Radio.setPhase(Phase.ERROR, err)

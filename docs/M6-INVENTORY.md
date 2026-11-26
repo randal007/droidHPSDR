@@ -110,6 +110,18 @@ transverter (question 5), otherwise **later**.
    shows the Pico's LPF status, and TUNE drives the XPA125B's tuner through
    it (`hl2_iob_set_antenna_tuner`): that part is M7.
 
+**Picks (2026-11-25):** settings way **B** (pictures F1, F2 in
+`tools/mockups/layouts8.js`); E2 scale fix **B** (widens while held, F4).
+**Built the same day** (`Hl2.kt`, `android/native/app/hl2.c`): SDR Device
+sheet with the HL2 section (IO board status from upstream's detection, Force
+IO board, HL2+ codec, filter board RX+TX+HPF / TX only + 3 MHz HPF via
+upstream's `n2adr_oc_settings[_tx]`, frequency calibration with upstream's
+real `apply_ppm_ll` instead of the old stub, ADC gain calibration); HL2
+setup page (Ethernet only, red warning, each action asks first and stops
+the radio): reboot then start again after 15 s, prefer DHCP, alternate MAC.
+**Gateware flashing not built yet**: its own step, tested with Randal.
+Not run on the radio yet.
+
 ## Questions for Randal (asked 2026-11-25)
 
 1. **Where the IO board status goes:** a small line in the info bar gaps

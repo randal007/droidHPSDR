@@ -110,7 +110,7 @@ internal val Grn = Color(0xFF3EE07A)
 internal val Red = Color(0xFFFF5A50)
 
 
-internal enum class Sheet { SCREEN, BAND, MODE, AF, LNA, FILTER, MENU, DISPLAY, FREQ, VFO, AGC, SDR, DISCOVERY, ABOUT, NOISE, EQ, DSP, TOOLBAR, RX, METER }
+internal enum class Sheet { HL2SETUP, SCREEN, BAND, MODE, AF, LNA, FILTER, MENU, DISPLAY, FREQ, VFO, AGC, SDR, DISCOVERY, ABOUT, NOISE, EQ, DSP, TOOLBAR, RX, METER }
 
 internal fun Modifier.glass(r: Int = 14) =
     clip(RoundedCornerShape(r.dp)).background(Glass).border(1.dp, Line, RoundedCornerShape(r.dp))
@@ -182,7 +182,7 @@ fun Screen(onStart: () -> Unit, onStop: () -> Unit) {
                 Sheet.EQ -> EqPanel(status, dismiss)
                 Sheet.TOOLBAR -> ToolbarEditor(status, dismiss)
                 null -> {}
-                else -> SheetHost(sheet!!, status, onStart, onStop, dismiss, done)
+                else -> SheetHost(sheet!!, status, onStart, onStop, dismiss, done) { sheet = it }
             }
         }
     }
@@ -289,6 +289,7 @@ private fun SpectrumOverlay(modifier: Modifier) {
                     st.ritOn && down.position.x > xa && down.position.x < xb -> 3
                     else -> 0
                 }
+                if (edge == 9) scaleHeld = true   // E2 (pick B): held, the scale widens for two fingers
                 val vt = VelocityTracker()
                 vt.addPosition(down.uptimeMillis, down.position)
                 var moved = false
@@ -494,13 +495,15 @@ private fun SpectrumOverlay(modifier: Modifier) {
         // E2 (option): the dB scale down the right edge; amber while the levels are manual
         if (scaleOn) {
             val manual = !panAutoS
-            val x0 = w - SCALE_W.dp.toPx()
+            // pick B: while held it opens to 3x the width, room for a pinch
+            val x0 = w - (if (scaleHeld) SCALE_W * 3 else SCALE_W).dp.toPx()
             val y0 = SCALE_TOP.dp.toPx(); val y1 = splitY - 10.dp.toPx()
             if (y1 > y0 + 40.dp.toPx()) {
                 val amb = Color(0xFFFFD27A)
                 drawRect(
                     androidx.compose.ui.graphics.Brush.horizontalGradient(
-                        listOf(Color.Transparent, if (manual) amb.copy(alpha = 0.16f) else Color(0x14FFFFFF)), x0, w),
+                        listOf(if (scaleHeld) amb.copy(alpha = 0.06f) else Color.Transparent,
+                        if (manual || scaleHeld) amb.copy(alpha = if (scaleHeld) 0.3f else 0.16f) else Color(0x14FFFFFF)), x0, w),
                     Offset(x0, y0), Size(w - x0, y1 - y0),
                 )
                 drawLine(if (manual) amb.copy(alpha = 0.35f) else Line, Offset(x0, y0), Offset(x0, y1), 1.dp.toPx())
@@ -522,7 +525,7 @@ private fun SpectrumOverlay(modifier: Modifier) {
                 if (scaleHeld) {
                     val t1 = measurer.measure("Levels %.0f … %.0f dBm · %s".format(h2, l2, if (manual) "manual" else "auto"),
                         TextStyle(color = amb, fontSize = 11.sp, fontWeight = FontWeight.SemiBold))
-                    val t2 = measurer.measure("drag ↕: move · pinch: range · double-tap: automatic", TextStyle(color = Dim, fontSize = 10.sp))
+                    val t2 = measurer.measure("drag: move · pinch: range · let go: thin again · double-tap: automatic", TextStyle(color = Dim, fontSize = 10.sp))
                     val bw = maxOf(t1.size.width, t2.size.width) + 18.dp.toPx()
                     val bh = t1.size.height + t2.size.height + 12.dp.toPx()
                     val bx = x0 - bw - 8.dp.toPx(); val by = y0 + 30.dp.toPx()
@@ -934,11 +937,12 @@ private fun CardButton(text: String, color: Color, onClick: () -> Unit) {
 @Composable
 private fun SheetHost(
     which: Sheet, st: Status, onStart: () -> Unit, onStop: () -> Unit, dismiss: () -> Unit, close: () -> Unit,
+    open: (Sheet) -> Unit = {},
 ) {
     Box(Modifier.fillMaxSize().background(Color(0x66000000)).clickable(onClick = dismiss)) {
         Column(
             Modifier.align(Alignment.BottomCenter)
-                .widthIn(max = if (which == Sheet.DISPLAY || which == Sheet.SCREEN) 660.dp else 560.dp).fillMaxWidth()
+                .widthIn(max = if (which in WIDE_SHEETS) 660.dp else 560.dp).fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)).background(Color(0xF20C111E))
                 .border(1.dp, Line, RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
                 .clickable(enabled = false) {}.heightIn(max = 330.dp)
@@ -953,7 +957,8 @@ private fun SheetHost(
                 Sheet.LNA -> SliderSheet("LNA gain", Radio.lnaDb.collectAsState().value, -12f..48f,
                     { "%+.0f dB".format(it) }) { Radio.setLna(it.roundToInt().toDouble()) }
                 Sheet.FILTER -> FilterSheet(st, close)
-                Sheet.SDR -> SdrDeviceSheet(st)
+                Sheet.SDR -> SdrDeviceSheet(st) { open(Sheet.HL2SETUP) }
+                Sheet.HL2SETUP -> Hl2SetupSheet(st, onStart, onStop)
                 Sheet.DISCOVERY -> DiscoverySheet(st, onStart, onStop, close)
                 Sheet.ABOUT -> AboutSheet()
                 Sheet.DSP -> DspSheet(st)
@@ -1262,24 +1267,7 @@ private fun MenuButton(label: String, modifier: Modifier, later: String? = null,
     }
 }
 
-/** deskHPSDR's SDR Device (Radio) menu: the parts built so far. The HL2 settings come with M6. */
-@Composable
-private fun SdrDeviceSheet(st: Status) {
-    SheetTitle("SDR Device")
-    Text("The HL2's own settings (IO board, HL2+, PA) come with M6. Sample rate: ☰ → RX.", color = Dim, fontSize = 11.sp)
-    val region by Radio.region.collectAsState()
-    Label("Band plan region")
-    GridButtons(listOf("Region 1", "Region 2", "Region 3"), "Region $region", 3) { Radio.setRegion(it + 1) }
-    val delay by Radio.rowDelayMs.collectAsState()
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Label("Tuning delay (test): spectrum rows are this old")
-        Text("$delay ms", color = Acc, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-    }
-    Slider(
-        value = delay.toFloat(), onValueChange = { Radio.setRowDelay(it.roundToInt()) }, valueRange = 0f..400f,
-        colors = SliderDefaults.colors(thumbColor = Acc, activeTrackColor = Acc),
-    )
-}
+private val WIDE_SHEETS = setOf(Sheet.DISPLAY, Sheet.SCREEN, Sheet.SDR, Sheet.HL2SETUP)
 
 /** deskHPSDR's Discovery: where the radio is, start/stop, and the demo band. */
 @Composable

@@ -69,7 +69,8 @@ add_library(droidhpsdr SHARED
   app/radio_core.c
   app/display_bridge.c
   app/gl_render.c
-  app/jni_bridge.c)
+  app/jni_bridge.c
+  app/hl2.c)
 target_include_directories(droidhpsdr PRIVATE app)
 target_compile_options(droidhpsdr PRIVATE -Wall -Wno-unused-parameter)
 target_link_libraries(droidhpsdr droidcore GLESv3 aaudio)

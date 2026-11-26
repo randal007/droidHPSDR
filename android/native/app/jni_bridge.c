@@ -182,6 +182,48 @@ JNIEXPORT void JNICALL FN(memory)(JNIEnv *env, jobject self, jboolean store, jin
 }
 JNIEXPORT void JNICALL FN(save)(JNIEnv *env, jobject self) { (void)env; (void)self; droid_save(); }
 
+/* M6: HL2 settings and setup */
+JNIEXPORT void JNICALL FN(hl2Set)(JNIEnv *env, jobject self, jint field, jdouble value) {
+  (void)env; (void)self;
+  droid_hl2_set(field, value);
+}
+JNIEXPORT jstring JNICALL FN(hl2Info)(JNIEnv *env, jobject self) {   /* iob|pico|lpf|gateware */
+  (void)self;
+  int iob, pico, gw;
+  char lpf[32], out[64];
+  droid_hl2_info(&iob, &pico, lpf, sizeof lpf, &gw);
+  snprintf(out, sizeof out, "%d|%d|%s|%d", iob, pico, lpf, gw);
+  return (*env)->NewStringUTF(env, out);
+}
+/* the setup actions block up to a few seconds (UDP with retries): call them off the main thread.
+ * They return "" when done, or the error text; hl2Flags returns the flags byte as text, or "!error". */
+JNIEXPORT jstring JNICALL FN(hl2Reboot)(JNIEnv *env, jobject self) {
+  (void)self;
+  char e[256];
+  droid_hl2_reboot(e, sizeof e);
+  return (*env)->NewStringUTF(env, e);
+}
+JNIEXPORT jstring JNICALL FN(hl2Dhcp)(JNIEnv *env, jobject self) {
+  (void)self;
+  char e[256];
+  droid_hl2_set_dhcp(e, sizeof e);
+  return (*env)->NewStringUTF(env, e);
+}
+JNIEXPORT jstring JNICALL FN(hl2Mac)(JNIEnv *env, jobject self, jint a, jint b) {
+  (void)self;
+  char e[256];
+  droid_hl2_set_mac(a, b, e, sizeof e);
+  return (*env)->NewStringUTF(env, e);
+}
+JNIEXPORT jstring JNICALL FN(hl2Flags)(JNIEnv *env, jobject self) {
+  (void)self;
+  char e[256], out[260];
+  int f;
+  if (droid_hl2_read_flags(&f, e, sizeof e) == 0) snprintf(out, sizeof out, "%d", f);
+  else snprintf(out, sizeof out, "!%s", e);
+  return (*env)->NewStringUTF(env, out);
+}
+
 /* M5: receive DSP fields (dsp.c) */
 JNIEXPORT void JNICALL FN(dspSet)(JNIEnv *env, jobject self, jint field, jdouble value) {
   (void)env; (void)self;

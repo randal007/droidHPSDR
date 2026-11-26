@@ -65,6 +65,14 @@ object Native {
     external fun demoSetFrequency(hz: Long)
     external fun demoSetFps(fps: Int)
 
+    // M6: the HL2's settings (field: droid_app.h HL2_*), IO board status "iob|pico|lpf|gateware",
+    // and HL2 setup over UDP 1025 (blocking: call off the main thread; "" = done, else the error)
+    external fun hl2Set(field: Int, value: Double)
+    external fun hl2Info(): String
+    external fun hl2Reboot(): String
+    external fun hl2Dhcp(): String
+    external fun hl2Mac(a: Int, b: Int): String
+
     // GL thread only
     external fun glInit()
     external fun glResize(w: Int, h: Int)

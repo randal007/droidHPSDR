@@ -16,6 +16,7 @@
  * GPL v3 or later, like the rest of droidHPSDR.
  */
 #include <stdatomic.h>
+#include <math.h>
 #include <stdlib.h>
 #include <netinet/in.h>
 #include <gtk/gtk.h>
@@ -49,7 +50,23 @@
 
 /* ---- radio.c ---- */
 
-long long apply_ppm_ll(long long f_hz) { return f_hz; }   /* ppm_factor 0 */
+/* radio.c ((C) 2015 John Melton G0ORX/N6LYT, 2024-2026 Heiko Amft DL1BZ
+ * (Project deskHPSDR); GPL-3.0-or-later), copied unchanged: the HL2's
+ * frequency calibration (SDR Device sheet, "Freq. Calibration (ppm factor)"). */
+double ppm_factor = 0.0;
+long long apply_ppm_ll(long long f_hz) {
+  const long long cal_0p1ppm = llround(ppm_factor * 10.0);
+  const long long scale  = 10000000LL;
+  const long long factor = scale + cal_0p1ppm;
+#if defined(__SIZEOF_INT128__)
+  return (long long)(((__int128) f_hz * factor) / scale);
+#else
+  // Overflow-sicher ohne __int128 (32-bit ARM)
+  const long long q = f_hz / scale;
+  const long long r = f_hz % scale;
+  return (q * factor) + ((r * factor) / scale);
+#endif
+}
 int radio_get_drive_as_int(void) { return 0; }
 int radio_is_transmitting(void) { return 0; }             /* RX ONLY */
 void radio_set_alex_antennas(void) {}

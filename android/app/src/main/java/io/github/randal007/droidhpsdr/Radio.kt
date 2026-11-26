@@ -227,6 +227,7 @@ object Radio {
         prefs = ctx.getSharedPreferences("radio", Context.MODE_PRIVATE)
         freq.value = prefs.getLong("freq", 14_074_000L)
         Disp.init(ctx)
+        Hl2.init(ctx)
         // Screen → Save zoom level: off starts at the default span
         span.value = if (Disp.saveZoom.value) prefs.getFloat("span", 48_000f).toDouble() else 48_000.0
         style.value = prefs.getInt("style", 0)

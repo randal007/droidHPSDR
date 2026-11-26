@@ -85,7 +85,16 @@ void droid_set_zoom(int zoom);         /* upstream's zoom, 1..16 */
 void droid_set_fps(int fps);           /* spectrum rows per second */
 void droid_set_window(int type);       /* FFT window, Screen menu order */
 void droid_set_detector(int det);      /* 0 Peak, 1 Average, 2 Rosenfell, 3 Sample */
-void droid_set_pan_fft(int size);      /* Screen menu FFT size: 0 Auto, 16384 .. 262144 */
+void droid_set_pan_fft(int size);
+/* M6: the HL2 settings of the SDR Device sheet (radio_core.c, on the radio loop) */
+enum { HL2_CODEC, HL2_FILTER_BOARD, HL2_HPF, HL2_PPM, HL2_ADC_CAL, HL2_FORCE_IOB };
+void droid_hl2_set(int field, double v);
+/* hl2.c: IO board detection, and HL2 setup over UDP 1025 (errors as text) */
+void droid_hl2_info(int *iob, int *pico, char *lpf, int lpf_len, int *gateware);
+int droid_hl2_read_flags(int *flags, char *error, int error_len);
+int droid_hl2_set_dhcp(char *error, int error_len);
+int droid_hl2_set_mac(int a, int b, char *error, int error_len);
+int droid_hl2_reboot(char *error, int error_len);      /* Screen menu FFT size: 0 Auto, 16384 .. 262144 */
 
 /* M4, receive operating: each runs deskHPSDR's own vfo.c / store.c call */
 void droid_filter_preset(int index);   /* vfo_filter_changed(): 0..9 presets, 10/11 Var1/Var2 */
