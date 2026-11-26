@@ -211,8 +211,9 @@ void GetMultifunctionString(char *str, size_t len) { if (len) str[0] = 0; }
 
 /* desktop UI refreshes: Compose reads the state itself */
 gboolean band_menu_update(gpointer data) { (void)data; return G_SOURCE_REMOVE; }
-void update_eq(void) {}
-void update_noise(void) {}
+/* weak: the app's real ones are in app/dsp.c (m1-rx keeps these) */
+__attribute__((weak)) void update_eq(void) {}
+__attribute__((weak)) void update_noise(void) {}
 void update_slider_agc_btn(void) {}
 void update_slider_bbcompr_button(gboolean show_widget) { (void)show_widget; }
 void update_slider_bbcompr_scale(gboolean show_widget) { (void)show_widget; }

@@ -78,9 +78,25 @@ object Tx {
     const val ON_AIR = 48; const val FWD = 49; const val REV = 50; const val SWR = 51; const val ALC = 52
     const val MIC = 53; const val HIGH_SWR = 54; const val SECONDS = 55; const val TIMEOUTS = 56; const val REFUSED = 57
     const val RADIO_PTT = 58; const val UNDERRUN = 59; const val OVERRUN = 60; const val OUT_OF_BAND_NOW = 61
-    const val MAX_W = 62; const val PICO = 63; const val INHIBITED = 64; const val PA_FILE_OK = 65; const val COUNT = 72
-    /** first live field: everything from here on is the radio's, never the UI's */
+    const val MAX_W = 62; const val PICO = 63; const val INHIBITED = 64; const val PA_FILE_OK = 65; const val VOX_PEAK = 66
+    /** the live fields, the radio's and never the UI's: [LIVE] until [LIVE_END] */
     private const val LIVE = ON_AIR
+    private const val LIVE_END = 72
+
+    // step 2, the TX audio chain (droid_app.h TXA_*); "per mode" ones are kept per mode by deskHPSDR
+    const val COMP = 72; const val COMP_LEVEL = 73; const val LEV = 74; const val LEV_GAIN = 75; const val LEV_DECAY = 76
+    const val CESSB = 77; const val PHROT = 78; const val PHROT_STAGES = 79; const val PHROT_FREQ = 80
+    const val CFC = 81; const val CFC_EQ = 82; const val EQ = 83; const val CTFMODE = 84
+    const val DEXP = 85; const val DEXP_TRIGGER = 86; const val DEXP_EXP = 87; const val DEXP_ATTACK = 88
+    const val DEXP_RELEASE = 89; const val DEXP_HOLD = 90; const val DEXP_TAU = 91; const val DEXP_HYST = 92
+    const val DEXP_FILTER = 93; const val DEXP_FILTER_LOW = 94; const val DEXP_FILTER_HIGH = 95
+    const val VOX = 96; const val VOX_THRESH = 97; const val VOX_HANG = 98
+    const val MON = 99; const val MON_GAIN = 100; const val MON_POST = 101; const val ADDGAIN = 102; const val ADDGAIN_GAIN = 103
+    /** 13 each: [0] added gain / unused / Pre Comp / Post Gain, [1..12] the points */
+    const val EQ_GAIN0 = 104; const val EQ_FREQ0 = 117; const val CFC_FREQ0 = 130; const val CFC_LVL0 = 143; const val CFC_POST0 = 156
+    const val COUNT = 169
+    /** the audio chain's fields: set only while the radio runs (they belong to the mode it is in), never kept for later */
+    private const val AUDIO = COMP
 
     /** deskHPSDR's band numbers (band.h) of the HL2's HF bands, for the PA page */
     val PA_BANDS = listOf("160m" to 2, "80m" to 3, "60m" to 4, "40m" to 5, "30m" to 6, "20m" to 7, "17m" to 8,
@@ -93,7 +109,8 @@ object Tx {
     val v = MutableStateFlow(DoubleArray(COUNT).also {
         it[TIMEOUT] = 120.0; it[DRIVE] = 50.0; it[TUNE_DRIVE] = 2.0; it[DRIVE_PER_BAND] = 1.0; it[SWR_ALARM] = 3.0
         it[FILTER_LOW] = 100.0; it[FILTER_HIGH] = 2900.0; it[MUTE_RX] = 1.0; it[PA] = 1.0; it[PA_POWER] = 1.0
-        it[MAX_W] = 5.0; it[SWR] = 1.0; it[ALC] = -100.0; it[MIC] = -100.0
+        it[MAX_W] = 5.0; it[SWR] = 1.0; it[ALC] = -100.0; it[MIC] = -100.0; it[VOX_HANG] = 250.0; it[VOX_THRESH] = 0.001
+        it[MON_GAIN] = -6.0; it[MON_POST] = 1.0
         for (b in 0 until 24) it[PA_CAL0 + b] = 38.8
     })
     /** the safety switch (TX page): off until Randal turns it on; kept across starts */
@@ -127,13 +144,14 @@ object Tx {
     private val running get() = Radio.running && !Radio.playback.value
 
     fun set(field: Int, value: Double) {
+        if (field >= AUDIO && !running) return   // the drawer says "start the radio"
         val a = v.value.copyOf()
         a[field] = value
         v.value = a
         lastSetMs = System.currentTimeMillis()
         if (running) Native.txSet(field, value)
         // events and the VFO's XIT are never kept for later: they'd land on the radio at the next start
-        else if (field != PTT && field != TUNE && field != PA_FILE && field != XIT && field != XIT_ON && field < LIVE)
+        else if (field != PTT && field != TUNE && field != PA_FILE && field != XIT && field != XIT_ON && field < LIVE)   // not AUDIO either
             synchronized(pending) { pending.add(field) }
     }
 
@@ -160,9 +178,9 @@ object Tx {
 
     private fun clearLive() {
         val a = v.value.copyOf()
-        if (a[ON_AIR] == 0.0 && a[PTT] == 0.0 && a[TUNE] == 0.0 && a[FWD] == 0.0) return
-        for (i in LIVE until COUNT) if (i != MAX_W && i != TIMEOUTS) a[i] = 0.0
-        a[PTT] = 0.0; a[TUNE] = 0.0; a[SWR] = 1.0; a[ALC] = -100.0; a[MIC] = -100.0
+        if (a[ON_AIR] == 0.0 && a[PTT] == 0.0 && a[TUNE] == 0.0 && a[FWD] == 0.0 && a[VOX] == 0.0 && a[VOX_PEAK] == 0.0) return
+        for (i in LIVE until LIVE_END) if (i != MAX_W && i != TIMEOUTS) a[i] = 0.0
+        a[PTT] = 0.0; a[TUNE] = 0.0; a[SWR] = 1.0; a[ALC] = -100.0; a[MIC] = -100.0; a[VOX] = 0.0   // the radio switches VOX off when it stops
         v.value = a
     }
 
@@ -246,9 +264,13 @@ object Tx {
         if (!running) { clearLive(); return }
         if (Native.txGet(buf) != COUNT) return
         val fresh = System.currentTimeMillis() - lastSetMs > 800
-        val a = if (fresh) buf.copyOf() else v.value.copyOf().also { for (i in LIVE until COUNT) it[i] = buf[i]; it[PTT] = buf[PTT]; it[TUNE] = buf[TUNE] }
+        val a = if (fresh) buf.copyOf() else v.value.copyOf().also {
+            for (i in LIVE until LIVE_END) it[i] = buf[i]
+            it[PTT] = buf[PTT]; it[TUNE] = buf[TUNE]; it[VOX] = buf[VOX]   // VOX: the timeout and a stop switch it off
+        }
         val t = a[TIMEOUTS].toInt()
-        if (t > lastTimeouts) note.value = "TX timeout (${timeoutLabel(a[TIMEOUT])}): back to receive" to System.currentTimeMillis()
+        if (t > lastTimeouts) note.value = "TX timeout (${timeoutLabel(a[TIMEOUT])}): back to receive" +
+            (if (v.value[VOX] != 0.0) ", VOX off" else "") to System.currentTimeMillis()
         lastTimeouts = t
         if (!a.contentEquals(v.value)) v.value = a
     }

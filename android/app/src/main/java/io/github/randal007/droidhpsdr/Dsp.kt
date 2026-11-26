@@ -519,6 +519,7 @@ internal val ALL_CHIPS = listOf(
     "BINAURAL" to "BINAURAL", "CWPEAK" to "CW PEAK", "BAND" to "BAND", "MODE" to "MODE", "AF" to "AF", "LNA" to "LNA",
     "PHONE" to "PHONE", "FILTER" to "FILTER", "AGC" to "AGC", "STEP" to "STEP", "SPAN" to "SPAN", "RIT" to "RIT",
     "CTUN" to "CTUN", "LOCK" to "LOCK", "AB" to "A⇄B", "LEVELS" to "LEVELS", "TX" to "TX",
+    "PROC" to "PROC", "VOX" to "VOX", "MON" to "MON",
 )
 
 /** One chip of the bottom row. Toggles: tap = on/off, hold = their settings. */
@@ -592,6 +593,24 @@ internal fun ChipFor(id: String, st: Status, open: (Sheet) -> Unit, modifier: Mo
         "TX" -> {   // M7 (Randal): one chip for the transmit panel; it shows the drive
             val tx by Tx.v.collectAsState()
             Chip("TX", "%.0f %%".format(tx[Tx.DRIVE]), tx[Tx.ON_AIR] != 0.0, modifier, { open(Sheet.TX) }) { open(Sheet.TXPANEL) }
+        }
+        // M7 step 2 (pick N1): the TX audio drawer. PROC opens it; VOX and MON switch, hold for their settings
+        "PROC" -> {
+            val tx by Tx.v.collectAsState()
+            val v = procLabel(tx)
+            Chip("PROC", v, v != "Off", modifier, { open(Sheet.TXAUDIO) }) { open(Sheet.TXAUDIO) }
+        }
+        "VOX" -> {
+            val tx by Tx.v.collectAsState()
+            Chip("VOX", if (tx[Tx.VOX] != 0.0) "On" else "Off", tx[Tx.VOX] != 0.0, modifier, { open(Sheet.TXVOX) }) { voxToggle() }
+        }
+        "MON" -> {
+            val tx by Tx.v.collectAsState()
+            val mon = tx[Tx.MON] != 0.0
+            Chip("MON", if (mon) "On" else "Off", mon, modifier, { open(Sheet.TXVOX) }) {
+                if (Radio.running && !Radio.playback.value) Tx.set(Tx.MON, if (mon) 0.0 else 1.0)
+                else Tx.note.value = "Start the radio to use the monitor" to System.currentTimeMillis()
+            }
         }
     }
 }

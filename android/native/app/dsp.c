@@ -28,6 +28,7 @@
 #include "mode.h"
 #include "radio.h"
 #include "receiver.h"
+#include "transmitter.h"
 #include "vfo.h"
 
 #include "ext.h"
@@ -40,7 +41,7 @@ static int nr_allowed(const RECEIVER *rx) {
 }
 
 /* noise_menu.c update_noise_for_rx(), without the dialog and slider updates */
-static void update_noise(RECEIVER *rx) {
+static void noise_apply(RECEIVER *rx) {
   int mode = vfo[rx->id].mode;
   if (!nr_allowed(rx)) {
     rx->nr = 0;
@@ -94,8 +95,8 @@ static void update_anf(RECEIVER *rx) {
   g_idle_add(ext_vfo_update, NULL);
 }
 
-/* equalizer_menu.c: store the RX EQ per mode, then update_eq() */
-static void update_eq(RECEIVER *rx) {
+/* equalizer_menu.c: store the RX EQ per mode, then hand it to WDSP */
+static void eq_apply(RECEIVER *rx) {
   if (rx->id == 0) {
     int mode = vfo[0].mode;
     mode_settings[mode].en_rxeq = rx->eq_enable;
@@ -107,6 +108,24 @@ static void update_eq(RECEIVER *rx) {
   }
   rx_set_equalizer(rx);
   g_idle_add(ext_vfo_update, NULL);
+}
+
+/* noise_menu.c update_noise() and equalizer_menu.c update_eq(): vfo.c calls
+ * them after a mode change has loaded that mode's settings, so WDSP gets
+ * them (headless/stubs.c's empty ones were used until 2026-11-26: a mode
+ * change left NR/NB and the EQs of the old mode running). update_eq() also
+ * sets the TX equalizer (M7 step 2). */
+void update_noise(void) {
+  noise_apply(active_receiver);
+}
+
+void update_eq(void) {
+  if (can_transmit) {
+    tx_set_equalizer(transmitter);
+  }
+  for (int id = 0; id < receivers; id++) {
+    rx_set_equalizer(receiver[id]);
+  }
 }
 
 static double clampd(double v, double lo, double hi) { return v < lo ? lo : v > hi ? hi : v; }
@@ -190,32 +209,32 @@ void droid_dsp_apply(int field, double v) {
   RECEIVER *rx = receiver[0];
   if (rx == NULL || field < 0 || field >= F_COUNT) return;
   switch (field) {
-  case F_NR: rx->nr = clampi(v, 0, 5); update_noise(rx); break;
-  case F_NB: rx->nb = clampi(v, 0, 2); update_noise(rx); break;
-  case F_SNB: rx->snb = v != 0; update_noise(rx); break;
-  case F_NR_POST_AGC: rx->nr_agc = v != 0; update_noise(rx); rx_set_anf(rx); break;
-  case F_NR2_GAIN: rx->nr2_gain_method = clampi(v, 0, 3); update_noise(rx); break;
-  case F_NR2_NPE: rx->nr2_npe_method = clampi(v, 0, 2); update_noise(rx); break;
-  case F_NR2_AE: rx->nr2_ae = v != 0; update_noise(rx); break;
-  case F_NR2_POST: rx->nr2_post = v != 0; update_noise(rx); break;
-  case F_NR2_POST_LEVEL: rx->nr2_post_nlevel = clampi(v, 0, 100); update_noise(rx); break;
-  case F_NR2_POST_RATE: rx->nr2_post_rate = clampi(v, 0, 100); update_noise(rx); break;
-  case F_NR2_POST_FACTOR: rx->nr2_post_factor = clampi(v, 0, 100); update_noise(rx); break;
-  case F_NR2_POST_TAPER: rx->nr2_post_taper = clampi(v, 0, 100); update_noise(rx); break;
-  case F_NR2_TRAINED_THRESH: rx->nr2_trained_threshold = clampd(v, -5.0, 5.0); update_noise(rx); break;
-  case F_NR2_TRAINED_T2: rx->nr2_trained_t2 = clampd(v, 0.02, 0.3); update_noise(rx); break;
-  case F_NB2_MODE: rx->nb2_mode = clampi(v, 0, 4); update_noise(rx); break;
-  case F_NB_SLEW: rx->nb_tau = 0.001 * clampd(v, 0.0, 0.1); update_noise(rx); break;
-  case F_NB_LEAD: rx->nb_advtime = 0.001 * clampd(v, 0.0, 0.1); update_noise(rx); break;
-  case F_NB_LAG: rx->nb_hang = 0.001 * clampd(v, 0.0, 0.1); update_noise(rx); break;
-  case F_NB_THRESH: rx->nb_thresh = 0.165 * clampd(v, 15.0, 500.0); update_noise(rx); break;
-  case F_NR4_REDUCTION: rx->nr4_reduction_amount = clampd(v, 0.0, 20.0); update_noise(rx); break;
-  case F_NR4_SMOOTHING: rx->nr4_smoothing_factor = clampd(v, 0.0, 100.0); update_noise(rx); break;
-  case F_NR4_WHITENING: rx->nr4_whitening_factor = clampd(v, 0.0, 100.0); update_noise(rx); break;
-  case F_NR4_RESCALE: rx->nr4_noise_rescale = clampd(v, 0.0, 12.0); update_noise(rx); break;
-  case F_NR4_THRESHOLD: rx->nr4_post_filter_threshold = clampd(v, -10.0, 10.0); update_noise(rx); break;
-  case F_NNR_MODEL: rx->nnr_model = clampi(v, 0, 1); update_noise(rx); break;
-  case F_NNR_FLOOR: rx->nnr_mask_floor = clampd(v, -50.0, -10.0); update_noise(rx); break;
+  case F_NR: rx->nr = clampi(v, 0, 5); noise_apply(rx); break;
+  case F_NB: rx->nb = clampi(v, 0, 2); noise_apply(rx); break;
+  case F_SNB: rx->snb = v != 0; noise_apply(rx); break;
+  case F_NR_POST_AGC: rx->nr_agc = v != 0; noise_apply(rx); rx_set_anf(rx); break;
+  case F_NR2_GAIN: rx->nr2_gain_method = clampi(v, 0, 3); noise_apply(rx); break;
+  case F_NR2_NPE: rx->nr2_npe_method = clampi(v, 0, 2); noise_apply(rx); break;
+  case F_NR2_AE: rx->nr2_ae = v != 0; noise_apply(rx); break;
+  case F_NR2_POST: rx->nr2_post = v != 0; noise_apply(rx); break;
+  case F_NR2_POST_LEVEL: rx->nr2_post_nlevel = clampi(v, 0, 100); noise_apply(rx); break;
+  case F_NR2_POST_RATE: rx->nr2_post_rate = clampi(v, 0, 100); noise_apply(rx); break;
+  case F_NR2_POST_FACTOR: rx->nr2_post_factor = clampi(v, 0, 100); noise_apply(rx); break;
+  case F_NR2_POST_TAPER: rx->nr2_post_taper = clampi(v, 0, 100); noise_apply(rx); break;
+  case F_NR2_TRAINED_THRESH: rx->nr2_trained_threshold = clampd(v, -5.0, 5.0); noise_apply(rx); break;
+  case F_NR2_TRAINED_T2: rx->nr2_trained_t2 = clampd(v, 0.02, 0.3); noise_apply(rx); break;
+  case F_NB2_MODE: rx->nb2_mode = clampi(v, 0, 4); noise_apply(rx); break;
+  case F_NB_SLEW: rx->nb_tau = 0.001 * clampd(v, 0.0, 0.1); noise_apply(rx); break;
+  case F_NB_LEAD: rx->nb_advtime = 0.001 * clampd(v, 0.0, 0.1); noise_apply(rx); break;
+  case F_NB_LAG: rx->nb_hang = 0.001 * clampd(v, 0.0, 0.1); noise_apply(rx); break;
+  case F_NB_THRESH: rx->nb_thresh = 0.165 * clampd(v, 15.0, 500.0); noise_apply(rx); break;
+  case F_NR4_REDUCTION: rx->nr4_reduction_amount = clampd(v, 0.0, 20.0); noise_apply(rx); break;
+  case F_NR4_SMOOTHING: rx->nr4_smoothing_factor = clampd(v, 0.0, 100.0); noise_apply(rx); break;
+  case F_NR4_WHITENING: rx->nr4_whitening_factor = clampd(v, 0.0, 100.0); noise_apply(rx); break;
+  case F_NR4_RESCALE: rx->nr4_noise_rescale = clampd(v, 0.0, 12.0); noise_apply(rx); break;
+  case F_NR4_THRESHOLD: rx->nr4_post_filter_threshold = clampd(v, -10.0, 10.0); noise_apply(rx); break;
+  case F_NNR_MODEL: rx->nnr_model = clampi(v, 0, 1); noise_apply(rx); break;
+  case F_NNR_FLOOR: rx->nnr_mask_floor = clampd(v, -50.0, -10.0); noise_apply(rx); break;
   case F_ANF: rx->anf = v != 0; update_anf(rx); break;
   /* the manual notch: noise_menu.c mnf_cb / mnf_fbw_cb, rx_panadapter.c's right-click */
   case F_MNF: rx->mnf = v != 0; rx_set_notch(rx); g_idle_add(ext_vfo_update, NULL); break;
@@ -224,7 +243,7 @@ void droid_dsp_apply(int field, double v) {
   /* squelch: sliders.c's squelch slider and enable button, 0..100 */
   case F_SQL_ON: rx->squelch_enable = v != 0; rx_set_squelch(rx); break;
   case F_SQL: rx->squelch = clampd(v, 0.0, 100.0); rx_set_squelch(rx); break;
-  case F_EQ_ON: rx->eq_enable = v != 0; update_eq(rx); break;
+  case F_EQ_ON: rx->eq_enable = v != 0; eq_apply(rx); break;
   case F_BINAURAL:
     rx->binaural = (v != 0 && rx_binaural_allowed(rx)) ? 1 : 0;
     rx_set_af_binaural(rx);
@@ -276,14 +295,14 @@ void droid_dsp_apply(int field, double v) {
   default:
     if (field >= F_EQ_GAIN0 && field < F_EQ_GAIN0 + 13) {
       rx->eq_gain[field - F_EQ_GAIN0] = clampd(v, -20.0, 20.0);
-      update_eq(rx);
+      eq_apply(rx);
     } else if (field > F_EQ_FREQ0 && field < F_EQ_FREQ0 + 13) {
       /* equalizer_menu.c freq_changed_cb(): points stay in order, 10 Hz apart */
       int i = field - F_EQ_FREQ0;
       double lo = (i > 1) ? rx->eq_freq[i - 1] + 10.0 : 10.0;
       double hi = (i < 12) ? rx->eq_freq[i + 1] - 10.0 : 16000.0;
       rx->eq_freq[i] = clampd(v, lo, hi);
-      update_eq(rx);
+      eq_apply(rx);
     }
     break;
   }

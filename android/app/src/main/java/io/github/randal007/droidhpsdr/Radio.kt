@@ -154,7 +154,7 @@ object Radio {
     const val PIXELS = 2048
     const val FPS = 30
     const val SAMPLE_RATE = 384000   // default; the HL2 does 48/96/192/384 kHz
-    val DEFAULT_CHIPS = listOf("NR", "BAND", "AF", "LNA", "PHONE", "FILTER", "AGC", "STEP", "SPAN", "LEVELS", "TX")
+    val DEFAULT_CHIPS = listOf("NR", "BAND", "AF", "LNA", "PHONE", "FILTER", "AGC", "STEP", "SPAN", "LEVELS", "PROC", "VOX", "MON", "TX")
 
     val status = MutableStateFlow(Status())
     val freq = MutableStateFlow(14_074_000L)
@@ -270,6 +270,13 @@ object Radio {
         if (!prefs.getBoolean("chipsTxAdded", false)) {
             if ("TX" !in chips.value) setChips(chips.value + "TX")
             prefs.edit().putBoolean("chipsTxAdded", true).apply()
+        }
+        // M7 step 2: PROC, VOX and MON (the TX audio drawer), once, before the TX chip
+        if (!prefs.getBoolean("chipsTxAudioAdded", false)) {
+            val add = listOf("PROC", "VOX", "MON").filter { it !in chips.value }
+            val at = chips.value.indexOf("TX").let { if (it < 0) chips.value.size else it }
+            if (add.isNotEmpty()) setChips(chips.value.take(at) + add + chips.value.drop(at))
+            prefs.edit().putBoolean("chipsTxAudioAdded", true).apply()
         }
     }
 

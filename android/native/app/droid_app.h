@@ -147,7 +147,37 @@ enum {
   TXS_ON_AIR = 48, TXS_FWD, TXS_REV, TXS_SWR, TXS_ALC, TXS_MIC, TXS_HIGH_SWR, TXS_SECONDS, TXS_TIMEOUTS,
   TXS_REFUSED, TXS_RADIO_PTT, TXS_UNDERRUN, TXS_OVERRUN, TXS_OUT_OF_BAND, TXS_MAX_W, TXS_PICO,
   TXS_INHIBITED, TXS_PA_FILE_OK,
-  TX_COUNT = 72
+  TXS_VOX_PEAK,                    /* vox.c's detector level (DEXP), 0..1: the mic bar of the VOX page */
+  TXS_LIVE_END = 72,               /* the live fields are TXS_ON_AIR .. TXS_LIVE_END-1 */
+  /* M7 step 2, the TX audio chain (tx_menu.c, equalizer_menu.c, vox_menu.c, the TX monitor).
+   * deskHPSDR keeps the ones marked "per mode" in mode_settings[] (copy_mode_settings). */
+  TXA_COMP = 72,                   /* speech processor, per mode */
+  TXA_COMP_LEVEL,                  /* 0..20 dB, per mode */
+  TXA_LEV, TXA_LEV_GAIN,           /* leveler on, 0..15 dB, per mode */
+  TXA_LEV_DECAY,                   /* 0..500 ms */
+  TXA_CESSB,
+  TXA_PHROT,                       /* phase rotator, per mode */
+  TXA_PHROT_STAGES, TXA_PHROT_FREQ,  /* 1..15, 1..500 Hz */
+  TXA_CFC, TXA_CFC_EQ,             /* CFC ("Use Pre-CFC") and its post EQ ("Use Post-CFC"), per mode */
+  TXA_EQ,                          /* TX equalizer, per mode */
+  TXA_CTFMODE,
+  TXA_DEXP,                        /* the noise gate (DEXP), per mode, like all its settings: */
+  TXA_DEXP_TRIGGER,                /* -40..-10 dB */
+  TXA_DEXP_EXP,                    /* 0..30 dB */
+  TXA_DEXP_ATTACK, TXA_DEXP_RELEASE, TXA_DEXP_HOLD, TXA_DEXP_TAU,   /* ms */
+  TXA_DEXP_HYST,                   /* 0.05..0.95 */
+  TXA_DEXP_FILTER, TXA_DEXP_FILTER_LOW, TXA_DEXP_FILTER_HIGH,       /* side channel filter, Hz */
+  TXA_VOX,                         /* vox_enabled: off at every start (Randal) */
+  TXA_VOX_THRESH,                  /* 0..1 (vox_menu.c's 0..1000 / 1000) */
+  TXA_VOX_HANG,                    /* ms */
+  TXA_MON, TXA_MON_GAIN, TXA_MON_POST,   /* the TX monitor: on, dB, 1 = after WDSP */
+  TXA_ADDGAIN, TXA_ADDGAIN_GAIN,   /* "Local Mic PreAmp Gain", 1..20 dB */
+  TXA_EQ_GAIN0 = 104,              /* 13: [0] the added gain, [1..12] the points; per mode */
+  TXA_EQ_FREQ0 = TXA_EQ_GAIN0 + 13,
+  TXA_CFC_FREQ0 = TXA_EQ_FREQ0 + 13,   /* 13: [0] unused */
+  TXA_CFC_LVL0 = TXA_CFC_FREQ0 + 13,   /* [0] Pre Comp, 0..20 dB */
+  TXA_CFC_POST0 = TXA_CFC_LVL0 + 13,   /* [0] Post Gain, -20..20 dB */
+  TX_COUNT = TXA_CFC_POST0 + 13
 };
 /* why the last PTT / TUNE did not transmit */
 enum { TXR_NONE, TXR_DISABLED, TXR_INHIBIT, TXR_CW, TXR_BAND, TXR_TIMEOUT };

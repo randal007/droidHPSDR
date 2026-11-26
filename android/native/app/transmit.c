@@ -20,9 +20,18 @@
  *   - a TX timeout (default 2 min) ends any transmission;
  *   - VOX is off at every start; MOX in CW waits for M7 step 3 (CW);
  *   - the radio leaves transmit before the stream stops (radio_core.c).
+ *   - VOX (step 2) goes through upstream's vox.c and the same checks, and
+ *     is refused out of band like the screen PTT.
+ *
+ * Step 2, the TX audio chain: the lines of tx_menu.c, equalizer_menu.c and
+ * vox_menu.c that store a setting (per mode where deskHPSDR keeps it per
+ * mode: mode_settings[] + copy_mode_settings()) and hand it to WDSP
+ * (tx_set_compressor / tx_set_dexp / tx_set_equalizer), without the dialogs.
  *
  * Copied from deskHPSDR: radio.c, ext.c, sliders.c set_drive(), actions.c
- * (TUNE_T), toolset.c sort_cfc() / sort_tx_eq(): (C) 2015 John Melton
+ * (TUNE_T), toolset.c sort_cfc() / sort_tx_eq(), tx_menu.c spinbtn_cb() /
+ * chkbtn_cb(), equalizer_menu.c enable_cb() / freq_changed_cb() /
+ * gain_changed_cb(), vox_menu.c: (C) 2015 John Melton
  * G0ORX/N6LYT, 2024-2026 Heiko Amft DL1BZ (Project deskHPSDR),
  * GPL-3.0-or-later.
  *
@@ -738,6 +747,11 @@ int ext_mox_update_immediate(void *data) {
 }
 
 int ext_set_vox(void *data) {
+  /* droidHPSDR: out of band, VOX is refused like the screen PTT */
+  if (GPOINTER_TO_INT(data) && !TransmitAllowed() && !tx_out_of_band_allowed) {
+    atomic_store(&refused, TXR_BAND);
+    return G_SOURCE_REMOVE;
+  }
   radio_set_vox(GPOINTER_TO_INT(data));
   return G_SOURCE_REMOVE;
 }
@@ -846,6 +860,8 @@ void droid_tx_create(int pixels) {
   GetPropI0("OCmemory_tune_time", OCmemory_tune_time);
   GetPropI0("droid_tx_timeout_s", tx_timeout_s);
   GetPropI0("enable_tx_inhibit", enable_tx_inhibit);
+  GetPropF0("vox_threshold", vox_threshold);   /* radio.c's; vox_enabled is not read: VOX is off at every start */
+  GetPropF0("vox_hang", vox_hang);
   int split_saved = 0;
   GetPropI0("split", split_saved);   /* radio.c restores it; applied once the transmitter exists */
   if (pa_power < PA_1W || pa_power > PA_5W + 12) pa_power = PA_5W;
@@ -883,6 +899,8 @@ void droid_tx_save(void) {
   SetPropI0("droid_tx_timeout_s", atomic_load(&tx_timeout_s));
   SetPropI0("enable_tx_inhibit", enable_tx_inhibit);
   SetPropI0("split", split);
+  SetPropF0("vox_threshold", vox_threshold);
+  SetPropF0("vox_hang", vox_hang);
   tx_save_state(transmitter);
 }
 
@@ -908,6 +926,153 @@ static void apply_tx_filter(void) {
 }
 
 static double clampd(double v, double lo, double hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+/* ---- step 2: the TX audio chain ---- */
+
+_Static_assert(TXA_ADDGAIN_GAIN == 103 && TX_COUNT == 169, "TXA_* numbering: keep in step with Tx in Transmit.kt");
+
+static int clampi(double v, int lo, int hi) { int i = (int)lround(v); return i < lo ? lo : i > hi ? hi : i; }
+
+/* A frequency point of the TX EQ or the CFC: in order, 10 Hz apart
+ * (equalizer_menu.c freq_changed_cb(), tx_menu.c CFCFREQ). */
+static double point_freq(const double *f, int k, double v) {
+  double lo = k > 1 ? f[k - 1] + 10.0 : 10.0;
+  double hi = k < 12 ? f[k + 1] - 10.0 : 16000.0;
+  return clampd(v, lo, hi);
+}
+
+/* tx_menu.c / equalizer_menu.c / vox_menu.c: set it on the transmitter, keep
+ * it for the mode where deskHPSDR does, hand it to WDSP. Returns 0 when the
+ * field is not one of the chain's. */
+static int tx_audio_apply(TRANSMITTER *tx, int field, double v) {
+  int mode = vfo_get_tx_mode();
+  struct _mode_settings *ms = &mode_settings[mode];
+  int on = v != 0;
+  switch (field) {
+  case TXA_COMP: tx->compressor = on; ms->compressor = on; copy_mode_settings(mode); tx_set_compressor(tx); return 1;
+  case TXA_COMP_LEVEL:
+    tx->compressor_level = clampi(v, 0, 20); ms->compressor_level = tx->compressor_level;
+    copy_mode_settings(mode); tx_set_compressor(tx); return 1;
+  case TXA_LEV: tx->lev_enable = on; ms->lev_enable = on; copy_mode_settings(mode); tx_set_compressor(tx); return 1;
+  case TXA_LEV_GAIN:
+    tx->lev_gain = clampd(v, 0, 15); ms->lev_gain = tx->lev_gain; copy_mode_settings(mode); tx_set_compressor(tx); return 1;
+  case TXA_LEV_DECAY: tx->lev_decay = clampi(v, 0, 500); tx_set_compressor(tx); return 1;
+  case TXA_CESSB:
+    tx->cessb_enable = on;
+    if (tx->low_latency) { tx->low_latency = 0; tx_set_latency(tx); }
+    tx_set_compressor(tx);
+    return 1;
+  case TXA_PHROT: tx->phrot_enable = on; ms->phrot_enable = on; copy_mode_settings(mode); tx_set_compressor(tx); return 1;
+  case TXA_PHROT_STAGES: tx->phrot_stage = clampi(v, 1, 15); tx_set_compressor(tx); return 1;
+  case TXA_PHROT_FREQ: tx->phrot_freq = clampd(v, 1, 500); tx_set_compressor(tx); return 1;
+  case TXA_CFC: tx->cfc = on; ms->cfc = on; copy_mode_settings(mode); tx_set_compressor(tx); return 1;
+  case TXA_CFC_EQ: tx->cfc_eq = on; ms->cfc_eq = on; copy_mode_settings(mode); tx_set_compressor(tx); return 1;
+  case TXA_EQ: tx->eq_enable = on; ms->en_txeq = on; copy_mode_settings(mode); tx_set_equalizer(tx); return 1;
+  case TXA_CTFMODE: tx->eq_ctfmode = on; tx_set_eq_ctfmode(tx); return 1;
+  case TXA_DEXP: tx->dexp = on; ms->dexp = on; break;
+  case TXA_DEXP_TRIGGER: tx->dexp_trigger = clampi(v, -40, -10); ms->dexp_trigger = tx->dexp_trigger; break;
+  case TXA_DEXP_EXP: tx->dexp_exp = clampi(v, 0, 30); ms->dexp_exp = tx->dexp_exp; break;
+  case TXA_DEXP_ATTACK: tx->dexp_attack = 0.001 * clampd(v, 1, 250); ms->dexp_attack = tx->dexp_attack; break;
+  case TXA_DEXP_RELEASE: tx->dexp_release = 0.001 * clampd(v, 1, 500); ms->dexp_release = tx->dexp_release; break;
+  case TXA_DEXP_HOLD: tx->dexp_hold = 0.001 * clampd(v, 10, 1500); ms->dexp_hold = tx->dexp_hold; break;
+  case TXA_DEXP_TAU: tx->dexp_tau = 0.001 * clampd(v, 1, 250); ms->dexp_tau = tx->dexp_tau; break;
+  case TXA_DEXP_HYST: tx->dexp_hyst = clampd(v, 0.05, 0.95); ms->dexp_hyst = tx->dexp_hyst; break;
+  case TXA_DEXP_FILTER: tx->dexp_filter = on; ms->dexp_filter = on; break;
+  case TXA_DEXP_FILTER_LOW: tx->dexp_filter_low = clampi(v, 0, 1200); ms->dexp_filter_low = tx->dexp_filter_low; break;
+  case TXA_DEXP_FILTER_HIGH: tx->dexp_filter_high = clampi(v, 500, 10000); ms->dexp_filter_high = tx->dexp_filter_high; break;
+  case TXA_VOX:
+    vox_enabled = on;
+    /* droidHPSDR: switched off while it holds the radio in transmit, back to receive now (not after the hang) */
+    if (!on && vox && !mox && !tune) { vox_cancel(); radio_set_vox(0); }
+    return 1;
+  case TXA_VOX_THRESH: vox_threshold = clampd(v, 0, 1); return 1;
+  case TXA_VOX_HANG: vox_hang = clampd(v, 0, 1000); return 1;
+  case TXA_MON: tx_set_monitor(on); return 1;
+  case TXA_MON_GAIN: tx_set_monitor_gain_db(clampd(v, -40, 0)); return 1;
+  case TXA_MON_POST: tx_set_monitor_post(on); return 1;
+  case TXA_ADDGAIN: tx->addgain_enable = on; tx_set_mic_gain(tx); return 1;
+  case TXA_ADDGAIN_GAIN: tx->addgain_gain = clampd(v, 1, 20); tx_set_mic_gain(tx); return 1;
+  default:
+    if (field >= TXA_EQ_GAIN0 && field < TXA_EQ_GAIN0 + 13) {
+      int k = field - TXA_EQ_GAIN0;
+      tx->eq_gain[k] = clampd(v, -20, 20); ms->tx_eq_gain[k] = tx->eq_gain[k];
+      copy_mode_settings(mode); tx_set_equalizer(tx);
+      return 1;
+    }
+    if (field > TXA_EQ_FREQ0 && field < TXA_EQ_FREQ0 + 13) {
+      int k = field - TXA_EQ_FREQ0;
+      tx->eq_freq[k] = point_freq(tx->eq_freq, k, v); ms->tx_eq_freq[k] = tx->eq_freq[k];
+      copy_mode_settings(mode); tx_set_equalizer(tx);
+      return 1;
+    }
+    if (field > TXA_CFC_FREQ0 && field < TXA_CFC_FREQ0 + 13) {
+      int k = field - TXA_CFC_FREQ0;
+      tx->cfc_freq[k] = point_freq(tx->cfc_freq, k, v); ms->cfc_freq[k] = tx->cfc_freq[k];
+      copy_mode_settings(mode); tx_set_compressor(tx);
+      return 1;
+    }
+    if (field >= TXA_CFC_LVL0 && field < TXA_CFC_LVL0 + 13) {
+      int k = field - TXA_CFC_LVL0;
+      tx->cfc_lvl[k] = clampd(v, 0, 20); ms->cfc_lvl[k] = tx->cfc_lvl[k];
+      copy_mode_settings(mode); tx_set_compressor(tx);
+      return 1;
+    }
+    if (field >= TXA_CFC_POST0 && field < TXA_CFC_POST0 + 13) {
+      int k = field - TXA_CFC_POST0;
+      tx->cfc_post[k] = clampd(v, -20, 20); ms->cfc_post[k] = tx->cfc_post[k];
+      copy_mode_settings(mode); tx_set_compressor(tx);
+      return 1;
+    }
+    return 0;
+  }
+  /* the DEXP cases */
+  copy_mode_settings(mode);
+  tx_set_dexp(tx);
+  return 1;
+}
+
+static void tx_audio_get(const TRANSMITTER *tx, double *o) {
+  o[TXA_COMP] = tx->compressor;
+  o[TXA_COMP_LEVEL] = tx->compressor_level;
+  o[TXA_LEV] = tx->lev_enable;
+  o[TXA_LEV_GAIN] = tx->lev_gain;
+  o[TXA_LEV_DECAY] = tx->lev_decay;
+  o[TXA_CESSB] = tx->cessb_enable;
+  o[TXA_PHROT] = tx->phrot_enable;
+  o[TXA_PHROT_STAGES] = tx->phrot_stage;
+  o[TXA_PHROT_FREQ] = tx->phrot_freq;
+  o[TXA_CFC] = tx->cfc;
+  o[TXA_CFC_EQ] = tx->cfc_eq;
+  o[TXA_EQ] = tx->eq_enable;
+  o[TXA_CTFMODE] = tx->eq_ctfmode;
+  o[TXA_DEXP] = tx->dexp;
+  o[TXA_DEXP_TRIGGER] = tx->dexp_trigger;
+  o[TXA_DEXP_EXP] = tx->dexp_exp;
+  o[TXA_DEXP_ATTACK] = 1000.0 * tx->dexp_attack;
+  o[TXA_DEXP_RELEASE] = 1000.0 * tx->dexp_release;
+  o[TXA_DEXP_HOLD] = 1000.0 * tx->dexp_hold;
+  o[TXA_DEXP_TAU] = 1000.0 * tx->dexp_tau;
+  o[TXA_DEXP_HYST] = tx->dexp_hyst;
+  o[TXA_DEXP_FILTER] = tx->dexp_filter;
+  o[TXA_DEXP_FILTER_LOW] = tx->dexp_filter_low;
+  o[TXA_DEXP_FILTER_HIGH] = tx->dexp_filter_high;
+  o[TXA_VOX] = vox_enabled;
+  o[TXA_VOX_THRESH] = vox_threshold;
+  o[TXA_VOX_HANG] = vox_hang;
+  o[TXA_MON] = tx_get_monitor();
+  o[TXA_MON_GAIN] = tx_get_monitor_gain_db();
+  o[TXA_MON_POST] = tx_get_monitor_post();
+  o[TXA_ADDGAIN] = tx->addgain_enable;
+  o[TXA_ADDGAIN_GAIN] = tx->addgain_gain;
+  for (int k = 0; k < 13; k++) {
+    o[TXA_EQ_GAIN0 + k] = tx->eq_gain[k];
+    o[TXA_EQ_FREQ0 + k] = tx->eq_freq[k];
+    o[TXA_CFC_FREQ0 + k] = tx->cfc_freq[k];
+    o[TXA_CFC_LVL0 + k] = tx->cfc_lvl[k];
+    o[TXA_CFC_POST0 + k] = tx->cfc_post[k];
+  }
+  o[TXS_VOX_PEAK] = vox_get_peak();
+}
 
 /* On the loop thread (radio_core.c CMD_TX). */
 void droid_tx_apply(int field, double v) {
@@ -1011,6 +1176,7 @@ void droid_tx_apply(int field, double v) {
     break;
   }
   default:
+    if (tx_audio_apply(transmitter, field, v)) break;
     if (field >= TX_PA_CAL0 && field < TX_PA_CAL0 + BANDS) {   /* pa_menu.c: 38.8 .. 70 dB */
       BAND *b = band_get_band(field - TX_PA_CAL0);
       b->pa_calibration = clampd(v, 38.8, 70.0);
@@ -1070,6 +1236,7 @@ void droid_tx_get(double *o) {
   int txv = vfo_get_tx_vfo();
   o[TX_XIT_ON] = vfo[txv].xit_enabled;
   o[TX_XIT] = vfo[txv].xit;
+  tx_audio_get(tx, o);
 }
 
 int droid_tx_on_air(void) { return can_transmit && radio_is_transmitting(); }
