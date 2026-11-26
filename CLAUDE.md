@@ -240,8 +240,10 @@ Decided; don't widen these without a reason.
 - **One receiver for now; RX2 later** (Randal, 2026-11-24): don't build or
   show RX2 until he asks. `receiver[1]` already exists in code because
   `old_protocol.c` reads it.
-- **No transmit until Randal asks.** The headless build is receive-only by
-  construction (`android/native/headless/stubs.c`); keep it that way.
+- **Transmit: Randal asked for M7 on 2026-11-25** (after the radio-test
+  fixes). Until M7's steps build it, everything stays receive-only (the
+  headless build is receive-only by construction, `headless/stubs.c`; keep
+  that). M7 goes step by step, each on a dummy load first (ROADMAP M7).
 
 ## Building and running (today)
 
