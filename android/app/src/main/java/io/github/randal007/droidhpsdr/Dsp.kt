@@ -517,7 +517,7 @@ internal val ALL_CHIPS = listOf(
     "NR" to "NR", "NB" to "NB", "ANF" to "ANF", "SNB" to "SNB", "NOTCH" to "NOTCH", "SQL" to "SQL", "EQ" to "EQ",
     "BINAURAL" to "BINAURAL", "CWPEAK" to "CW PEAK", "BAND" to "BAND", "MODE" to "MODE", "AF" to "AF", "LNA" to "LNA",
     "PHONE" to "PHONE", "FILTER" to "FILTER", "AGC" to "AGC", "STEP" to "STEP", "SPAN" to "SPAN", "RIT" to "RIT",
-    "CTUN" to "CTUN", "LOCK" to "LOCK", "AB" to "A⇄B",
+    "CTUN" to "CTUN", "LOCK" to "LOCK", "AB" to "A⇄B", "LEVELS" to "LEVELS",
 )
 
 /** One chip of the bottom row. Toggles: tap = on/off, hold = their settings. */
@@ -549,6 +549,11 @@ internal fun ChipFor(id: String, st: Status, open: (Sheet) -> Unit, modifier: Mo
             set(Dsp.CW_PEAK, !on(d, Dsp.CW_PEAK))
         }
         "BAND" -> Chip("BAND", BandPlan.band(freq)?.name ?: "GEN", modifier = modifier) { open(Sheet.BAND) }
+        "LEVELS" -> {   // the levels panel (pick A): spectrum and waterfall high / low, in view
+            val pa by Disp.panAuto.collectAsState()
+            val wa by Disp.wfAuto.collectAsState()
+            Chip("LEVELS", if (pa && wa) "Auto" else "Manual", !(pa && wa), modifier) { open(Sheet.LEVELS) }
+        }
         "MODE" -> Chip("MODE", Modes.name(st.mode), modifier = modifier) { open(Sheet.MODE) }
         "AF" -> {
             val vol by Radio.volumeDb.collectAsState()

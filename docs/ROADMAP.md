@@ -305,6 +305,13 @@ radio check: relays click on band changes. Picks B (settings) and E2 fix
 B built the same day (see M6-INVENTORY.md); gateware flashing is a
 separate step. M5 still waits for its radio tests and ticks.
 
+**E2 replaced (Randal, 2026-11-25: too hard to use):** the dB scale on
+the spectrum is gone; a LEVELS chip (added once to saved bottom rows) opens
+a side panel on the right (pick A, picture G1, `tools/mockups/layouts9.js`)
+that doesn't dim the screen: spectrum and waterfall Automatic / HIGH / LOW,
+same settings as Display → Levels. AGC lines fade to a quarter 3 s after
+their last change.
+
 **Demo band from an IQ recording (Randal, 2026-11-25):** ☰ → Discovery →
 Demo band plays the first .wav in the app's folder on the phone
 (`Android/data/io.github.randal007.droidhpsdr/files`) through deskHPSDR's

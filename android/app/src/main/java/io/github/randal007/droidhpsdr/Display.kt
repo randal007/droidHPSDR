@@ -12,6 +12,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -61,7 +64,6 @@ internal object Disp {
     val wfAuto = MutableStateFlow(true)
     val wfHi = MutableStateFlow(-60)
     val wfLo = MutableStateFlow(-130)
-    val scaleDrag = MutableStateFlow(true)       // E2 as an option: drag / pinch the dB scale on the spectrum
 
     // Averaging and peaks & hold (E3)
     val avgMode = MutableStateFlow(AVG_LOG)      // deskHPSDR's default: Log recursive
@@ -91,7 +93,7 @@ internal object Disp {
         "wfLo" to wfLo, "avgMode" to avgMode, "peakMode" to peakMode, "peakColor" to peakColor, "fftSize" to fftSize,
     )
     private val bools = listOf(
-        "panAuto" to panAuto, "wfAuto" to wfAuto, "scaleDrag" to scaleDrag, "saveZoom" to saveZoom, "preserve" to preserve,
+        "panAuto" to panAuto, "wfAuto" to wfAuto, "saveZoom" to saveZoom, "preserve" to preserve,
         "showMeter" to showMeter, "showVfo" to showVfo, "showChips" to showChips, "showBandBar" to showBandBar,
         "showInfo" to showInfo, "showAxis" to showAxis, "infoClock" to infoClock, "infoAdc" to infoAdc,
         "infoRadio" to infoRadio,
@@ -136,19 +138,6 @@ internal object Disp {
     fun levels3d(style: Int, nf: Double): Pair<Double, Double> = if (panAuto.value) {
         SpectrumView.floor3d(style, nf) to SpectrumView.RANGE_3D.toDouble()
     } else panLo.value.toDouble() to maxOf(panHi.value - panLo.value, 10).toDouble()
-
-    /** The bottom and top (dBm) the scale shows: the 2D levels, or in 3D the floor and a full ridge. */
-    fun shownLevels(flat: Boolean, style: Int, nf: Double): Pair<Double, Double> =
-        if (flat || !panAuto.value) panLevels(nf) else levels3d(style, nf).let { it.first to it.first + it.second }
-
-    /** E2: set the spectrum levels by finger (manual from then on), kept to sensible limits. */
-    fun setPan(lo: Double, hi: Double) {
-        val range = (hi - lo).coerceIn(20.0, 150.0)
-        val l = lo.coerceIn(-170.0, -20.0 - range)
-        panLo.value = l.roundToInt(); panHi.value = (l + range).roundToInt()
-        prefs.edit().putInt("d.panLo", panLo.value).putInt("d.panHi", panHi.value).apply()
-        if (panAuto.value) set(panAuto, false)
-    }
 
     fun peakArgb(): Int = PEAK_COLORS[peakColor.value.coerceIn(0, PEAK_COLORS.size - 1)].toArgb()
 
@@ -230,10 +219,7 @@ private fun LevelsTab() {
             Setting("LOW", wl.toDouble(), -160f..-60f, 5.0, dbm, !wa) { Disp.set(Disp.wfLo, minOf(it.toInt(), wh - 10)) }
             Text("Automatic greys out HIGH / LOW, like deskHPSDR. Manual spectrum levels also set the 3D view.",
                 color = Dim, fontSize = 10.5.sp)
-            val sd by Disp.scaleDrag.collectAsState()
-            Toggle("dB scale on the spectrum", sd, Modifier.fillMaxWidth(), sub = "drag ↕ · pinch · double-tap: auto") {
-                Disp.set(Disp.scaleDrag, it)
-            }
+            Text("Quicker, with the spectrum in view: the LEVELS chip in the bottom row.", color = Dim, fontSize = 10.5.sp)
         }
     }
 }
@@ -455,3 +441,42 @@ private val shadow = androidx.compose.ui.text.TextStyle(
 )
 
 private fun utcNow(): String = ZonedDateTime.now(ZoneOffset.UTC).let { "%02d:%02d".format(it.hour, it.minute) }
+
+// ---------------------------------------------------------------- the levels panel (pick A, picture G1)
+
+/**
+ * The LEVELS chip's panel (replaces E2): a side panel on the right that
+ * doesn't dim the screen, so the spectrum and waterfall change in view while
+ * the sliders move. The same settings as Display → Levels.
+ */
+@Composable
+internal fun LevelsPanel(close: () -> Unit) {
+    val pa by Disp.panAuto.collectAsState()
+    val ph by Disp.panHi.collectAsState()
+    val pl by Disp.panLo.collectAsState()
+    val wa by Disp.wfAuto.collectAsState()
+    val wh by Disp.wfHi.collectAsState()
+    val wl by Disp.wfLo.collectAsState()
+    val dbm = { v: Double -> "%.0f dBm".format(v) }
+    Box(Modifier.fillMaxSize().clickable(interactionSource = null, indication = null, onClick = close)) {
+        Column(
+            Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp, bottom = 64.dp).width(260.dp)
+                .clip(RoundedCornerShape(16.dp)).background(Color(0xE60A0E1A)).border(1.dp, Line, RoundedCornerShape(16.dp))
+                .clickable(enabled = false) {}.verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("Levels", color = Txt, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                Text("✕", color = Dim, fontSize = 16.sp, modifier = Modifier.clickable(onClick = close).padding(4.dp))
+            }
+            Label("SPECTRUM")
+            Toggle("Automatic", pa, Modifier.fillMaxWidth()) { Disp.set(Disp.panAuto, it) }
+            Setting("HIGH", ph.toDouble(), -100f..0f, 1.0, dbm, !pa) { Disp.set(Disp.panHi, maxOf(it.toInt(), pl + 10)) }
+            Setting("LOW", pl.toDouble(), -160f..-60f, 1.0, dbm, !pa) { Disp.set(Disp.panLo, minOf(it.toInt(), ph - 10)) }
+            Label("WATERFALL")
+            Toggle("Automatic", wa, Modifier.fillMaxWidth()) { Disp.set(Disp.wfAuto, it) }
+            Setting("HIGH", wh.toDouble(), -100f..0f, 1.0, dbm, !wa) { Disp.set(Disp.wfHi, maxOf(it.toInt(), wl + 10)) }
+            Setting("LOW", wl.toDouble(), -160f..-60f, 1.0, dbm, !wa) { Disp.set(Disp.wfLo, minOf(it.toInt(), wh - 10)) }
+        }
+    }
+}

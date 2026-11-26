@@ -153,7 +153,7 @@ object Radio {
     const val PIXELS = 2048
     const val FPS = 30
     const val SAMPLE_RATE = 384000   // default; the HL2 does 48/96/192/384 kHz
-    val DEFAULT_CHIPS = listOf("NR", "BAND", "AF", "LNA", "PHONE", "FILTER", "AGC", "STEP", "SPAN")
+    val DEFAULT_CHIPS = listOf("NR", "BAND", "AF", "LNA", "PHONE", "FILTER", "AGC", "STEP", "SPAN", "LEVELS")
 
     val status = MutableStateFlow(Status())
     val freq = MutableStateFlow(14_074_000L)
@@ -259,6 +259,11 @@ object Radio {
         status.value = status.value.copy(mode = prefs.getInt("mode", Modes.DIGU))
         analogMeter.value = prefs.getBoolean("analogMeter", false)
         prefs.getString("chips", null)?.let { c -> chips.value = c.split(",").filter { it.isNotBlank() } }
+        // the LEVELS chip is new (it replaced the dB scale, E2): once, at the end of a saved row
+        if (!prefs.getBoolean("chipsLevelsAdded", false)) {
+            if ("LEVELS" !in chips.value) setChips(chips.value + "LEVELS")
+            prefs.edit().putBoolean("chipsLevelsAdded", true).apply()
+        }
     }
 
     val running get() = status.value.phase == Phase.RUNNING
