@@ -412,7 +412,7 @@ object Radio {
         lastPhoneMs = System.currentTimeMillis()
         phoneAudio.value = on
         if (running) Native.setPhoneAudio(on)
-        prefs.edit().putBoolean("phoneAudio", on).apply()
+        if (!playback.value) prefs.edit().putBoolean("phoneAudio", on).apply()   // the demo's PHONE isn't the radio's
     }
 
     fun setFlat(on: Boolean) { flat.value = on; prefs.edit().putBoolean("flat", on).apply() }
@@ -457,6 +457,11 @@ object Radio {
     val playback = MutableStateFlow(false)
     private var freqBeforePlayback = 0L
     private var spanBeforePlayback = 48_000.0
+    private var statusBeforePlayback: Status? = null
+    @Volatile private var playbackGen = 0
+    private val playbackLock = Any()
+    private var pbRows = -1L
+    private var pbQuietSince = 0L
 
     /**
      * The demo's IQ recording: the first .wav in the app's own folder on the phone
@@ -483,13 +488,27 @@ object Radio {
         val centre = Regex("(\\d{6,9})Hz", RegexOption.IGNORE_CASE).find(file.name)?.groupValues?.get(1)?.toLong()
             ?: freq.value
         val mode = if (centre >= 10_000_000) Modes.USB else Modes.LSB
+        // claimed before the file opens: a Stop or a radio start meanwhile has to find it
+        freqBeforePlayback = freq.value
+        spanBeforePlayback = span.value
+        statusBeforePlayback = status.value
+        playback.value = true
+        val gen = ++playbackGen
         setPhase(Phase.CONNECTING, "IQ recording ${file.name}")
         scope.launch {
             val err = Native.startPlayback(file.absolutePath, centre, mode, PIXELS, fps.value, appCtx.filesDir.absolutePath)
-            if (err.isNotEmpty()) { setPhase(Phase.ERROR, err); return@launch }
-            freqBeforePlayback = freq.value
-            spanBeforePlayback = span.value
-            playback.value = true
+            synchronized(playbackLock) {
+                if (gen != playbackGen) return@launch   // stopped while opening: stopDemo stopped it
+                if (err.isNotEmpty()) { playback.value = false; setPhase(Phase.ERROR, err); return@launch }
+                startedPlayback(centre)
+            }
+        }
+    }
+
+    private fun startedPlayback(centre: Long) {
+        run {
+            pbRows = -1
+            pbQuietSince = System.currentTimeMillis()
             lastTuneMs = 0
             freq.value = centre
             val a = DoubleArray(26)
@@ -498,19 +517,27 @@ object Radio {
             Native.setVolumeDb(volumeDb.value)
             setPhase(Phase.RUNNING, "", "IQ recording")
             Native.setPhoneAudio(true)   // there's no HL2+ speaker: the recording plays on the phone
+            phoneAudio.value = true      // the PHONE chip shows it; not saved (setPhoneAudio's pref stays the radio's)
+            lastPhoneMs = System.currentTimeMillis()
             setSpan(span.value)
             setDisplay()
         }
     }
 
     fun stopDemo() {
-        if (playback.value) {
-            Native.stop()
-            playback.value = false
-            freq.value = freqBeforePlayback
-            span.value = spanBeforePlayback
-            setPhase(Phase.IDLE)
-            return
+        synchronized(playbackLock) {
+            if (playback.value) {
+                playbackGen++
+                Native.stop()   // also waits for a recording that is still opening (native life lock)
+                playback.value = false
+                // the radio's frequency, span, mode/filter display and PHONE, as before the recording
+                freq.value = freqBeforePlayback
+                span.value = spanBeforePlayback
+                statusBeforePlayback?.let { status.value = it }
+                phoneAudio.value = prefs.getBoolean("phoneAudio", false)
+                setPhase(Phase.IDLE)
+                return
+            }
         }
         if (status.value.phase == Phase.DEMO) setPhase(Phase.IDLE)
     }
@@ -567,6 +594,15 @@ object Radio {
                     if (ns > 0 && ns != step.value && System.currentTimeMillis() - lastStepMs > 400) {
                         step.value = ns
                         prefs.edit().putInt("step", ns).apply()
+                    }
+                }
+                // a recording that stops producing rows (file gone, read error): say so, don't sit frozen
+                if (playback.value && status.value.phase == Phase.RUNNING) {
+                    val now = System.currentTimeMillis()
+                    if (status.value.rows != pbRows) { pbRows = status.value.rows; pbQuietSince = now }
+                    else if (now - pbQuietSince > 3000) {
+                        stopDemo()
+                        setPhase(Phase.ERROR, "The recording stopped playing: the file can't be read")
                     }
                 }
                 if (++tick % 4 == 0) pollPeaks(pk)

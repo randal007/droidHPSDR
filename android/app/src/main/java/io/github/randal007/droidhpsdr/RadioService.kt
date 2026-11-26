@@ -111,7 +111,8 @@ class RadioService : Service() {
             while (wanted) {
                 Thread.sleep(1000)
                 val st = Radio.status.value
-                if (!Radio.running || starting) { lastRows = -1; continue }
+                // the demo's recording isn't the radio (Radio's poll watches it)
+                if (!Radio.running || starting || Radio.playback.value) { lastRows = -1; continue }
                 val now = System.currentTimeMillis()
                 if (st.rows != lastRows) { lastRows = st.rows; quietSince = now; continue }
                 if (now - quietSince > 3000) {

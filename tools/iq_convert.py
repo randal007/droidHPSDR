@@ -17,14 +17,14 @@ while True:
         if n & 1: f.read(1)
         if ch != 2: sys.exit('needs 2 channels (I/Q)')
     elif cid == b'data':
-        off = f.tell(); break
+        off = f.tell(); dlen = n; break
     else:
         f.seek(n + (n & 1), 1)
 if tag == 1 and bits == 16:
-    x = np.memmap(src, dtype=np.int16, mode='r', offset=off).reshape(-1, 2)
+    x = np.memmap(src, dtype=np.int16, mode='r', offset=off, shape=(dlen // 4, 2))   # only the data chunk
     x = x[:int(secs * sr)].astype(np.float64)
 elif tag == 3 and bits == 32:
-    x = np.memmap(src, dtype=np.float32, mode='r', offset=off).reshape(-1, 2)
+    x = np.memmap(src, dtype=np.float32, mode='r', offset=off, shape=(dlen // 8, 2))
     x = x[:int(secs * sr)].astype(np.float64) * 32768.0   # to the 16-bit scale the gain is given in
 else:
     sys.exit(f'unsupported format: tag {tag}, {bits} bits (16-bit PCM or 32-bit float)')

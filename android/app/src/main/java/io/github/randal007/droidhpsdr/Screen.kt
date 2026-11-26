@@ -1164,7 +1164,7 @@ private fun MainMenu(st: Status, onStart: () -> Unit, close: () -> Unit, open: (
                 // first row: Close / Restart Protocol / Iconify
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     MenuButton("Close", Modifier.weight(1f), onClick = close)
-                    if (st.phase == Phase.RUNNING) {
+                    if (st.phase == Phase.RUNNING && !Radio.playback.value) {
                         MenuButton("Restart Protocol P1", Modifier.weight(1f)) { RadioService.restart(ctx); close() }
                     } else {
                         MenuButton("Start radio", Modifier.weight(1f)) { onStart(); close() }

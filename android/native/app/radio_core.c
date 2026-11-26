@@ -80,7 +80,13 @@ static void post(cmd c) {
     int last = (cmd_head + CMD_MAX - 1) % CMD_MAX;
     for (int k = cmd_tail; k != cmd_head; k = (k + 1) % CMD_MAX) {
       if (cmds[k].type == c.type && (c.type != CMD_DSP || cmds[k].a == c.a)) {
-        if (k == last || !room) {   /* the last one, or no room to append: replace it where it is */
+        if (!room) {
+          /* full: take the old one out, closing the gap, so the new one still goes to the end */
+          for (int j = k; j != last; j = (j + 1) % CMD_MAX) cmds[j] = cmds[(j + 1) % CMD_MAX];
+          cmd_head = last;
+          break;
+        }
+        if (k == last) {
           cmds[k] = c;
           pthread_mutex_unlock(&cmd_lock);
           return;
@@ -357,7 +363,13 @@ static pthread_t loop_thread;
 static int p1_started;
 static DISCOVERED *real_radio;   /* the HL2 discovery found (radio points elsewhere while a recording plays) */
 static DISCOVERED pb_radio;      /* the recording, as a radio */
-static __typeof__(vfo[0]) pb_saved_vfo;   /* VFO A as the radio left it: back when the recording stops */
+/* What a recording may change (tuning, mode, filters, per-mode NR/AGC/step) is deskHPSDR's global
+ * state, shared with the radio: snapshotted when a recording starts, put back when it stops, so
+ * nothing from the demo reaches the radio or its props file. */
+static __typeof__(vfo[0]) pb_saved_vfos[MAX_VFOS];
+static FILTER pb_saved_filters[MODES][FILTERS];
+static __typeof__(mode_settings[0]) pb_saved_modes[MODES];
+static int pb_seeded;   /* a recording made the receivers with no props of the radio: seed the VFOs at its first start */
 
 DISCOVERED *droid_real_radio(void) { return real_radio; }
 
@@ -555,6 +567,7 @@ setup:
     n2adr_oc_settings();
     memRestoreState();
     vfo_restore_state();
+    if (!have_props && pb) pb_seeded = 1;
     if (!have_props) {
       /* first start: no deskHPSDR settings yet, start where the app was */
       for (int i = 0; i < MAX_VFOS; i++) {
@@ -579,6 +592,17 @@ setup:
     snprintf(props_path, sizeof props_path, "%s/%02X-%02X-%02X-%02X-%02X-%02X.props", o->props_dir, m[0], m[1],
              m[2], m[3], m[4], m[5]);
   }
+  if (!pb && pb_seeded) {
+    /* the radio's first start after a recording made the receivers: start where the app was */
+    for (int i = 0; i < MAX_VFOS; i++) {
+      vfo[i].band = get_band_from_frequency(o->freq);
+      vfo[i].frequency = o->freq;
+      vfo[i].ctun = 0;
+      vfo[i].mode = o->mode;
+      vfo[i].filter = mode_settings[o->mode].filter;
+    }
+    pb_seeded = 0;
+  }
   const int sample_rate = pb ? pb_rate : o->sample_rate;
   if (sample_rate != receiver[0]->sample_rate) {
     /* radio.c's radio_change_sample_rate(), with the stream stopped */
@@ -586,8 +610,10 @@ setup:
     if (p1_started) old_protocol_set_mic_sample_rate(sample_rate);
   }
   if (pb) {
+    memcpy(pb_saved_vfos, vfo, sizeof pb_saved_vfos);
+    for (int m = 0; m < MODES; m++) memcpy(pb_saved_filters[m], filters[m], sizeof pb_saved_filters[m]);
+    memcpy(pb_saved_modes, mode_settings, sizeof pb_saved_modes);
     /* the recording's centre stays put: listen inside it like CTUN */
-    pb_saved_vfo = vfo[0];
     vfo[0].frequency = o->freq;
     vfo[0].ctun = 1;
     vfo[0].ctun_frequency = o->freq;
@@ -654,8 +680,10 @@ void droid_radio_stop(void) {
   droid_radio_save_now();   /* the loop thread has stopped: safe here */
   if (atomic_load(&droid_playback_on)) {
     droid_playback_stop();
-    /* the radio's VFO A and the radio itself, as they were before the recording */
-    vfo[0] = pb_saved_vfo;
+    /* the radio's VFOs, filters, per-mode settings and the radio itself, as before the recording */
+    memcpy(vfo, pb_saved_vfos, sizeof pb_saved_vfos);
+    for (int m = 0; m < MODES; m++) memcpy(filters[m], pb_saved_filters[m], sizeof pb_saved_filters[m]);
+    memcpy(mode_settings, pb_saved_modes, sizeof pb_saved_modes);
     radio = real_radio;
   } else {
     old_protocol_stop();

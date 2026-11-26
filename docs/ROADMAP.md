@@ -42,7 +42,17 @@ next, what's waiting on whom. Session history lives in git and in
   recording, playback can't spin on an empty or unreadable WAV, HL2 setup
   targets the real HL2, full queue keeps the newest command, lock holds in
   the demo, WAVE_FORMAT_EXTENSIBLE read properly, iq_convert.py walks the
-  chunks. Next review: from `ff3c548`'s fixes onward.
+  chunks. **`ff3c548..45849bd` done 2026-11-25** (high, 9 findings, all
+  checked and fixed): a recording now snapshots and restores deskHPSDR's
+  VFOs, filter tables and per-mode settings (nothing from the demo reaches
+  the radio or its props); a recording first with no radio props seeds the
+  radio's VFOs from the app at its first start; PHONE during the demo is
+  shown but not saved; stopping or starting the radio while a recording
+  opens; mode/filter display put back; a recording that stops producing
+  rows ends the demo with a message (the service watchdog leaves it
+  alone); no Restart Protocol during the demo; a full command queue keeps
+  the order; iq_convert.py reads only the data chunk. Next review: from
+  this commit on.
   M1 done 2026-11-25 (`9f49c21..m1-done`, high; 10 findings, 8 fixed:
   m1-rx's S-meter now calibrated like receiver.c (read high by the LNA
   gain), stops with an error on an upstream FATAL, catches SIGHUP so a
