@@ -53,6 +53,12 @@ object Native {
     external fun dspSet(field: Int, value: Double)
     external fun dspGet(out: DoubleArray): Int
 
+    // M7: transmit fields, numbered as in droid_app.h TX_* / TXS_* (Tx in Transmit.kt)
+    external fun txSet(field: Int, value: Double)
+    external fun txGet(out: DoubleArray): Int
+    /** The phone mic's AAudio device id (0 = default) and whether it is a Bluetooth headset. */
+    external fun micRoute(device: Int, bluetooth: Boolean)
+
     // deskHPSDR's tables, one entry per line, fields split by '|'
     external fun filters(mode: Int): String     // title|low|high
     external fun bands(): String                // title|fmin|fmax (index = band number)

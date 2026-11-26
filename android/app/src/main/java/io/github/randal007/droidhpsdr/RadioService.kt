@@ -82,6 +82,12 @@ class RadioService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Radio.init(this)
+        if (intent?.action == ACTION_MIC) {
+            // the foreground types again, now with (or without) the microphone
+            runCatching { startForeground(1, notification("Receiving"), fgsType(this)) }
+                .onFailure { Log.w("droidHPSDR", "microphone foreground type refused", it) }
+            return START_STICKY
+        }
         if (intent?.action == ACTION_STOP) {
             shutdown()
             stopSelf()
@@ -96,7 +102,7 @@ class RadioService : Service() {
             startRadio()
             return START_STICKY
         }
-        startForeground(1, notification("Starting"), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+        startForeground(1, notification("Starting"), fgsType(this))
         if (!wanted) {
             wanted = true
             getSystemService(ConnectivityManager::class.java).registerNetworkCallback(
@@ -191,6 +197,7 @@ class RadioService : Service() {
                     Radio.setSpan(Radio.span.value)   // re-clamped and zoomed for the (new) sample rate
                     Radio.setDisplay()
                     Hl2.apply()   // M6: the HL2 settings of the SDR Device sheet
+                    Tx.apply()    // M7: the TX safety switch and the microphone
                     getSystemService(NotificationManager::class.java).notify(1, notification("Receiving on $net"))
                 } else {
                     Radio.setPhase(Phase.ERROR, err)
@@ -271,6 +278,20 @@ class RadioService : Service() {
         const val ACTION_RESTART = "io.github.randal007.droidhpsdr.RESTART"
 
         fun start(ctx: Context) = ctx.startForegroundService(Intent(ctx, RadioService::class.java))
+
+        /** The service's foreground types: the microphone too while the phone's mic is the TX mic
+         *  (Android silences a background mic otherwise; it may only be added while the app is in front). */
+        fun fgsType(ctx: Context): Int {
+            val mic = Tx.micSource.value != 0 && Tx.hasMicPermission(ctx)
+            return ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
+                (if (mic) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0)
+        }
+
+        /** Tell Android the mic is in use now (the user just picked it, so the app is in front). */
+        fun micInUse(ctx: Context) {
+            if (Radio.running) runCatching { ctx.startForegroundService(Intent(ctx, RadioService::class.java).setAction(ACTION_MIC)) }
+        }
+        const val ACTION_MIC = "io.github.randal007.droidhpsdr.MIC"
         fun restart(ctx: Context) =
             ctx.startForegroundService(Intent(ctx, RadioService::class.java).setAction(ACTION_RESTART))
         fun stop(ctx: Context) = ctx.startService(Intent(ctx, RadioService::class.java).setAction(ACTION_STOP))

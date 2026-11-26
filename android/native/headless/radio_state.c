@@ -136,12 +136,7 @@ int vox_enabled = 0;
 /* ---- from src/main.c, src/rigctl.c, src/transmitter.c (read by vfo.c's VFO bar) ---- */
 int freq_bgcolor_alter = 0;
 int cat_control = 0;
-double ctcss_frequencies[CTCSS_FREQUENCIES] = {
-  67.0,  71.9,  74.4,  77.0,  79.7,  82.5,  85.4,  88.5,  91.5,  94.8,
-  97.4, 100.0, 103.5, 107.2, 110.9, 114.8, 118.8, 123.0, 127.3, 131.8,
-  136.5, 141.3, 146.2, 151.4, 156.7, 162.2, 167.9, 173.8, 179.9, 186.2,
-  192.8, 203.5, 210.7, 218.1, 225.7, 233.6, 241.8, 250.3
-};
+/* ctcss_frequencies: transmitter.c (app) or headless/tx_null.c (m1-rx) */
 /* from src/radio.c: the local-audio ring's latency settings (buffered_audio.c) */
 int rx_audio_network_reserve_enabled = 0;
 int rx_audio_network_reserve_ms = 100;

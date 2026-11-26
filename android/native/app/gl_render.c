@@ -24,6 +24,11 @@
  * the top. Rows arrive ~30 times a second and frames 120: everything glides
  * between rows (frac) instead of stepping.
  *
+ * Transmitting (M7, Randal's pick A): the plot shows the TX spectrum (your
+ * own signal, orange, at its real frequency on the same axis) instead of
+ * the 2D/3D view, and the stopped waterfall is dimmed. The rows come from
+ * transmitter.c's display timer (transmit.c, droid_tx_row).
+ *
  * Text (frequency axis, band names) is drawn by Compose over this surface.
  *
  * GPL v3 or later, like the rest of droidHPSDR.
@@ -44,7 +49,14 @@
 static GLuint bg_tex;
 static int bg_w, bg_h;
 static GLuint height_tex, meta_tex, peak_tex, pal_wf[WF_THEMES], pal_surf[4], pal_line, vao;
-static GLuint prog_wf, prog_3d, prog_2d;
+static GLuint prog_wf, prog_3d, prog_2d, prog_tx;
+/* the newest TX spectrum row */
+static GLuint tx_tex;
+static float tx_buf[TEXW];
+static uint16_t tx_half[TEXW];
+static double tx_fmin, tx_hzpp;
+static int tx_w;
+static uint64_t tx_seq;
 static int vw, vh;
 static int head = -1, valid;
 static uint64_t seq;
@@ -158,6 +170,36 @@ static const char *WF_FS =
   "  float db = rowDb(age, uViewLo + vUv.x * uViewSpan);\n"
   "  if (db < -190.0) { o = vec4(0.008, 0.016, 0.04, 1.0); return; }\n"
   "  o = vec4(texture(uPal, vec2(clamp((db - uLo) / (uHi - uLo), 0.0, 1.0), 0.5)).rgb, 1.0);\n"
+  "}\n";
+
+/* TX spectrum (M7 pick A): the transmitter's analyzer row, relative dB (0 =
+ * full drive, as deskHPSDR's TX panadapter), filled orange; uMode 1 is a
+ * plain dark veil over the stopped waterfall. */
+static const char *TX_FS =
+  "#version 300 es\n"
+  "precision highp float;\n"
+  "uniform highp sampler2D uTx;\n"
+  "uniform vec3 uTxMeta;\n"   /* fmin relative to the view's left edge, hzpp, width */
+  "uniform float uSpan, uLo, uHi;\n"
+  "uniform vec2 uPlotPx;\n"
+  "uniform int uMode;\n"
+  "in vec2 vUv;\n"
+  "out vec4 o;\n"
+  "void main() {\n"
+  "  if (uMode == 1) { o = vec4(0.0, 0.0, 0.0, 0.5); return; }\n"
+  "  vec3 c = mix(vec3(0.043, 0.016, 0.020), vec3(0.078, 0.031, 0.039), vUv.y);\n"
+  "  float dbHere = uHi - vUv.y * (uHi - uLo);\n"
+  "  float gridPx = abs(fract(dbHere / 20.0 + 0.5) - 0.5) * 20.0 / (uHi - uLo) * uPlotPx.y;\n"
+  "  if (gridPx < 0.6) c += vec3(0.05);\n"
+  "  float px = (vUv.x * uSpan - uTxMeta.x) / uTxMeta.y;\n"
+  "  if (px >= 0.5 && px <= uTxMeta.z - 0.5) {\n"
+  "    float db = texture(uTx, vec2(px / 8192.0, 0.5)).r;\n"
+  "    float y = 1.0 - clamp((db - uLo) / (uHi - uLo), 0.0, 1.0);\n"
+  "    if (vUv.y > y) c = mix(c, vec3(1.0, 0.55, 0.24), 0.62 * (1.0 - (vUv.y - y) / (1.0 - y + 0.001)) + 0.03);\n"
+  "    float d = abs(vUv.y - y) * uPlotPx.y;\n"
+  "    if (d < 1.8) c = mix(c, vec3(1.0, 0.82, 0.66), 1.0 - d / 1.8);\n"
+  "  }\n"
+  "  o = vec4(c, 1.0);\n"
   "}\n";
 
 /* 2D spectrum: deskHPSDR's panadapter (filled, gradient by height, peak hold),
@@ -457,6 +499,15 @@ void droid_gl_init(void) {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
+  glGenTextures(1, &tx_tex);
+  glBindTexture(GL_TEXTURE_2D, tx_tex);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_R16F, TEXW, 1, 0, GL_RED, GL_HALF_FLOAT, NULL);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  tx_w = 0;
+  tx_seq = 0;
+
   glGenTextures(1, &peak_tex);
   glBindTexture(GL_TEXTURE_2D, peak_tex);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_R16F, TEXW, 1, 0, GL_RED, GL_HALF_FLOAT, NULL);
@@ -474,6 +525,7 @@ void droid_gl_init(void) {
   prog_wf = link(WF_VS, WF_FS);
   prog_3d = link(T3_VS, T3_FS);
   prog_2d = link(WF_VS, SP_FS);
+  prog_tx = link(WF_VS, TX_FS);
   glGenVertexArrays(1, &vao);
   droid_log("GL: %s / %s", glGetString(GL_RENDERER), glGetString(GL_VERSION));
 }
@@ -530,6 +582,36 @@ void droid_gl_draw(const droid_view *v) {
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
   float plot_h = (float)vh * (float)v->split;
+
+  /* ---- transmitting: veil over the stopped waterfall, TX spectrum on top ---- */
+  if (droid_tx_on_air()) {
+    int w = droid_tx_row(tx_buf, TEXW, &tx_fmin, &tx_hzpp, &tx_seq);
+    if (w > 0) {
+      for (int i = 0; i < w; i++) tx_half[i] = to_half(tx_buf[i]);
+      glBindTexture(GL_TEXTURE_2D, tx_tex);
+      glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, 1, GL_RED, GL_HALF_FLOAT, tx_half);
+      tx_w = w;
+    }
+    glUseProgram(prog_tx);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glUniform1i(U(prog_tx, "uMode"), 1);
+    glUniform4f(U(prog_tx, "uRect"), -1.0f, -1.0f, 1.0f, split_ndc);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glDisable(GL_BLEND);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, tx_tex);
+    glUniform1i(U(prog_tx, "uTx"), 0);
+    glUniform1i(U(prog_tx, "uMode"), 0);
+    glUniform3f(U(prog_tx, "uTxMeta"), (float)(tx_fmin - v->view_lo), (float)tx_hzpp, (float)tx_w);
+    glUniform1f(U(prog_tx, "uSpan"), (float)(v->view_hi - v->view_lo));
+    glUniform1f(U(prog_tx, "uLo"), -100.0f);   /* full drive is 0 dB; a little headroom above */
+    glUniform1f(U(prog_tx, "uHi"), 10.0f);
+    glUniform2f(U(prog_tx, "uPlotPx"), (float)vw, plot_h);
+    glUniform4f(U(prog_tx, "uRect"), -1.0f, split_ndc, 1.0f, 1.0f);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    return;
+  }
 
   /* ---- 2D spectrum ---- */
   if (v->flat) {

@@ -154,7 +154,7 @@ object Radio {
     const val PIXELS = 2048
     const val FPS = 30
     const val SAMPLE_RATE = 384000   // default; the HL2 does 48/96/192/384 kHz
-    val DEFAULT_CHIPS = listOf("NR", "BAND", "AF", "LNA", "PHONE", "FILTER", "AGC", "STEP", "SPAN", "LEVELS")
+    val DEFAULT_CHIPS = listOf("NR", "BAND", "AF", "LNA", "PHONE", "FILTER", "AGC", "STEP", "SPAN", "LEVELS", "TX")
 
     val status = MutableStateFlow(Status())
     val freq = MutableStateFlow(14_074_000L)
@@ -231,6 +231,7 @@ object Radio {
         freq.value = prefs.getLong("freq", 14_074_000L)
         Disp.init(ctx)
         Hl2.init(ctx)
+        Tx.init(ctx)
         // Screen → Save zoom level: off starts at the default span
         span.value = if (Disp.saveZoom.value) prefs.getFloat("span", 48_000f).toDouble() else 48_000.0
         style.value = prefs.getInt("style", 0)
@@ -264,6 +265,11 @@ object Radio {
         if (!prefs.getBoolean("chipsLevelsAdded", false)) {
             if ("LEVELS" !in chips.value) setChips(chips.value + "LEVELS")
             prefs.edit().putBoolean("chipsLevelsAdded", true).apply()
+        }
+        // M7: the TX chip (opens the transmit panel), once, at the end of a saved row
+        if (!prefs.getBoolean("chipsTxAdded", false)) {
+            if ("TX" !in chips.value) setChips(chips.value + "TX")
+            prefs.edit().putBoolean("chipsTxAdded", true).apply()
         }
     }
 
@@ -579,6 +585,7 @@ object Radio {
             val a = DoubleArray(27)
             val pk = DoubleArray(64)
             val dv = DoubleArray(Dsp.COUNT)
+            val tv = DoubleArray(Tx.COUNT)
             var tick = 0
             while (isActive) {
                 Native.status(a)
@@ -623,6 +630,7 @@ object Radio {
                         setPhase(Phase.ERROR, "The recording stopped playing: the file can't be read")
                     }
                 }
+                Tx.poll(tv)   // the TX meter and the PTT chip: every tick
                 if (++tick % 4 == 0) pollPeaks(pk)
                 if (tick % 20 == 0 && running && !playback.value) Hl2.readChannels()   // the 60 m markers, about once a second
                 // the radio changes these itself on a mode change (per-mode settings)

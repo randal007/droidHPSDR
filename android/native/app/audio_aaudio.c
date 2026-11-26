@@ -4,9 +4,15 @@
  * (src/buffered_audio.c, compiled unchanged) can play the receiver on the
  * phone: its "local audio", as on a PC.
  *
- * Output only. The HL2+ codec stays the main audio path (CLAUDE.md
- * decision 1, as changed 2026-11-24): phone audio plays as well, when the
- * user turns it on. The microphone is the HL2+'s; input is not offered.
+ * The HL2+ codec stays the main audio path (CLAUDE.md decision 1, as
+ * changed 2026-11-24): phone audio plays as well, when the user turns it on.
+ *
+ * Input (M7, Randal 2026-11-25): the phone's microphone, built-in or
+ * Bluetooth, as deskHPSDR's "local microphone": the stream's callback hands
+ * the samples to buffered_audio.c's mic ring (audio_process_local_mic_input),
+ * which old_protocol.c reads instead of the HL2+ mic. The app picks the
+ * device (droid_mic_route); for Bluetooth it has already made the headset
+ * Android's communication device.
  *
  * The stream's callback pulls samples from upstream's ring with
  * audio_render_local_output(), as the CoreAudio and miniaudio backends do.
@@ -158,10 +164,70 @@ int audio_backend_output_is_alive(void *handle) {
   return alive;
 }
 
-/* No phone microphone (the HL2+ has the mic) and no TCI monitor. */
-void *audio_backend_input_open(const char *device_name) { (void)device_name; return NULL; }
-void audio_backend_input_close(void *handle) { (void)handle; }
-int audio_backend_input_is_alive(void *handle) { (void)handle; return 0; }
+/* ---- the phone's microphone ---- */
+
+static atomic_int mic_device;      /* AAudio device id, 0 = Android's default input */
+static atomic_int mic_bluetooth;   /* 1: a Bluetooth headset (communication device) */
+
+void droid_mic_route(int device_id, int bluetooth) {
+  atomic_store(&mic_device, device_id);
+  atomic_store(&mic_bluetooth, bluetooth);
+}
+
+static aaudio_data_callback_result_t on_mic(AAudioStream *s, void *user, void *data, int32_t frames) {
+  (void)s; (void)user;
+  audio_process_local_mic_input((const float *)data, (unsigned)frames);
+  return AAUDIO_CALLBACK_RESULT_CONTINUE;
+}
+
+void *audio_backend_input_open(const char *device_name) {
+  (void)device_name;
+  AAudioStreamBuilder *b;
+  AAudioStream *s = NULL;
+  if (AAudio_createStreamBuilder(&b) != AAUDIO_OK) return NULL;
+  AAudioStreamBuilder_setDirection(b, AAUDIO_DIRECTION_INPUT);
+  AAudioStreamBuilder_setSampleRate(b, 48000);   /* the TX mic rate; AAudio resamples (Bluetooth is 16 kHz) */
+  AAudioStreamBuilder_setChannelCount(b, 1);
+  AAudioStreamBuilder_setFormat(b, AAUDIO_FORMAT_PCM_FLOAT);
+  AAudioStreamBuilder_setPerformanceMode(b, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
+  AAudioStreamBuilder_setSharingMode(b, AAUDIO_SHARING_MODE_SHARED);
+  if (atomic_load(&mic_device) > 0) AAudioStreamBuilder_setDeviceId(b, atomic_load(&mic_device));
+  /* built-in: no phone-call processing (WDSP does the TX chain); Bluetooth: the call path the headset uses */
+  AAudioStreamBuilder_setInputPreset(b, atomic_load(&mic_bluetooth) ? AAUDIO_INPUT_PRESET_VOICE_COMMUNICATION
+                                                                      : AAUDIO_INPUT_PRESET_VOICE_RECOGNITION);
+  AAudioStreamBuilder_setDataCallback(b, on_mic, NULL);
+  aaudio_result_t r = AAudioStreamBuilder_openStream(b, &s);
+  AAudioStreamBuilder_delete(b);
+  if (r != AAUDIO_OK) {
+    droid_log("phone mic: open failed: %s", AAudio_convertResultToText(r));
+    return NULL;
+  }
+  r = AAudioStream_requestStart(s);
+  if (r != AAUDIO_OK) {
+    droid_log("phone mic: start failed: %s", AAudio_convertResultToText(r));
+    AAudioStream_close(s);
+    return NULL;
+  }
+  droid_log("phone mic: %d Hz, device %d%s", AAudioStream_getSampleRate(s), AAudioStream_getDeviceId(s),
+            atomic_load(&mic_bluetooth) ? " (Bluetooth)" : "");
+  return s;
+}
+
+void audio_backend_input_close(void *handle) {
+  AAudioStream *s = handle;
+  if (!s) return;
+  AAudioStream_requestStop(s);
+  AAudioStream_close(s);
+}
+
+int audio_backend_input_is_alive(void *handle) {
+  AAudioStream *s = handle;
+  if (!s) return 0;
+  aaudio_stream_state_t st = AAudioStream_getState(s);
+  return st != AAUDIO_STREAM_STATE_DISCONNECTED && st != AAUDIO_STREAM_STATE_CLOSED;
+}
+
+/* No TCI monitor. */
 void *audio_backend_tci_monitor_open(const char *device_name, int *channels) {
   (void)device_name; (void)channels;
   return NULL;

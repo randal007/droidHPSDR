@@ -112,7 +112,7 @@ internal val Grn = Color(0xFF3EE07A)
 internal val Red = Color(0xFFFF5A50)
 
 
-internal enum class Sheet { ANT, LEVELS, HL2SETUP, SCREEN, BAND, MODE, AF, LNA, FILTER, MENU, DISPLAY, FREQ, VFO, AGC, SDR, DISCOVERY, ABOUT, NOISE, EQ, DSP, TOOLBAR, RX, METER }
+internal enum class Sheet { ANT, LEVELS, HL2SETUP, SCREEN, BAND, MODE, AF, LNA, FILTER, MENU, DISPLAY, FREQ, VFO, AGC, SDR, DISCOVERY, ABOUT, NOISE, EQ, DSP, TOOLBAR, RX, METER, TX, PA, TXPANEL }
 
 internal fun Modifier.glass(r: Int = 14) =
     clip(RoundedCornerShape(r.dp)).background(Glass).border(1.dp, Line, RoundedCornerShape(r.dp))
@@ -145,17 +145,22 @@ fun Screen(onStart: () -> Unit, onStop: () -> Unit) {
             // hold the meter: deskHPSDR's Meter menu
             val analog by Radio.analogMeter.collectAsState()
             val meterMod = Modifier.align(Alignment.TopStart).padding(10.dp).onGloballyPositioned { meterRect = it.boundsInParent() }
-            if (showMeter) {
+            val tx by Tx.v.collectAsState()
+            val onAir = tx[Tx.ON_AIR] != 0.0
+            if (showMeter && onAir) {
+                TxMeterCard(meterMod)   // M7 pick A: the meter card becomes the TX meter while on the air
+            } else if (showMeter) {
                 if (analog) AnalogMeter(status.meterDbm, meterMod) { sheet = Sheet.METER; fromMenu = false }
                 else MeterCard(status.meterDbm, meterMod) { sheet = Sheet.METER; fromMenu = false }
             } else meterRect = null
             if (showVfo) {
-                VfoPill(freq, status, { sheet = Sheet.MODE }, { sheet = Sheet.FILTER }, { sheet = Sheet.FREQ }, { sheet = Sheet.VFO },
+                VfoPill(freq, status, onAir, { sheet = Sheet.MODE }, { sheet = Sheet.FILTER }, { sheet = Sheet.FREQ }, { sheet = Sheet.VFO },
                     Modifier.align(Alignment.TopCenter).padding(top = 8.dp).onGloballyPositioned { pillRect = it.boundsInParent() })
                 SegmentTag(freq, Modifier.align(Alignment.TopCenter).padding(top = 76.dp))
                 InfoGaps(status, meterRect, pillRect, buttonsRect)
             }
             Flash(flash, Modifier.align(Alignment.TopEnd).padding(top = 66.dp, end = 12.dp))
+            TxWarnings(Modifier.align(Alignment.Center).padding(bottom = 40.dp))
 
             Row(Modifier.align(Alignment.TopEnd).padding(12.dp).onGloballyPositioned { buttonsRect = it.boundsInParent() },
                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -169,7 +174,13 @@ fun Screen(onStart: () -> Unit, onStop: () -> Unit) {
             }
 
             // the editor draws its own copy of the row in the same place: not both (they don't line up)
-            if (showChips && sheet != Sheet.TOOLBAR) ChipRow(status, { sheet = it; fromMenu = false }, Modifier.align(Alignment.BottomStart).padding(10.dp))
+            // the chips scroll; PTT stays put at the right end, under the right thumb (M7 picture M1)
+            val playingNow by Radio.playback.collectAsState()
+            val pttShown = status.phase == Phase.RUNNING && !playingNow
+            if (showChips && sheet != Sheet.TOOLBAR) ChipRow(status, { sheet = it; fromMenu = false },
+                Modifier.align(Alignment.BottomStart).padding(start = 10.dp, bottom = 10.dp, top = 10.dp,
+                    end = if (pttShown) 152.dp else 10.dp))
+            if (pttShown) PttChip(Modifier.align(Alignment.BottomEnd).padding(10.dp))
 
             val playing by Radio.playback.collectAsState()
             val waitHl2 by Radio.waitingForHl2.collectAsState()
@@ -191,6 +202,7 @@ fun Screen(onStart: () -> Unit, onStop: () -> Unit) {
                 Sheet.MENU -> MainMenu(status, onStart, done) { sheet = it; fromMenu = true }
                 Sheet.NOISE -> NoiseDrawer(status, dismiss)
                 Sheet.LEVELS -> LevelsPanel(dismiss)
+                Sheet.TXPANEL -> TxPanel(dismiss)
                 Sheet.EQ -> EqPanel(status, dismiss)
                 Sheet.TOOLBAR -> ToolbarEditor(status, dismiss)
                 null -> {}
@@ -662,18 +674,23 @@ internal fun sMeter(dbm: Double): Pair<String, Double> {
  */
 @Composable
 private fun VfoPill(
-    freq: Long, st: Status, onMode: () -> Unit, onFilter: () -> Unit, onFreq: () -> Unit, onPanel: () -> Unit,
+    freq: Long, st: Status, onAir: Boolean, onMode: () -> Unit, onFilter: () -> Unit, onFreq: () -> Unit, onPanel: () -> Unit,
     modifier: Modifier,
 ) {
     Row(
-        modifier.height(74.dp).glass().clickable(onClick = onPanel).padding(horizontal = 16.dp),
+        modifier.height(74.dp).glass()
+            // on the air: a red edge (M7 pick A)
+            .then(if (onAir) Modifier.border(1.5.dp, Color(0xD9FF4D4D), RoundedCornerShape(14.dp)) else Modifier)
+            .clickable(onClick = onPanel).padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Box(Modifier.clip(RoundedCornerShape(6.dp)).background(Amb).padding(horizontal = 7.dp, vertical = 1.dp)) {
-                    Text("A", color = Color(0xFF1A1000), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Box(Modifier.clip(RoundedCornerShape(6.dp)).background(if (onAir) Color(0xFFFF4D4D) else Amb)
+                    .padding(horizontal = 7.dp, vertical = 1.dp)) {
+                    Text(if (onAir) "TX" else "A", color = if (onAir) Color.White else Color(0xFF1A1000), fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold)
                 }
                 val haptic = LocalHapticFeedback.current
                 Box(
@@ -987,7 +1004,9 @@ private fun SheetHost(
                 Sheet.ANT -> AntSheet()
                 Sheet.FREQ -> FreqSheet(close)
                 Sheet.AGC -> AgcSheet(st, close)
-                Sheet.VFO, Sheet.MENU, Sheet.LEVELS -> {}
+                Sheet.TX -> TxSheet()
+                Sheet.PA -> PaSheet()
+                Sheet.VFO, Sheet.MENU, Sheet.LEVELS, Sheet.TXPANEL -> {}
             }
         }
     }
@@ -1199,7 +1218,7 @@ private val MENU_COLUMNS = listOf(
         MenuItem("Mode", Sheet.MODE), MenuItem("Memory", Sheet.BAND)),
     listOf(MenuItem("RX", Sheet.RX), MenuItem("RX Filter", Sheet.FILTER), MenuItem("Noise", Sheet.NOISE),
         MenuItem("AGC", Sheet.AGC)),
-    listOf(MenuItem("TX", later = "M7"), MenuItem("PA", later = "M6"), MenuItem("VOX", later = "M7"),
+    listOf(MenuItem("TX", Sheet.TX), MenuItem("PA", Sheet.PA), MenuItem("VOX", later = "M7"),
         MenuItem("PS", later = "M7"), MenuItem("CW", later = "M7")),
     listOf(MenuItem("DSP", Sheet.DSP), MenuItem("WDSP EQ", Sheet.EQ), MenuItem("Ant", Sheet.ANT),
         MenuItem("OC Output", later = "M6"), MenuItem("Extras", later = "M8")),
@@ -1263,7 +1282,7 @@ private fun MainMenu(st: Status, onStart: () -> Unit, close: () -> Unit, open: (
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(note, color = Amb, fontSize = 11.sp, modifier = Modifier.weight(1f))
                     MenuButton("About", Modifier.weight(1f)) { open(Sheet.ABOUT) }
-                    Text("Receive only: transmit comes with M7", color = Dim, fontSize = 10.sp,
+                    Text("Transmit: M7 step 1 (voice, drive, TUNE)", color = Dim, fontSize = 10.sp,
                         modifier = Modifier.weight(1f), textAlign = TextAlign.End)
                 }
             }
@@ -1285,7 +1304,7 @@ private fun MenuButton(label: String, modifier: Modifier, later: String? = null,
     }
 }
 
-private val WIDE_SHEETS = setOf(Sheet.DISPLAY, Sheet.SCREEN, Sheet.SDR, Sheet.HL2SETUP, Sheet.ANT)
+private val WIDE_SHEETS = setOf(Sheet.DISPLAY, Sheet.SCREEN, Sheet.SDR, Sheet.HL2SETUP, Sheet.ANT, Sheet.TX, Sheet.PA)
 
 /** deskHPSDR's Discovery: where the radio is, start/stop, and the demo band. */
 @Composable

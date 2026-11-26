@@ -518,7 +518,7 @@ internal val ALL_CHIPS = listOf(
     "NR" to "NR", "NB" to "NB", "ANF" to "ANF", "SNB" to "SNB", "NOTCH" to "NOTCH", "SQL" to "SQL", "EQ" to "EQ",
     "BINAURAL" to "BINAURAL", "CWPEAK" to "CW PEAK", "BAND" to "BAND", "MODE" to "MODE", "AF" to "AF", "LNA" to "LNA",
     "PHONE" to "PHONE", "FILTER" to "FILTER", "AGC" to "AGC", "STEP" to "STEP", "SPAN" to "SPAN", "RIT" to "RIT",
-    "CTUN" to "CTUN", "LOCK" to "LOCK", "AB" to "A⇄B", "LEVELS" to "LEVELS",
+    "CTUN" to "CTUN", "LOCK" to "LOCK", "AB" to "A⇄B", "LEVELS" to "LEVELS", "TX" to "TX",
 )
 
 /** One chip of the bottom row. Toggles: tap = on/off, hold = their settings. */
@@ -589,6 +589,10 @@ internal fun ChipFor(id: String, st: Status, open: (Sheet) -> Unit, modifier: Mo
         "CTUN" -> Chip("CTUN", if (st.ctun) "On" else "Off", st.ctun, modifier, { open(Sheet.VFO) }) { Radio.ctun(!st.ctun) }
         "LOCK" -> Chip("LOCK", if (st.locked) "On" else "Off", st.locked, modifier, { open(Sheet.VFO) }) { Radio.lock(!st.locked) }
         "AB" -> Chip("A⇄B", "swap", modifier = modifier, onLongClick = { open(Sheet.VFO) }) { Radio.vfoOp(2) }
+        "TX" -> {   // M7 (Randal): one chip for the transmit panel; it shows the drive
+            val tx by Tx.v.collectAsState()
+            Chip("TX", "%.0f %%".format(tx[Tx.DRIVE]), tx[Tx.ON_AIR] != 0.0, modifier, { open(Sheet.TX) }) { open(Sheet.TXPANEL) }
+        }
     }
 }
 

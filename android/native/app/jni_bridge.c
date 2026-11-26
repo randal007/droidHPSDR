@@ -278,6 +278,25 @@ JNIEXPORT jint JNICALL FN(dspGet)(JNIEnv *env, jobject self, jdoubleArray out) {
   return n;
 }
 
+/* M7: transmit fields (transmit.c, droid_app.h TX_* / TXS_*) */
+JNIEXPORT void JNICALL FN(txSet)(JNIEnv *env, jobject self, jint field, jdouble value) {
+  (void)env; (void)self;
+  droid_tx_set(field, value);
+}
+JNIEXPORT jint JNICALL FN(txGet)(JNIEnv *env, jobject self, jdoubleArray out) {
+  (void)self;
+  double v[TX_COUNT];
+  droid_tx_get(v);
+  jsize n = (*env)->GetArrayLength(env, out);
+  if (n > TX_COUNT) n = TX_COUNT;
+  (*env)->SetDoubleArrayRegion(env, out, 0, n, v);
+  return n;
+}
+JNIEXPORT void JNICALL FN(micRoute)(JNIEnv *env, jobject self, jint device, jboolean bluetooth) {
+  (void)env; (void)self;
+  droid_mic_route(device, bluetooth);
+}
+
 /* Lists as text, one entry per line, fields split by '|'. */
 static jstring text(JNIEnv *env, const char *s) { return (*env)->NewStringUTF(env, s); }
 

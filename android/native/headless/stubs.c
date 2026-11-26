@@ -3,12 +3,10 @@
  * compile in the headless (M1) build: the GTK UI, local PC audio, TCI, CAT,
  * menus, the display, and the whole transmit side.
  *
- * RECEIVE ONLY. Everything that could put the radio into transmit is a
- * no-op or reports "not transmitting":
- *   - radio_is_transmitting() is always 0, so old_protocol.c never sets MOX;
- *   - radio_state.c leaves cw_keyer_internal = 0 and pa_enabled = 0;
- *   - the host program's TRANSMITTER is all zeros (drive level 0) and has no
- *     WDSP TX channel; tx_add_mic_sample() discards mic samples.
+ * Nothing here transmits. The transmit side is in its own file, so the two
+ * programs can differ: headless/tx_null.c keeps m1-rx RECEIVE ONLY (no-op
+ * stubs, radio_is_transmitting() always 0); the app links upstream's
+ * transmitter.c with app/transmit.c instead (M7).
  *
  * Prototypes come from the upstream headers, so a signature change upstream
  * fails the build here instead of misbehaving.
@@ -68,8 +66,6 @@ long long apply_ppm_ll(long long f_hz) {
   return (q * factor) + ((r * factor) / scale);
 #endif
 }
-int radio_get_drive_as_int(void) { return 0; }
-int radio_is_transmitting(void) { return 0; }             /* RX ONLY */
 /* radio.c ((C) 2015 John Melton G0ORX/N6LYT, 2024-2026 Heiko Amft DL1BZ
  * (Project deskHPSDR); GPL-3.0-or-later), copied unchanged: the band's RX
  * antenna (ANT menu) and step attenuator; vfo.c calls it on every band
@@ -97,9 +93,6 @@ void radio_set_alex_antennas(void) {
   schedule_high_priority();         // possibly update RX/TX antennas
   schedule_general();               // possibly update PA disable
 }
-void radio_set_hardware_tx_inhibit(int state) { (void)state; }
-void radio_start_auto_tune(void) {}
-void radio_tx_vfo_changed(void) {}
 
 /* Upstream keeps a timed loss window for the GUI; headless just counts. */
 atomic_uint droid_sequence_errors;
@@ -129,10 +122,8 @@ int fatal_error(void *data) {
   return G_SOURCE_REMOVE;
 }
 int ext_vfo_update(void *data) { (void)data; return G_SOURCE_REMOVE; }
-int ext_mox_update(void *data) { (void)data; return G_SOURCE_REMOVE; }
 int ext_start_rx(void *data) { (void)data; return G_SOURCE_REMOVE; }
 int ext_start_noise(void *data) { (void)data; return G_SOURCE_REMOVE; }
-int ext_set_duplex(void *data) { (void)data; return G_SOURCE_REMOVE; }   /* TX display (M7) */
 int menu_active_receiver_changed(void *data) { (void)data; return G_SOURCE_REMOVE; }
 int sliders_active_receiver_changed(void *data) { (void)data; return G_SOURCE_REMOVE; }
 int zoompan_active_receiver_changed(void *data) { (void)data; return G_SOURCE_REMOVE; }
@@ -169,20 +160,10 @@ void new_protocol_audio_samples(short left_audio_sample, short right_audio_sampl
 void schedule_high_priority(void) {}
 void schedule_receive_specific(void) {}
 
-/* ---- transmit side: RX ONLY, nothing here may produce RF ---- */
-
-void tx_add_mic_sample(TRANSMITTER *tx, float mic_sample) { (void)tx; (void)mic_sample; }
-void tx_add_ps_iq_samples(const TRANSMITTER *tx, double i_sample_0, double q_sample_0, double i_sample_1,
-                          double q_sample_1) {
-  (void)tx; (void)i_sample_0; (void)q_sample_0; (void)i_sample_1; (void)q_sample_1;
-}
-double tx_display_span_hz(const TRANSMITTER *tx) { (void)tx; return 0.0; }
-int tx_monitor_audio_active(void) { return 0; }
-void tx_set_filter(TRANSMITTER *tx) { (void)tx; }
-void tx_off_cancel(void) {}
 void keyer_event(int left, int state) { (void)left; (void)state; }
 
 /* ---- vfo.c: compiled unchanged since M4. What it calls elsewhere: ---- */
+/* (the transmit-side ones: headless/tx_null.c for m1-rx, app/transmit.c for the app) */
 
 /* radio.c ((C) 2015 John Melton G0ORX/N6LYT, 2024-2026 Heiko Amft DL1BZ
  * (Project deskHPSDR); GPL-3.0-or-later), copied unchanged: split only takes effect when the radio can
@@ -202,13 +183,6 @@ void radio_set_split(int val) {
   }
 }
 
-/* transmit side: RX ONLY */
-void set_drive(double drive) { (void)drive; }
-void tx_set_analyzer(TRANSMITTER *tx) { (void)tx; }
-void tx_set_compressor(TRANSMITTER *tx) { (void)tx; }
-void tx_set_ctcss(const TRANSMITTER *tx) { (void)tx; }
-void tx_set_dexp(const TRANSMITTER *tx) { (void)tx; }
-void tx_set_mode(TRANSMITTER *tx, int m) { (void)tx; (void)m; }
 void sort_cfc_profile(double *freq, double *level, double *post, double *comp_weight, double *post_weight) {
   (void)freq; (void)level; (void)post; (void)comp_weight; (void)post_weight;
 }

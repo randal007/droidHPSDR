@@ -133,6 +133,35 @@ void droid_dsp_apply(int field, double value); /* on the loop thread */
 void droid_dsp_get(double *out);               /* droid_dsp_count() values */
 int droid_dsp_count(void);
 
+/* M7, transmit (transmit.c): numbered like dsp.c's fields (Tx in Radio.kt).
+ * Settings are set with droid_tx_set (queued to the loop thread); everything,
+ * live state included (TXS_*), comes back from droid_tx_get. */
+enum {
+  TX_ENABLED, TX_TIMEOUT, TX_PTT, TX_TUNE, TX_DRIVE, TX_TUNE_DRIVE, TX_TUNE_USE_DRIVE, TX_DRIVE_PER_BAND,
+  TX_MIC_GAIN, TX_MIC_BOOST, TX_MIC_LOCAL, TX_FILTER_LOW, TX_FILTER_HIGH, TX_USE_RX_FILTER, TX_SWR_PROT,
+  TX_SWR_ALARM, TX_OUT_OF_BAND, TX_MUTE_RX, TX_PA, TX_PA_POWER,
+  TX_PA_CAL0 = 20,                 /* + band number (band.h), 24 bands */
+  TXS_ON_AIR = 48, TXS_FWD, TXS_REV, TXS_SWR, TXS_ALC, TXS_MIC, TXS_HIGH_SWR, TXS_SECONDS, TXS_TIMEOUTS,
+  TXS_REFUSED, TXS_RADIO_PTT, TXS_UNDERRUN, TXS_OVERRUN, TXS_OUT_OF_BAND, TXS_MAX_W, TXS_PICO,
+  TX_COUNT = 72
+};
+/* why the last PTT / TUNE did not transmit */
+enum { TXR_NONE, TXR_DISABLED, TXR_INHIBIT, TXR_CW, TXR_BAND };
+void droid_tx_set(int field, double value);    /* queued to the loop thread */
+void droid_tx_apply(int field, double value);  /* on the loop thread */
+void droid_tx_get(double *out);                /* TX_COUNT values */
+void droid_tx_create(int pixels);              /* radio_core.c start: upstream's transmitter */
+void droid_tx_save(void);                      /* radio_core.c save: its props */
+void droid_tx_off_now(void);                   /* back to receive, now */
+void droid_tx_poll(void);                      /* loop thread: PTT repeats, the timeout */
+void droid_tx_ptt_seen(void);                  /* a screen PTT repeat (any thread) */
+/* 1 while transmitting: the renderer shows the TX spectrum over the stopped waterfall (M7 pick A) */
+int droid_tx_on_air(void);
+/* the phone mic's AAudio device (0: default) and whether it is a Bluetooth headset (audio_aaudio.c) */
+void droid_mic_route(int device_id, int bluetooth);
+/* the newest TX spectrum row (transmit.c); -1 when there is none newer than *seq */
+int droid_tx_row(float *db, int max, double *fmin, double *hzpp, uint64_t *seq);
+
 /* HL2 ADC auto gain (autogain.c, from rigctl.c): start/stop the thread */
 void droid_autogain_run(int run);
 

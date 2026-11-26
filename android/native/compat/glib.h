@@ -124,6 +124,7 @@ static inline void g_rec_mutex_unlock(GRecMutex *mutex) { pthread_mutex_unlock(&
 static inline void g_cond_init(GCond *cond) { pthread_cond_init(&cond->c, NULL); }
 static inline void g_cond_signal(GCond *cond) { pthread_cond_signal(&cond->c); }
 static inline void g_cond_wait(GCond *cond, GMutex *mutex) { pthread_cond_wait(&cond->c, &mutex->m); }
+static inline void g_cond_broadcast(GCond *cond) { pthread_cond_broadcast(&cond->c); }
 
 /* ---- atomics (GLib's are full barriers; so are these) ---- */
 #define g_atomic_int_inc(p) ((void)__atomic_add_fetch((p), 1, __ATOMIC_SEQ_CST))
@@ -160,6 +161,9 @@ typedef struct _GTypeInstance GTypeInstance;
 typedef void (*GWeakNotify)(gpointer data, GObject *where_the_object_was);
 #define G_OBJECT(o) ((GObject *)(o))
 static inline void g_object_weak_ref(GObject *o, GWeakNotify n, gpointer d) { (void)o; (void)n; (void)d; }
+static inline gpointer g_object_ref(gpointer o) { return o; }
+static inline void g_object_unref(gpointer o) { (void)o; }
+#define G_OBJECT_TYPE_NAME(o) "GObject"
 
 /* ---- printing ---- */
 void g_print(const gchar *format, ...) G_GNUC_PRINTF(1, 2);

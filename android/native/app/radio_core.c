@@ -6,9 +6,10 @@
  * upstream's display timer (receiver.c), runs a loop thread that plays GTK's
  * main loop for upstream code, and takes the UI's requests on that thread.
  *
- * RECEIVE ONLY, like M1: the transmitter is all zeros and the stubs in
- * headless/stubs.c keep the radio out of transmit (radio_is_transmitting()
- * is always 0, no PA, no keyer).
+ * Transmit (M7): upstream's transmitter.c with app/transmit.c, made at the
+ * first start with a real radio; an IQ recording never transmits
+ * (can_transmit = 0 while one plays). Before any stop the radio goes back
+ * to receive (droid_tx_off_now).
  *
  * Network: the Kotlin service binds the whole process to the Ethernet (or
  * WiFi) network before calling droid_radio_start, so the sockets that
@@ -62,7 +63,7 @@
 
 enum { CMD_FREQ, CMD_MODE, CMD_FILTER, CMD_VOLUME, CMD_LNA, CMD_PHONE_AUDIO, CMD_ZOOM, CMD_FPS, CMD_WINDOW, CMD_DETECTOR, CMD_PAN_FFT, CMD_HL2, CMD_ANT, CMD_RIT_STEP,
        CMD_FILTER_PRESET, CMD_BAND, CMD_BANDSTACK, CMD_VFO_OP, CMD_RIT, CMD_CTUN, CMD_LOCK, CMD_STEP, CMD_MEMORY,
-       CMD_AGC, CMD_SAVE, CMD_DSP, CMD_NONE };
+       CMD_AGC, CMD_SAVE, CMD_DSP, CMD_TX, CMD_NONE };
 typedef struct { int type; long long i; double d; int a, b; } cmd;
 #define CMD_MAX 256
 static cmd cmds[CMD_MAX];
@@ -77,10 +78,10 @@ static void post(cmd c) {
    * commands sent after the old one (a filter drag, then a mode change). */
   int room = (cmd_head + 1) % CMD_MAX != cmd_tail;
   if (c.type == CMD_FREQ || c.type == CMD_VOLUME || c.type == CMD_LNA || c.type == CMD_FILTER || c.type == CMD_ZOOM ||
-      c.type == CMD_DSP) {
+      c.type == CMD_DSP || c.type == CMD_TX) {
     int last = (cmd_head + CMD_MAX - 1) % CMD_MAX;
     for (int k = cmd_tail; k != cmd_head; k = (k + 1) % CMD_MAX) {
-      if (cmds[k].type == c.type && (c.type != CMD_DSP || cmds[k].a == c.a)) {
+      if (cmds[k].type == c.type && ((c.type != CMD_DSP && c.type != CMD_TX) || cmds[k].a == c.a)) {
         if (!room) {
           /* full: take the old one out, closing the gap, so the new one still goes to the end */
           for (int j = k; j != last; j = (j + 1) % CMD_MAX) cmds[j] = cmds[(j + 1) % CMD_MAX];
@@ -154,6 +155,10 @@ void droid_memory(int store, int slot) { post((cmd){ .type = CMD_MEMORY, .a = st
 void droid_agc(int agc) { post((cmd){ .type = CMD_AGC, .a = agc }); }
 void droid_save(void) { post((cmd){ .type = CMD_SAVE }); }
 void droid_dsp_set(int field, double value) { post((cmd){ .type = CMD_DSP, .a = field, .d = value }); }
+void droid_tx_set(int field, double value) {
+  if (field == TX_PTT && value != 0) droid_tx_ptt_seen();   /* the finger is still down, even if the queue is slow */
+  post((cmd){ .type = CMD_TX, .a = field, .d = value });
+}
 
 /* ---- when the radio was on which frequency ----
  * A spectrum row describes samples from some time before it is drawn (the
@@ -209,6 +214,7 @@ static void droid_radio_save_now(void) {
   SetPropI0("rx_audio_network_reserve_ms", rx_audio_network_reserve_ms);
   SetPropI0("autogain_enabled", autogain_enabled);
   SetPropI0("autogain_time_enabled", autogain_time_enabled);
+  droid_tx_save();
   saveProperties(props_path);
 }
 
@@ -309,6 +315,9 @@ static void run(const cmd *c) {
     break;
   case CMD_DSP:
     droid_dsp_apply(c->a, c->d);
+    break;
+  case CMD_TX:
+    droid_tx_apply(c->a, c->d);
     break;
   case CMD_VOLUME:
     rx->volume = c->d;
@@ -413,6 +422,7 @@ static __typeof__(vfo[0]) pb_saved_vfos[MAX_VFOS];
 static FILTER pb_saved_filters[MODES][FILTERS];
 static __typeof__(mode_settings[0]) pb_saved_modes[MODES];
 static int pb_seeded;   /* a recording made the receivers with no props of the radio: seed the VFOs at its first start */
+static TRANSMITTER inert_tx;     /* before the real transmitter exists (vfo.c reads transmitter->...) */
 
 DISCOVERED *droid_real_radio(void) { return real_radio; }
 
@@ -450,7 +460,8 @@ static void *loop(void *arg) {
       if (!have) break;
       run(&c);
     }
-    droid_compat_run_pending();   /* g_idle_add / g_timeout_add, incl. the display timer */
+    droid_compat_run_pending();   /* g_idle_add / g_timeout_add, incl. the display timers */
+    droid_tx_poll();              /* the screen PTT's repeats, the TX timeout */
     usleep(4000);
   }
   return NULL;
@@ -625,10 +636,13 @@ setup:
       receiver[i] = rx_create_receiver(CHANNEL_RX0 + i, o->pixels, o->pixels, 200);
       receiver[i]->displaying = 0;
     }
-    transmitter = calloc(1, sizeof(TRANSMITTER));   /* inert: see stubs.c */
+    transmitter = &inert_tx;   /* until a real radio starts: all zeros, never transmits */
   }
   active_receiver = receiver[0];
-  can_transmit = 0;
+  /* the transmitter, as radio.c's start_radio() makes it: once, with the first real radio
+   * (its WDSP channel can't be reopened); an IQ recording never transmits */
+  if (!pb) droid_tx_create(o->pixels);
+  can_transmit = !pb && transmitter != &inert_tx;
   if (!pb && o->props_dir[0]) {
     /* a real radio saves to its own file, also when a recording made the receivers first */
     const unsigned char *m = radio->info.network.mac_address;
@@ -717,6 +731,8 @@ void droid_radio_stop(void) {
   droid_autogain_run(0);
   atomic_store(&running, 0);
   pthread_join(loop_thread, NULL);
+  /* back to receive before the stream stops: with the loop thread stopped, nothing else runs upstream code */
+  droid_tx_off_now();
   if (receiver[0] && receiver[0]->local_audio) {
     receiver[0]->local_audio = 0;
     audio_close_output(receiver[0]);

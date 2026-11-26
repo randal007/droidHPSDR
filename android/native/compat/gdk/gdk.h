@@ -46,6 +46,8 @@ typedef union { int type; GdkEventButton button; GdkEventMotion motion; GdkEvent
                 GdkEventKey key; } GdkEvent;
 
 typedef struct { int type; GdkWindow *window; gint x, y, width, height; } GdkEventConfigure;
+typedef struct { int x, y, width, height; } GdkRectangle;
+#define GDK_KEY_PRESS_MASK (1 << 10)
 #define GDK_BUTTON_PRESS_MASK (1 << 8)
 #define GDK_BUTTON_RELEASE_MASK (1 << 9)
 #define GDK_SCROLL_MASK (1 << 21)

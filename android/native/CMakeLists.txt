@@ -56,12 +56,18 @@ target_link_libraries(droidcore PUBLIC
   ${DEPS}/fftw-float/lib/libfftw3f.a
   android log m)
 
-add_executable(m1-rx headless/m1_main.c headless/display_null.c headless/audio_null.c)
+# m1-rx stays RECEIVE ONLY by construction: headless/tx_null.c is its transmit side.
+add_executable(m1-rx headless/m1_main.c headless/display_null.c headless/audio_null.c headless/tx_null.c)
 target_link_libraries(m1-rx droidcore)
 
 # The app: radio core + upstream display hook + GPU renderer + JNI bridge.
 add_library(droidhpsdr SHARED
   ${UPSTREAM}/buffered_audio.c   # deskHPSDR's local audio engine, unchanged
+  ${UPSTREAM}/transmitter.c      # M7: deskHPSDR's transmitter (WDSP TX channel), unchanged
+  ${UPSTREAM}/tx_off.c           #     graceful MOX off (the speech tail goes out first)
+  ${UPSTREAM}/vox.c
+  ${UPSTREAM}/sintab.c
+  app/transmit.c                 #     radio.c's transmit functions + droidHPSDR's safety
   app/audio_aaudio.c
   app/autogain.c
   app/demo.c
