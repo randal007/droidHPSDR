@@ -21,7 +21,7 @@
 
 #define W 2048
 #define RATE 192000.0
-#define FPS 30
+static atomic_int fps = 30;   /* rows per second: the Display menu's speed, like the radio's */
 
 typedef enum { CW, FT8, PSK, RTTY, CAR, SSB } kind_t;
 typedef struct { kind_t k; double f, l, wpm; int par; double p; } demo_sig;
@@ -141,7 +141,7 @@ static void *run(void *arg) {
     for (int b = 0; b < W; b++) db[b] = (float)(10 * log10(p[b]));
     droid_rows_push(db, 0.0f, W, fmin, hzpp);
     droid_meter_set(meter > -127 ? meter : -118 + rnd() * 2);
-    usleep(1000000 / FPS);
+    usleep(1000000 / atomic_load(&fps));
   }
   return NULL;
 }
@@ -158,3 +158,4 @@ void droid_demo_stop(void) {
 }
 
 void droid_demo_set_frequency(long long hz) { atomic_store(&center, hz); }
+void droid_demo_set_fps(int f) { if (f >= 5 && f <= 60) atomic_store(&fps, f); }

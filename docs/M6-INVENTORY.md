@@ -95,7 +95,22 @@ transverter (question 5), otherwise **later**.
 | Static IP in EEPROM | **CLAUDE.md: never** (disables DHCP, breaks the WiFi path) | **not doing** (needs Randal's OK as a "not doing" line) |
 | DHCP preference, alternate MAC, reboot | EEPROM writes, then a reboot | reboot + rediscover: **build**; the EEPROM writes: question 6 |
 
-## Questions for Randal
+## Randal's answers (2026-11-25)
+
+1. IO board status in the **SDR Device sheet**, **auto-detected** with an
+   override (= upstream's detection plus "HL2 Force IO Board").
+2. Wanted more detail on the HL2 page: explained, waiting on his pick.
+3. **No GPSDO**: CL1 goes on the later list.
+4. **No OC editing**: the filter board choice is enough.
+5. **No transverter now, but wanted later**: XVTR on the later list.
+6. HL2 setup **over Ethernet only, with warnings** (gateware update,
+   DHCP preference, MAC, reboot). Static IP stays out unless he says so.
+7. **IO board with the custom XPA125B firmware on its Pico** (the
+   `hl2-xpa125b-controller` uf2): upstream sees it as "IO: Pico or SoC",
+   shows the Pico's LPF status, and TUNE drives the XPA125B's tuner through
+   it (`hl2_iob_set_antenna_tuner`): that part is M7.
+
+## Questions for Randal (asked 2026-11-25)
 
 1. **Where the IO board status goes:** a small line in the info bar gaps
    (E8), in the SDR Device sheet only, or both? (pictures)

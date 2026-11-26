@@ -40,6 +40,7 @@ void droid_meter_set(double dbm);
 void droid_demo_start(void);
 void droid_demo_stop(void);
 void droid_demo_set_frequency(long long hz);
+void droid_demo_set_fps(int fps);
 
 /* S-meter in dBm, corrected like upstream's (rx_update_display). */
 double droid_meter_dbm(void);

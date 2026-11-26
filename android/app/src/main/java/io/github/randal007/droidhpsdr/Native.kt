@@ -63,6 +63,7 @@ object Native {
     external fun demoStart()
     external fun demoStop()
     external fun demoSetFrequency(hz: Long)
+    external fun demoSetFps(fps: Int)
 
     // GL thread only
     external fun glInit()

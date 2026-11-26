@@ -281,6 +281,10 @@ JNIEXPORT void JNICALL FN(demoSetFrequency)(JNIEnv *env, jobject self, jlong hz)
   (void)env; (void)self;
   droid_demo_set_frequency(hz);
 }
+JNIEXPORT void JNICALL FN(demoSetFps)(JNIEnv *env, jobject self, jint fps) {
+  (void)env; (void)self;
+  droid_demo_set_fps(fps);
+}
 
 JNIEXPORT void JNICALL FN(glInit)(JNIEnv *env, jobject self) { (void)env; (void)self; droid_gl_init(); }
 JNIEXPORT void JNICALL FN(glResize)(JNIEnv *env, jobject self, jint w, jint h) {

@@ -431,6 +431,7 @@ object Radio {
         this.fps.value = fps; this.window.value = window; this.detector.value = detector
         prefs.edit().putInt("fps", fps).putInt("window", window).putInt("detector", detector).apply()
         if (running) Native.setDisplay(fps, window, detector, Disp.fftSize.value)
+        Native.demoSetFps(fps)   // the demo band follows the speed too
     }
 
     fun setRegion(r: Int) {
@@ -448,6 +449,7 @@ object Radio {
     fun startDemo() {
         if (running) return
         Native.demoSetFrequency(freq.value)
+        Native.demoSetFps(fps.value)
         Native.demoStart()
         setPhase(Phase.DEMO, "made-up 20 m band, no radio")
         applyModeFilter()
