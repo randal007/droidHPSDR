@@ -325,7 +325,8 @@ separate MIC / DRIVE / TUNE chips (Randal).
 drawn. **Step 1 built the same day** (29424fb; code review of `059d3d1..29424fb`: 10 findings,
 all fixed in eb55688; then 2063a1d (watchdog cut TUNE/PTT after 3 s: fixed; TX log;
 PA default), reviewed `8499dca..2063a1d`, fixes eadad0b; then dd68587 (the TCI stub zeroed every mic sample: fixed; reviewed `5f6101c..dd68587`, clean);
-**next review starts after dd68587**;
+then the leftovers 56b3109, reviewed `d92521c..56b3109`, fixes 4597c58;
+**next review starts after 4597c58**;
 installed on the phone 2026-11-25). Randal's PA was off (props saved 0): he turns it on himself: upstream transmitter.c /
 tx_off.c / vox.c compiled unchanged, radio.c's TX functions in
 `android/native/app/transmit.c`, PTT chip (hold, repeats every 250 ms,
