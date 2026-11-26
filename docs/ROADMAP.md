@@ -322,7 +322,8 @@ it also starts the XPA125B's tuner, as in deskHPSDR. Tune IOB not shown.
 One **TX** chip (shows the drive %) opens the transmit panel, instead of
 separate MIC / DRIVE / TUNE chips (Randal).
 **Randal happy with round 1 (2026-11-25):** A, M1, M5b, M6, M7, M8 as
-drawn. **Step 1 built the same day** (29424fb): upstream transmitter.c /
+drawn. **Step 1 built the same day** (29424fb; code review of `059d3d1..29424fb`: 10 findings,
+all fixed in eb55688; **next review starts after eb55688**; installed on the phone 2026-11-25): upstream transmitter.c /
 tx_off.c / vox.c compiled unchanged, radio.c's TX functions in
 `android/native/app/transmit.c`, PTT chip (hold, repeats every 250 ms,
 back to RX after 1.5 s without one), TX chip + panel, TX and PA pages, TX
