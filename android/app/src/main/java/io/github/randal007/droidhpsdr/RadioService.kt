@@ -48,6 +48,7 @@ class RadioService : Service() {
         override fun onLost(network: Network) {
             if (network != boundNet) return
             Log.i("droidHPSDR", "Ethernet lost")
+            Radio.waitingForHl2.value = false
             stopStream()
             boundNet = null
             Radio.setPhase(Phase.ERROR, "Ethernet unplugged: plug the adapter back in")
@@ -57,6 +58,7 @@ class RadioService : Service() {
             if (!wanted || Radio.running || starting) return
             Log.i("droidHPSDR", "Ethernet back")
             replugAt = System.currentTimeMillis()
+            Radio.waitingForHl2.value = true   // the screen says why it waits (Screen.kt)
             // let the static address settle; a Stop meanwhile cancels this (shutdown)
             main.removeCallbacks(replugStart)
             main.postDelayed(replugStart, 1500)
@@ -119,14 +121,17 @@ class RadioService : Service() {
                 // the demo's recording isn't the radio (Radio's poll watches it)
                 if (!Radio.running || starting || Radio.playback.value) { lastRows = -1; continue }
                 val now = System.currentTimeMillis()
-                if (st.rows != lastRows) { lastRows = st.rows; quietSince = now; continue }
+                if (st.rows != lastRows) {
+                    // data is flowing again (not just the first look after a start): the replug wait is over
+                    if (lastRows != -1L) { replugAt = 0; Radio.waitingForHl2.value = false }
+                    lastRows = st.rows; quietSince = now; continue
+                }
                 val afterReplug = now - replugAt < 60_000
-                if (now - quietSince > (if (afterReplug) 1500 else 3000)) {
-                    Log.i("droidHPSDR", "no data for 3 s: restarting the stream")
+                val quietMs = if (afterReplug) 1500 else 3000
+                if (now - quietSince > quietMs) {
+                    Log.i("droidHPSDR", "no data for ${quietMs / 1000.0} s: restarting the stream")
                     stopStream()
-                    Radio.setPhase(Phase.CONNECTING,
-                        if (afterReplug) "Waiting for the HL2: after a replug it looks for a DHCP server first (about 20 s)"
-                        else "No data from the radio: trying again")
+                    Radio.setPhase(Phase.CONNECTING, "No data from the radio: trying again")
                     lastRows = -1
                     startRadio()
                 }
@@ -228,6 +233,7 @@ class RadioService : Service() {
             runCatching { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(ethernet) }
         }
         main.removeCallbacks(replugStart)
+        Radio.waitingForHl2.value = false
         stopStream()   // also writes deskHPSDR's props file
         Radio.setPhase(Phase.IDLE)
         releaseLocks()

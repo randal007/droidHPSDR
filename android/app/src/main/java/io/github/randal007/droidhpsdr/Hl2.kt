@@ -122,6 +122,7 @@ internal object Hl2 {
         region60.value = r
         prefs.edit().putInt("hl2.region60", r).apply()
         if (Radio.running) Native.hl2Set(F_REGION60, r.toDouble())   // the poll picks up the new table
+        else channels60.value = emptyList()   // the next start sends it and reads the new table
     }
     fun setBeacons(on: Boolean) { beacons.value = on; prefs.edit().putBoolean("hl2.beacons", on).apply() }
     fun setContestFree(on: Boolean) { contestFree.value = on; prefs.edit().putBoolean("hl2.contestFree", on).apply() }

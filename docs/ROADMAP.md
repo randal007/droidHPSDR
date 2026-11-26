@@ -9,11 +9,12 @@ next, what's waiting on whom. Session history lives in git and in
 *Offload 2026-11-25.* Branch `m3-app` (pushed) holds M3-M6; `master` is still at M1.
 
 - **Radio test done 2026-11-25** (`docs/RADIO-TEST.md`): Randal is happy,
-  "the majority of everything works". **Next session, in order:** (1) the
-  5 small fixes at the bottom of RADIO-TEST.md (60 m band bar in Region 2,
-  RIT step not used by the RIT drag, bottom row overflow, toolbar editor
-  shadow, slow replug); build → review → install; (2) tag `m5-done` and
-  `m6-done`; (3) **start M7** (transmit, Randal 2026-11-25): its plan is the
+  "the majority of everything works". The 5 fixes from it are built,
+  reviewed and installed (60 m band bar follows the channel set, RIT drag
+  in RIT steps, bottom row scrolls, toolbar editor, replug: faster retry +
+  "Waiting for the HL2" note; the ~20 s is the HL2's DHCP wait). Check them
+  on the radio in passing. **Next session:** (1) tag `m5-done` and
+  `m6-done` once Randal agrees; (2) **start M7** (transmit, Randal 2026-11-25): its plan is the
   M7 section below; step 1 of "How each section is done" is the inventory.
   Gateware flashing from the phone goes on the later list (Randal: not
   needed now, scary). Only explicitly checked items are ticked in FEATURES.md.
@@ -29,7 +30,9 @@ next, what's waiting on whom. Session history lives in git and in
   ranges: M1 `9f49c21..m1-done`, M3 `m1-done..m3-done`, M4+M5
   `m3-done..13d5bda`, then `13d5bda..ff3c548`, `ff3c548..45849bd`,
   `45849bd..59f982b`, `59f982b..d6d0043`, `d6d0043..aa57aa6` (fixes in the
-  commit after each). **Next review starts at `8c260e9`.** Workflow
+  commit after each), and `8c260e9..1b6ee78` (the radio-test fixes; 6
+  findings fixed in the next commit). **Next review starts after the
+  2026-11-25 offload commit.** Workflow
   (Randal): build → `/code-review` the new commits → fix → install.
   Tags: `m1-done` (master tip), `m3-done` (e580fa6).
 - **Waiting on Randal:** the radio test; his own background pictures (an

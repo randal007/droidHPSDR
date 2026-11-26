@@ -463,6 +463,9 @@ object Radio {
         if (p == Phase.RUNNING || p == Phase.DEMO) startPolling() else poll?.cancel()
     }
 
+    /** After an adapter replug, until the HL2 sends data again (it looks for DHCP first, ~20 s). */
+    val waitingForHl2 = MutableStateFlow(false)
+
     /** The demo band is playing an IQ recording (playback.c) instead of the radio. */
     val playback = MutableStateFlow(false)
     private var freqBeforePlayback = 0L

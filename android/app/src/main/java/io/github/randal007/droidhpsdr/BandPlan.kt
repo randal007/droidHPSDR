@@ -74,11 +74,30 @@ object BandPlan {
 
     data class Band(val loHz: Long, val hiHz: Long, val name: String, val home: Long)
 
+    /**
+     * The channel set chosen in SDR Device, while it describes what the radio is on (the radio
+     * running, not the demo): stale otherwise.
+     */
+    private fun liveChannels(): List<Pair<Long, Long>> =
+        if (Radio.running && !Radio.playback.value) Hl2.channels60.value else emptyList()
+
+    /**
+     * The bands, with a frequency to jump to. 60 m: with a channel set, one band per channel (so the
+     * bar stays red between them and the BAND chip says 60m only on a channel); else WRC-15's edges.
+     */
+    val bands: List<Band>
+        get() {
+            val ch = liveChannels()
+            if (ch.isEmpty()) return fixedBands
+            val sixty = ch.map { (f, w) -> Band(f - w / 2, f + w / 2, "60m", f) }
+            return fixedBands.filter { it.name != "60m" } + sixty
+        }
+
     /** The bands by their widest edges in any region, with a frequency to jump to. */
-    val bands = listOf(
+    private val fixedBands = listOf(
         Band(1_800_000, 2_000_000, "160m", 1_840_000),
         Band(3_500_000, 4_000_000, "80m", 3_573_000),
-        Band(5_250_000, 5_450_000, "60m", 5_357_000),   // all the 60 m channel schemes; the segments say what's allowed
+        Band(5_351_500, 5_366_500, "60m", 5_357_000),   // WRC-15; a chosen channel set replaces it (bands)
         Band(7_000_000, 7_300_000, "40m", 7_074_000),
         Band(10_100_000, 10_150_000, "30m", 10_136_000),
         Band(14_000_000, 14_350_000, "20m", 14_074_000),
@@ -95,7 +114,7 @@ object BandPlan {
         val table = when (region) { 2 -> region2; 3 -> region3; else -> region1 }
         // 60 m: with a channel set chosen (SDR Device), its channels replace the WRC-15 segment, so
         // Canada's or the US's channels show as allowed and the gaps between them as out of band
-        val ch = Hl2.channels60.value
+        val ch = liveChannels()
         val plan = if (ch.isEmpty()) table
         else table.filter { it.hiHz <= 5_250_000L || it.loHz >= 5_450_000L } +
             ch.map { (f, w) -> Segment(f - w / 2, f + w / 2, SegKind.CHANNEL) }

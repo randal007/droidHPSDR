@@ -172,6 +172,13 @@ fun Screen(onStart: () -> Unit, onStop: () -> Unit) {
             if (showChips && sheet != Sheet.TOOLBAR) ChipRow(status, { sheet = it; fromMenu = false }, Modifier.align(Alignment.BottomStart).padding(10.dp))
 
             val playing by Radio.playback.collectAsState()
+            val waitHl2 by Radio.waitingForHl2.collectAsState()
+            if (waitHl2 && status.phase != Phase.ERROR && status.phase != Phase.IDLE) {
+                Text("Waiting for the HL2: after a replug it looks for a DHCP server first (about 20 s)",
+                    color = Amb, fontSize = 12.sp, fontWeight = FontWeight.Medium,
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 96.dp)
+                        .glass(8).padding(horizontal = 10.dp, vertical = 4.dp))
+            }
             if (status.phase == Phase.DEMO || playing) {
                 Text(if (playing) "DEMO · IQ recording" else "DEMO · no radio", color = Amb, fontSize = 12.sp, fontWeight = FontWeight.Bold,
                     modifier = Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 112.dp)
@@ -328,7 +335,7 @@ private fun SpectrumOverlay(modifier: Modifier) {
                             2 -> Radio.setFilter(st.filterLow, (st.filterHigh + dx * hzpx).roundToInt())
                             3 -> {   // RIT drag, in deskHPSDR's RIT/XIT step (VFO panel: 1, 10 or 100 Hz)
                                 val rs = st.ritStep.coerceAtLeast(1)
-                                Radio.rit(true, ((st.rit + dx * hzpx) / rs).roundToLong() * rs)
+                                Radio.rit(true, st.rit + (dx * hzpx / rs).roundToLong() * rs)   // whole steps from where it was
                             }
                             5 -> if (c.position.y - down.position.y < -70.dp.toPx() && c.position.y < splitY * 0.3f) {
                                 Radio.setDsp(Dsp.MNF, 0.0)   // pushed off the top: gone
@@ -826,7 +833,10 @@ internal fun widthLabel(hz: Int) = if (hz >= 1000) "%.1fk".format(hz / 1000.0) e
 @Composable
 private fun SegmentTag(freq: Long, modifier: Modifier) {
     val region by Radio.region.collectAsState()
-    val key = BandPlan.tagKey(region, freq)
+    val ch by Hl2.channels60.collectAsState()   // the 60 m channel set changes what the tag says
+    val st by Radio.status.collectAsState()
+    val playing by Radio.playback.collectAsState()
+    val key = BandPlan.tagKey(region, freq) + "/" + ch.size + "/" + (st.phase == Phase.RUNNING && !playing)
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(key) {
         visible = true

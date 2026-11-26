@@ -621,6 +621,7 @@ internal fun ToolbarEditor(st: Status, close: () -> Unit) {
         // the row itself, in edit mode, where it always is
         // scrolls like the real row; a long press starts a move, a plain swipe scrolls
         Row(Modifier.align(Alignment.BottomStart).padding(10.dp).horizontalScroll(rememberScrollState())
+            .padding(horizontal = 8.dp)   // room inside the scroll for the × badges and a dragged chip
             .clickable(enabled = false) {}, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             ids.forEach { id -> key(id) {   // state and gesture follow the chip as it moves
                 var dx by remember(id) { mutableStateOf(0f) }
