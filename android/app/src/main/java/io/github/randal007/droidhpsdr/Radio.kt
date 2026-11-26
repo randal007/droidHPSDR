@@ -329,7 +329,7 @@ object Radio {
 
     fun setSpan(hz: Double) {
         span.value = hz.coerceIn(1_500.0, rate() * 0.95)
-        prefs.edit().putFloat("span", span.value.toFloat()).apply()
+        if (!playback.value) prefs.edit().putFloat("span", span.value.toFloat()).apply()   // a recording's width isn't the radio's
         applyZoom()
     }
 
@@ -451,6 +451,7 @@ object Radio {
     /** The demo band is playing an IQ recording (playback.c) instead of the radio. */
     val playback = MutableStateFlow(false)
     private var freqBeforePlayback = 0L
+    private var spanBeforePlayback = 48_000.0
 
     /**
      * The demo's IQ recording: the first .wav in the app's own folder on the phone
@@ -482,6 +483,7 @@ object Radio {
             val err = Native.startPlayback(file.absolutePath, centre, mode, PIXELS, fps.value, appCtx.filesDir.absolutePath)
             if (err.isNotEmpty()) { setPhase(Phase.ERROR, err); return@launch }
             freqBeforePlayback = freq.value
+            spanBeforePlayback = span.value
             playback.value = true
             lastTuneMs = 0
             freq.value = centre
@@ -501,6 +503,7 @@ object Radio {
             Native.stop()
             playback.value = false
             freq.value = freqBeforePlayback
+            span.value = spanBeforePlayback
             setPhase(Phase.IDLE)
             return
         }
@@ -546,11 +549,14 @@ object Radio {
                     val nf = a[1].toLong()
                     if (nf != freq.value && System.currentTimeMillis() - lastTuneMs > 400) {
                         freq.value = nf
-                        prefs.edit().putLong("freq", nf).apply()
+                        if (!playback.value) prefs.edit().putLong("freq", nf).apply()   // not a recording's
                     }
                     // phone audio can fail to open, or upstream's watchdog turns it off: the switch follows
+                    // (not during a recording: it turns phone audio on itself, PHONE stays the user's)
                     val pa = a[12] != 0.0
-                    if (pa != phoneAudio.value && System.currentTimeMillis() - lastPhoneMs > 1500) phoneAudio.value = pa
+                    if (!playback.value && pa != phoneAudio.value && System.currentTimeMillis() - lastPhoneMs > 1500) {
+                        phoneAudio.value = pa
+                    }
                     // each mode keeps its own step (vfo.c mode_settings): the STEP chip follows
                     val ns = a[20].toInt()
                     if (ns > 0 && ns != step.value && System.currentTimeMillis() - lastStepMs > 400) {

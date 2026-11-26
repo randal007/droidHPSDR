@@ -33,8 +33,9 @@
 
 #include "droid_app.h"
 
-/* the radio discovery found (radio.c's `radio`), as the target */
+/* the HL2 discovery found (not a recording playing in its place), as the target */
 static int target(struct sockaddr_in *dst, unsigned char mac[6], char *error, size_t error_len) {
+  DISCOVERED *radio = droid_real_radio();
   if (radio == NULL || radio->device != DEVICE_HERMES_LITE2) {
     snprintf(error, error_len, "No HL2 found yet: start the radio once (over Ethernet), then try again.");
     return -1;
@@ -166,5 +167,6 @@ void droid_hl2_info(int *iob, int *pico, char *lpf, int lpf_len, int *gateware) 
   *pico = hl2_pico_is_present();
   const char *s = *pico && hl2_iob_get_lpf_status() != 0 ? hl2_iob_get_lpf_status_str() : "";
   snprintf(lpf, lpf_len, "%s", s ? s : "");
-  *gateware = radio ? radio->software_version : 0;
+  DISCOVERED *r = droid_real_radio();
+  *gateware = r ? r->software_version : 0;
 }

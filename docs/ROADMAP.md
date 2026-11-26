@@ -32,6 +32,17 @@ next, what's waiting on whom. Session history lives in git and in
   start fails, a clear message when the radio's address changes - that one
   needs a fresh app process, old_protocol.c keeps the address). Radio
   checks: CW tap-to-tune lands in the passband; drag a CW filter edge.
+  **`13d5bda..ff3c548` (everything after the M4+M5 review: the review fixes,
+  M5 display, E2, M6, the IQ demo, notch handles) done 2026-11-25** (high,
+  10 findings, all checked and fixed): the demo no longer leaks into the
+  radio (never saves props while playing, VFO A and `radio` put back,
+  props path per real radio; a recording first uses the newest real
+  props), Start radio / service stop / restart while the demo plays,
+  sample-rate change during the demo, poll/span not saved from a
+  recording, playback can't spin on an empty or unreadable WAV, HL2 setup
+  targets the real HL2, full queue keeps the newest command, lock holds in
+  the demo, WAVE_FORMAT_EXTENSIBLE read properly, iq_convert.py walks the
+  chunks. Next review: from `ff3c548`'s fixes onward.
   M1 done 2026-11-25 (`9f49c21..m1-done`, high; 10 findings, 8 fixed:
   m1-rx's S-meter now calibrated like receiver.c (read high by the LNA
   gain), stops with an error on an upstream FATAL, catches SIGHUP so a

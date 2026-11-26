@@ -66,7 +66,10 @@ class RadioService : Service() {
     private val replugStart = Runnable { if (wanted && !Radio.running && !starting) startRadio() }
 
     /** Native.stop from any thread; the native side also serialises start and stop. */
-    private fun stopStream() = synchronized(this) { if (Radio.running) Native.stop() }
+    /** The demo's recording counts as "running" too: stopping it goes through Radio, which puts the radio's state back. */
+    private fun stopStream() = synchronized(this) {
+        if (Radio.playback.value) Radio.stopDemo() else if (Radio.running) Native.stop()
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -77,6 +80,8 @@ class RadioService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        // the radio wanted while the demo plays its recording: the demo gives way first
+        if (Radio.playback.value) Radio.stopDemo()
         if (intent?.action == ACTION_RESTART && Radio.running && !starting) {
             // new sample rate: stop the stream and start it again, keeping the service
             stopStream()

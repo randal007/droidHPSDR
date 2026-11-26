@@ -469,7 +469,8 @@ internal fun RxSheet(st: Status) {
     Seg(rates.map { "${it / 1000} kHz" }, rates.indexOf(rate)) {
         if (rates[it] != rate) {
             Radio.setSampleRate(rates[it])
-            if (st.phase == Phase.RUNNING) RadioService.restart(ctx)
+            // the demo's recording has its own rate: the new one is for the radio's next start
+            if (st.phase == Phase.RUNNING && !Radio.playback.value) RadioService.restart(ctx)
         }
     }
     Label("HL2 ADC auto gain: the radio sets its own LNA gain, lowering it when the ADC overloads")

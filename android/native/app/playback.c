@@ -40,7 +40,7 @@ atomic_int droid_playback_on;
 static uint32_t le32(const unsigned char *p) { return p[0] | p[1] << 8 | p[2] << 16 | (uint32_t)p[3] << 24; }
 
 int droid_playback_open(const char *path, int *sample_rate, char *msg, int msglen) {
-  unsigned char h[12], c[8], fmt[16];
+  unsigned char h[12], c[8], fmt[40];
   FILE *f = fopen(path, "rb");
   if (!f) { snprintf(msg, msglen, "can't open %s: %s", path, strerror(errno)); return -1; }
   if (fread(h, 1, 12, f) != 12 || memcmp(h, "RIFF", 4) || memcmp(h + 8, "WAVE", 4)) {
@@ -53,18 +53,21 @@ int droid_playback_open(const char *path, int *sample_rate, char *msg, int msgle
     if (fread(c, 1, 8, f) != 8) { snprintf(msg, msglen, "no data in %s", path); fclose(f); return -1; }
     long n = le32(c + 4);
     if (!memcmp(c, "fmt ", 4)) {
-      if (n < 16 || fread(fmt, 1, 16, f) != 16) break;
+      long got = n < 40 ? n : 40;
+      if (n < 16 || fread(fmt, 1, (size_t)got, f) != (size_t)got) break;
       int tag = fmt[0] | fmt[1] << 8, ch = fmt[2] | fmt[3] << 8;
       rate = (int)le32(fmt + 4);
       bits = fmt[14] | fmt[15] << 8;
-      is_float = tag == 3 || (tag == 0xFFFE && bits == 32);
-      if (ch != 2 || (!((tag == 1 || tag == 0xFFFE) && bits == 16) && !(is_float && bits == 32))) {
+      /* WAVE_FORMAT_EXTENSIBLE: the real format is the SubFormat GUID's first two bytes */
+      if (tag == 0xFFFE) tag = got >= 26 ? (fmt[24] | fmt[25] << 8) : 0;
+      is_float = tag == 3;
+      if (ch != 2 || (!(tag == 1 && bits == 16) && !(is_float && bits == 32))) {
         snprintf(msg, msglen, "the WAV must be 2 channels (I/Q), 16-bit or 32-bit float");
         fclose(f);
         return -1;
       }
       have_fmt = 1;
-      fseek(f, n - 16 + (n & 1), SEEK_CUR);
+      fseek(f, n - got + (n & 1), SEEK_CUR);
     } else if (!memcmp(c, "data", 4)) {
       data_off = ftell(f);
       data_len = n;
@@ -74,6 +77,11 @@ int droid_playback_open(const char *path, int *sample_rate, char *msg, int msgle
     }
   }
   if (!have_fmt) { snprintf(msg, msglen, "no format in %s", path); fclose(f); return -1; }
+  if (data_len < (is_float ? 8 : 4) * (long)(rate / 100 > 0 ? rate / 100 : 1)) {
+    snprintf(msg, msglen, "the recording in %s is empty (or shorter than 10 ms)", path);
+    fclose(f);
+    return -1;
+  }
   if (rate != 48000 && rate != 96000 && rate != 192000 && rate != 384000) {
     snprintf(msg, msglen, "the recording is at %d Hz: the HL2 rates are 48, 96, 192 or 384 kHz "
              "(tools/iq_convert.py converts it)", rate);
@@ -99,6 +107,10 @@ static void *run(void *arg) {
     if (want > left) want = left - left % frame;
     size_t got = want > 0 ? fread(buf, 1, (size_t)want, wav) : 0;
     if (got < (size_t)frame) {   /* the end: loop */
+      if (left == data_len) {   /* nothing even right after a rewind (read error): stop, don't spin */
+        droid_log("playback: can't read the recording any more");
+        break;
+      }
       fseek(wav, data_off, SEEK_SET);
       left = data_len;
       continue;

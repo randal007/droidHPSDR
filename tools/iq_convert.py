@@ -4,14 +4,30 @@ import sys, struct, numpy as np
 from math import gcd
 from scipy.signal import resample_poly
 src, dst, rate, secs, gain = sys.argv[1], sys.argv[2], int(sys.argv[3]), float(sys.argv[4]), float(sys.argv[5])
-f = open(src, 'rb'); d = f.read(4096); i = 12; sr = None
+# walk the chunks (SDR# / SDR++ put big auxi / LIST chunks before 'data')
+f = open(src, 'rb'); hdr = f.read(12); sr = tag = bits = None
+assert hdr[:4] == b'RIFF' and hdr[8:12] == b'WAVE', 'not a WAV file'
 while True:
-    cid = d[i:i+4]; n = struct.unpack('<I', d[i+4:i+8])[0]
-    if cid == b'fmt ': sr = struct.unpack('<I', d[i+12:i+16])[0]
-    if cid == b'data': off = i + 8; break
-    i += 8 + n + (n & 1)
-x = np.memmap(src, dtype=np.int16, mode='r', offset=off).reshape(-1, 2)
-x = x[:int(secs * sr)].astype(np.float64)
+    c = f.read(8)
+    if len(c) < 8: sys.exit('no data chunk')
+    cid, n = c[:4], struct.unpack('<I', c[4:8])[0]
+    if cid == b'fmt ':
+        fm = f.read(n); tag, ch, sr = struct.unpack('<HHI', fm[:8]); bits = struct.unpack('<H', fm[14:16])[0]
+        if tag == 0xFFFE and len(fm) >= 26: tag = struct.unpack('<H', fm[24:26])[0]   # extensible: SubFormat
+        if n & 1: f.read(1)
+        if ch != 2: sys.exit('needs 2 channels (I/Q)')
+    elif cid == b'data':
+        off = f.tell(); break
+    else:
+        f.seek(n + (n & 1), 1)
+if tag == 1 and bits == 16:
+    x = np.memmap(src, dtype=np.int16, mode='r', offset=off).reshape(-1, 2)
+    x = x[:int(secs * sr)].astype(np.float64)
+elif tag == 3 and bits == 32:
+    x = np.memmap(src, dtype=np.float32, mode='r', offset=off).reshape(-1, 2)
+    x = x[:int(secs * sr)].astype(np.float64) * 32768.0   # to the 16-bit scale the gain is given in
+else:
+    sys.exit(f'unsupported format: tag {tag}, {bits} bits (16-bit PCM or 32-bit float)')
 z = x[:, 0] + 1j * x[:, 1]
 g = gcd(rate, sr); up, down = rate // g, sr // g
 y = resample_poly(z, up, down) * gain

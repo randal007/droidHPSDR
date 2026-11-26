@@ -74,6 +74,9 @@ int droid_playback_open(const char *path, int *sample_rate, char *msg, int msgle
 void droid_playback_run(void);
 void droid_playback_stop(void);
 extern atomic_int droid_playback_on;
+/* the HL2 discovery found this run (NULL before): radio points at the recording while one plays */
+struct _DISCOVERED;
+struct _DISCOVERED *droid_real_radio(void);
 
 /* Discovery, receiver set-up as radio.c does for an HL2, stream start.
  * Returns 0 when streaming, else a negative error (see radio_core.c). */

@@ -27,6 +27,8 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/stat.h>
+#include <dirent.h>
+#include <time.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <gtk/gtk.h>
@@ -72,12 +74,13 @@ static void post(cmd c) {
    * Only in place when it is the last one queued; otherwise the old one is
    * dropped and the new one goes to the end, so it never runs before
    * commands sent after the old one (a filter drag, then a mode change). */
+  int room = (cmd_head + 1) % CMD_MAX != cmd_tail;
   if (c.type == CMD_FREQ || c.type == CMD_VOLUME || c.type == CMD_LNA || c.type == CMD_FILTER || c.type == CMD_ZOOM ||
       c.type == CMD_DSP) {
     int last = (cmd_head + CMD_MAX - 1) % CMD_MAX;
     for (int k = cmd_tail; k != cmd_head; k = (k + 1) % CMD_MAX) {
       if (cmds[k].type == c.type && (c.type != CMD_DSP || cmds[k].a == c.a)) {
-        if (k == last) {
+        if (k == last || !room) {   /* the last one, or no room to append: replace it where it is */
           cmds[k] = c;
           pthread_mutex_unlock(&cmd_lock);
           return;
@@ -161,7 +164,8 @@ long long droid_freq_ago(int64_t age_us) {
 static char props_path[400];
 
 static void droid_radio_save_now(void) {
-  if (!props_path[0] || receiver[0] == NULL) return;
+  /* a recording's state (its centre, CTUN on) is not the radio's: never saved */
+  if (!props_path[0] || receiver[0] == NULL || atomic_load(&droid_playback_on)) return;
   clearProperties();
   for (int i = 0; i < 2; i++) rx_save_state(receiver[i]);
   filterSaveState();
@@ -182,6 +186,7 @@ static void run(const cmd *c) {
   if (atomic_load(&droid_playback_on)) {
     switch (c->type) {
     case CMD_FREQ: {
+      if (locked) return;
       long long half = receiver[0]->sample_rate / 2 - 3000, f = c->i;
       if (f < vfo[0].frequency - half) f = vfo[0].frequency - half;
       if (f > vfo[0].frequency + half) f = vfo[0].frequency + half;
@@ -351,7 +356,29 @@ static atomic_int running;
 static pthread_t loop_thread;
 static int p1_started;
 static DISCOVERED *real_radio;   /* the HL2 discovery found (radio points elsewhere while a recording plays) */
-static DISCOVERED pb_radio;      /* the recording, as a radio */   /* old_protocol_init done: the radio is found and the protocol set up */
+static DISCOVERED pb_radio;      /* the recording, as a radio */
+static __typeof__(vfo[0]) pb_saved_vfo;   /* VFO A as the radio left it: back when the recording stops */
+
+DISCOVERED *droid_real_radio(void) { return real_radio; }
+
+/* The newest <MAC>.props in dir (a real radio's, not the all-zero one), so a
+ * recording played before the radio this run still uses the radio's settings. */
+static int newest_props(const char *dir, char *out, size_t len) {
+  DIR *d = opendir(dir);
+  if (!d) return 0;
+  struct dirent *e;
+  time_t best = 0;
+  while ((e = readdir(d)) != NULL) {
+    size_t n = strlen(e->d_name);
+    if (n != 23 || strcmp(e->d_name + 17, ".props") != 0 || strncmp(e->d_name, "00-00-00-00-00-00", 17) == 0) continue;
+    char p[512];
+    struct stat st;
+    snprintf(p, sizeof p, "%s/%s", dir, e->d_name);
+    if (stat(p, &st) == 0 && st.st_mtime > best) { best = st.st_mtime; snprintf(out, len, "%s", p); }
+  }
+  closedir(d);
+  return best != 0;
+}   /* old_protocol_init done: the radio is found and the protocol set up */
 
 static void *loop(void *arg) {
   (void)arg;
@@ -512,6 +539,8 @@ setup:
     const unsigned char *m = radio->info.network.mac_address;
     snprintf(props_path, sizeof props_path, "%s/%02X-%02X-%02X-%02X-%02X-%02X.props", o->props_dir, m[0], m[1],
              m[2], m[3], m[4], m[5]);
+    /* a recording first: the radio's own settings, from its last run (never saved over: see save_now) */
+    if (pb && !newest_props(o->props_dir, props_path, sizeof props_path)) props_path[0] = 0;
     int have_props = o->props_dir[0] && access(props_path, R_OK) == 0;
     if (have_props) {
       loadProperties(props_path);
@@ -544,6 +573,12 @@ setup:
   }
   active_receiver = receiver[0];
   can_transmit = 0;
+  if (!pb && o->props_dir[0]) {
+    /* a real radio saves to its own file, also when a recording made the receivers first */
+    const unsigned char *m = radio->info.network.mac_address;
+    snprintf(props_path, sizeof props_path, "%s/%02X-%02X-%02X-%02X-%02X-%02X.props", o->props_dir, m[0], m[1],
+             m[2], m[3], m[4], m[5]);
+  }
   const int sample_rate = pb ? pb_rate : o->sample_rate;
   if (sample_rate != receiver[0]->sample_rate) {
     /* radio.c's radio_change_sample_rate(), with the stream stopped */
@@ -552,6 +587,7 @@ setup:
   }
   if (pb) {
     /* the recording's centre stays put: listen inside it like CTUN */
+    pb_saved_vfo = vfo[0];
     vfo[0].frequency = o->freq;
     vfo[0].ctun = 1;
     vfo[0].ctun_frequency = o->freq;
@@ -616,8 +652,14 @@ void droid_radio_stop(void) {
     audio_close_output(receiver[0]);
   }
   droid_radio_save_now();   /* the loop thread has stopped: safe here */
-  if (atomic_load(&droid_playback_on)) droid_playback_stop();
-  else old_protocol_stop();
+  if (atomic_load(&droid_playback_on)) {
+    droid_playback_stop();
+    /* the radio's VFO A and the radio itself, as they were before the recording */
+    vfo[0] = pb_saved_vfo;
+    radio = real_radio;
+  } else {
+    old_protocol_stop();
+  }
   droid_log("stream stopped");
   pthread_mutex_unlock(&life_lock);
   /* The receivers stay allocated: WDSP channels cannot be reopened cleanly in
