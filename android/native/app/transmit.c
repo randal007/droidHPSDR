@@ -763,7 +763,9 @@ void rtty_engine_render_iq(double *iq, int frames, int sample_rate, int txmode) 
   (void)iq; (void)frames; (void)sample_rate; (void)txmode;
 }
 void rtty_engine_abort(void) {}
-void tci_get_next_mic_sample(double *micsample) { *micsample = 0.0; }
+/* tci_audio.c replaces the mic sample only while TCI TX audio plays; no TCI here: leave it alone
+ * (the first version zeroed it: every mic was silent, Randal 2026-11-25) */
+void tci_get_next_mic_sample(double *micsample) { (void)micsample; }
 void tci_mox_changed(int state) { (void)state; }
 void tci_tune_changed(int state) { (void)state; }
 int ps_calibration_timer(gpointer arg) { (void)arg; return G_SOURCE_REMOVE; }
