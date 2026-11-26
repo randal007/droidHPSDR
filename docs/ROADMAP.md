@@ -51,7 +51,20 @@ next, what's waiting on whom. Session history lives in git and in
   must not be blocked.** Round 3 pictures for that (`layouts7.js`): E7
   see-through strip over the top edge (cards 12 dp lower), E8 items in the
   gaps between the floating cards, E9 see-through strip along the bottom
-  edge. Waiting on his pick; E1/E3/E6 can be built meanwhile.
+  edge. **Randal picked E8.** All four built 2026-11-25 (`Display.kt`):
+  Display sheet with tabs (Look, Levels, Peaks, Averaging, Info bar,
+  Speed); Levels = automatic or manual high/low/step/noise margin for
+  spectrum (also sets the 3D view) and waterfall; Averaging = None /
+  Recursive / Time window / Log recursive (default, deskHPSDR's) done in
+  the 2D shader, detector, peaks & hold Off/Hold/Decay with hold time,
+  drop rate and line colour; ☰ → Screen = FFT size (upstream
+  pan_fft_size), FFT window, save zoom, preserve narrow peaks (2D, 3
+  analyzer pixels like rx_panadapter.c), show/hide meter, VFO pill,
+  bottom row, band plan bar, info bar, frequency axis; info bar in the
+  gaps beside the VFO pill (UTC clock; ADC OK / red ADC OVERLOAD for 2 s;
+  radio address), measured from where the cards are, empty when a gap is
+  too narrow. Solar data waits for M8. Builds; the 2D shader validates
+  (glslangValidator); **not run on the phone yet** (demo mode is enough).
 - Branch `m3-app` (pushed) holds M3-M5; `master` is still at M1.
 - No transmit until Randal asks for it (M7). One receiver; RX2 later.
 - **Decided 2026-11-24:** no "not doing" lines: what isn't an HL2 item goes

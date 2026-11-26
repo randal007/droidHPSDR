@@ -169,7 +169,6 @@ object Radio {
     val flat = MutableStateFlow(false)           // 2D spectrum instead of 3D
     val wfTheme = MutableStateFlow(0)            // waterfall colours, see WF_THEMES
     val depthRows = MutableStateFlow(80)         // 3D history depth
-    val peakHold = MutableStateFlow(true)        // 2D peak-hold line
     // peak labels: deskHPSDR's Display menu settings and defaults, except
     // "as S-meter values", which Randal wants on by default
     val peakLabels = MutableStateFlow(3)         // Number of Peaks to label, 0 = off
@@ -227,7 +226,9 @@ object Radio {
         if (::prefs.isInitialized) return
         prefs = ctx.getSharedPreferences("radio", Context.MODE_PRIVATE)
         freq.value = prefs.getLong("freq", 14_074_000L)
-        span.value = prefs.getFloat("span", 48_000f).toDouble()
+        Disp.init(ctx)
+        // Screen → Save zoom level: off starts at the default span
+        span.value = if (Disp.saveZoom.value) prefs.getFloat("span", 48_000f).toDouble() else 48_000.0
         style.value = prefs.getInt("style", 0)
         volumeDb.value = prefs.getFloat("volume", -12f).toDouble()
         lnaDb.value = prefs.getFloat("lna", 20f).toDouble()
@@ -238,7 +239,6 @@ object Radio {
         flat.value = prefs.getBoolean("flat", false)
         wfTheme.value = prefs.getInt("wfTheme", 0)
         depthRows.value = prefs.getInt("depthRows", 80)
-        peakHold.value = prefs.getBoolean("peakHold", true)
         peakLabels.value = prefs.getInt("peakLabels3", 3)
         labelsPassband.value = prefs.getBoolean("labelsPassband", false)
         labelsSmeter.value = prefs.getBoolean("labelsSmeter", true)
@@ -410,7 +410,6 @@ object Radio {
     fun setFlat(on: Boolean) { flat.value = on; prefs.edit().putBoolean("flat", on).apply() }
     fun setWfTheme(t: Int) { wfTheme.value = t; prefs.edit().putInt("wfTheme", t).apply() }
     fun setDepthRows(n: Int) { depthRows.value = n; prefs.edit().putInt("depthRows", n).apply() }
-    fun setPeakHold(on: Boolean) { peakHold.value = on; prefs.edit().putBoolean("peakHold", on).apply() }
     fun setPeakLabels(n: Int) { peakLabels.value = n; prefs.edit().putInt("peakLabels3", n).apply() }
     fun setLabelsPassband(on: Boolean) { labelsPassband.value = on; prefs.edit().putBoolean("labelsPassband", on).apply() }
     fun setLabelsSmeter(on: Boolean) { labelsSmeter.value = on; prefs.edit().putBoolean("labelsSmeter", on).apply() }
@@ -431,7 +430,7 @@ object Radio {
     fun setDisplay(fps: Int = this.fps.value, window: Int = this.window.value, detector: Int = this.detector.value) {
         this.fps.value = fps; this.window.value = window; this.detector.value = detector
         prefs.edit().putInt("fps", fps).putInt("window", window).putInt("detector", detector).apply()
-        if (running) Native.setDisplay(fps, window, detector)
+        if (running) Native.setDisplay(fps, window, detector, Disp.fftSize.value)
     }
 
     fun setRegion(r: Int) {

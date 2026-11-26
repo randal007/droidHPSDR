@@ -129,11 +129,13 @@ JNIEXPORT void JNICALL FN(setZoom)(JNIEnv *env, jobject self, jint zoom) {
   (void)env; (void)self;
   droid_set_zoom(zoom);
 }
-JNIEXPORT void JNICALL FN(setDisplay)(JNIEnv *env, jobject self, jint fps, jint window, jint detector) {
+JNIEXPORT void JNICALL FN(setDisplay)(JNIEnv *env, jobject self, jint fps, jint window, jint detector,
+                                      jint fft_size) {
   (void)env; (void)self;
   droid_set_fps(fps);
   droid_set_window(window);
   droid_set_detector(detector);
+  droid_set_pan_fft(fft_size);
 }
 JNIEXPORT void JNICALL FN(setPhoneAudio)(JNIEnv *env, jobject self, jboolean on) {
   (void)env; (void)self;
@@ -288,11 +290,15 @@ JNIEXPORT void JNICALL FN(glResize)(JNIEnv *env, jobject self, jint w, jint h) {
 JNIEXPORT void JNICALL FN(glDraw)(JNIEnv *env, jobject self, jdouble lo, jdouble hi, jdouble split, jint style,
                                   jfloat floor_db, jfloat range_db, jfloat wf_lo, jfloat wf_hi, jboolean flat,
                                   jfloat pan_lo, jfloat pan_hi, jint wf_theme, jint depth_rows, jboolean peak_hold,
-                                  jfloat hold_s, jfloat drop_db_s, jint avg_rows) {
+                                  jfloat hold_s, jfloat drop_db_s, jint avg_rows, jint avg_mode, jfloat grid_db,
+                                  jboolean preserve, jint peak_argb) {
   (void)env; (void)self;
   droid_view v = { .view_lo = lo, .view_hi = hi, .split = split, .style = style, .floor_db = floor_db,
                    .range_db = range_db, .wf_lo = wf_lo, .wf_hi = wf_hi, .flat = flat, .pan_lo = pan_lo,
                    .pan_hi = pan_hi, .wf_theme = wf_theme, .depth_rows = depth_rows, .peak_hold = peak_hold,
-                   .peak_hold_s = hold_s, .peak_drop_db_s = drop_db_s, .avg_rows = avg_rows };
+                   .peak_hold_s = hold_s, .peak_drop_db_s = drop_db_s, .avg_rows = avg_rows,
+                   .avg_mode = avg_mode, .grid_db = grid_db, .preserve = preserve,
+                   .peak_rgb = { ((peak_argb >> 16) & 255) / 255.0f, ((peak_argb >> 8) & 255) / 255.0f,
+                                 (peak_argb & 255) / 255.0f } };
   droid_gl_draw(&v);
 }

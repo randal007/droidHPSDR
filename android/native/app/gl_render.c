@@ -169,19 +169,40 @@ static const char *SP_FS =
   "uniform vec2 uPlotPx;\n"
   "uniform vec3 uPeakMeta;\n"   /* fmin (relative), hzpp, width */
   "uniform int uPeakOn;\n"
+  "uniform vec3 uPeakCol;\n"
+  "uniform float uGrid;\n"   /* dB between grid lines */
+  "uniform int uPreserve;\n"
   "in vec2 vUv;\n"
   "out vec4 o;\n"
   "float yOf(float db) { return 1.0 - clamp((db - uLo) / (uHi - uLo), 0.0, 1.0); }\n"
-  /* deskHPSDR's display averaging ("Av. Time"), done here over uAvgRows rows,
-   * each at its own frequency: calm, and still no smear while tuning */
-  "uniform int uAvgRows;\n"
+  /* deskHPSDR's "Preserve Narrow Peaks" (rx_panadapter.c): each point is the
+   * highest of itself and its two analyzer neighbours, so a carrier narrower
+   * than a screen pixel still shows when zoomed out */
+  "highp float rowDbP(int age, highp float f) {\n"
+  "  highp float d = rowDb(age, f);\n"
+  "  if (uPreserve == 0 || age >= uValid) return d;\n"
+  "  highp float hz = texelFetch(uMeta, ivec2((uHead - age + 1024) % 1024, 0), 0).y;\n"
+  "  return max(d, max(rowDb(age, f - hz), rowDb(age, f + hz)));\n"
+  "}\n"
+  /* deskHPSDR's display averaging ("Av. Time" over uAvgRows rows, each at its
+   * own frequency: calm, and still no smear while tuning), in its four kinds:
+   * 0 None, 1 Recursive (decaying weights, as power), 2 Time window (plain
+   * mean, as power), 3 Log recursive (decaying weights, in dB: steady noise,
+   * peaks stand out). The recursive kinds look back 2x Av. Time (max 32 rows). */
+  "uniform int uAvgRows, uAvgMode;\n"
   "float avgDb(highp float f) {\n"
-  "  highp float p = 0.0, n = 0.0;\n"
-  "  for (int k = 0; k < uAvgRows; k++) {\n"
-  "    highp float d = rowDb(k, f);\n"
-  "    if (d > -190.0) { p += exp2(d * 0.33219281); n += 1.0; }\n"
+  "  if (uAvgMode == 0) return rowDbP(0, f);\n"
+  "  bool rec = uAvgMode != 2;\n"
+  "  int rows = rec ? min(uAvgRows * 2, 32) : uAvgRows;\n"
+  "  highp float a = rec ? exp(-1.0 / float(max(uAvgRows, 1))) : 1.0;\n"
+  "  highp float p = 0.0, n = 0.0, w = 1.0;\n"
+  "  for (int k = 0; k < rows; k++) {\n"
+  "    highp float d = rowDbP(k, f);\n"
+  "    if (d > -190.0) { p += w * (uAvgMode == 3 ? d : exp2(d * 0.33219281)); n += w; }\n"
+  "    w *= a;\n"
   "  }\n"
-  "  return n > 0.0 ? log2(p / n) * 3.0103 : -200.0;\n"
+  "  if (n <= 0.0) return -200.0;\n"
+  "  return uAvgMode == 3 ? p / n : log2(p / n) * 3.0103;\n"
   "}\n"
   "float traceY(float x) { return yOf(avgDb(uViewLo + x * uViewSpan)); }\n"
   "void main() {\n"
@@ -189,7 +210,7 @@ static const char *SP_FS =
   "  float y0 = traceY(vUv.x), yl = traceY(vUv.x - px.x), yr = traceY(vUv.x + px.x);\n"
   "  vec3 c = mix(vec3(0.010, 0.020, 0.048), vec3(0.020, 0.040, 0.085), vUv.y);\n"
   "  float db = uHi - vUv.y * (uHi - uLo);\n"
-  "  float g = abs(fract(db / 10.0 + 0.5) - 0.5) * 10.0;\n"   /* dB to the nearest 10 dB line */
+  "  float g = abs(fract(db / uGrid + 0.5) - 0.5) * uGrid;\n"   /* dB to the nearest grid line */
   "  if (g < (uHi - uLo) / uPlotPx.y * 0.6) c += vec3(0.035);\n"
   "  if (vUv.y > y0) {\n"
   "    vec3 f = texture(uPal, vec2(clamp(1.0 - vUv.y + 0.15, 0.0, 1.0), 0.5)).rgb;\n"
@@ -199,7 +220,7 @@ static const char *SP_FS =
   "    float pp = (uViewLo + vUv.x * uViewSpan - uPeakMeta.x) / uPeakMeta.y;\n"
   "    if (pp > 0.5 && pp < uPeakMeta.z - 0.5) {\n"
   "      float yp = yOf(texture(uPeak, vec2(pp / 8192.0, 0.5)).r);\n"
-  "      c = mix(c, vec3(0.85, 0.9, 1.0), 0.45 * (1.0 - smoothstep(0.6, 1.6, abs(vUv.y - yp) / px.y)));\n"
+  "      c = mix(c, uPeakCol, 0.6 * (1.0 - smoothstep(0.6, 1.6, abs(vUv.y - yp) / px.y)));\n"
   "    }\n"
   "  }\n"
   "  float lo = min(y0, min(yl, yr)) - px.y, hi = max(y0, max(yl, yr)) + px.y;\n"
@@ -514,6 +535,10 @@ void droid_gl_draw(const droid_view *v) {
     glUniform1i(U(prog_2d, "uPeakOn"), v->peak_hold && peak_w > 0);
     glUniform3f(U(prog_2d, "uPeakMeta"), (float)(peak_fmin - base_hz), (float)peak_hzpp, (float)peak_w);
     glUniform1i(U(prog_2d, "uAvgRows"), v->avg_rows < 1 ? 1 : v->avg_rows > 32 ? 32 : v->avg_rows);
+    glUniform1i(U(prog_2d, "uAvgMode"), v->avg_mode < 0 || v->avg_mode > 3 ? 3 : v->avg_mode);
+    glUniform1f(U(prog_2d, "uGrid"), v->grid_db < 2.0f ? 10.0f : v->grid_db);
+    glUniform1i(U(prog_2d, "uPreserve"), v->preserve != 0);
+    glUniform3f(U(prog_2d, "uPeakCol"), v->peak_rgb[0], v->peak_rgb[1], v->peak_rgb[2]);
     glUniform1f(U(prog_2d, "uLo"), v->pan_lo);
     glUniform1f(U(prog_2d, "uHi"), v->pan_hi);
     glUniform2f(U(prog_2d, "uPlotPx"), (float)vw, plot_h);

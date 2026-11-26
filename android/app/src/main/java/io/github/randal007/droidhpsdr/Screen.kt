@@ -72,6 +72,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInParent
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -107,7 +110,7 @@ internal val Grn = Color(0xFF3EE07A)
 internal val Red = Color(0xFFFF5A50)
 
 
-internal enum class Sheet { BAND, MODE, AF, LNA, FILTER, MENU, DISPLAY, FREQ, VFO, AGC, SDR, DISCOVERY, ABOUT, NOISE, EQ, DSP, TOOLBAR, RX, METER }
+internal enum class Sheet { SCREEN, BAND, MODE, AF, LNA, FILTER, MENU, DISPLAY, FREQ, VFO, AGC, SDR, DISCOVERY, ABOUT, NOISE, EQ, DSP, TOOLBAR, RX, METER }
 
 internal fun Modifier.glass(r: Int = 14) =
     clip(RoundedCornerShape(r.dp)).background(Glass).border(1.dp, Line, RoundedCornerShape(r.dp))
@@ -130,17 +133,30 @@ fun Screen(onStart: () -> Unit, onStop: () -> Unit) {
             AndroidView(factory = { SpectrumView(it) }, modifier = Modifier.fillMaxSize())
             SpectrumOverlay(Modifier.fillMaxSize())
 
+            // ☰ → Screen: which parts show (E6); the info bar sits in the gaps between them (E8)
+            val showMeter by Disp.showMeter.collectAsState()
+            val showVfo by Disp.showVfo.collectAsState()
+            val showChips by Disp.showChips.collectAsState()
+            var meterRect by remember { mutableStateOf<Rect?>(null) }
+            var pillRect by remember { mutableStateOf<Rect?>(null) }
+            var buttonsRect by remember { mutableStateOf<Rect?>(null) }
             // hold the meter: deskHPSDR's Meter menu
             val analog by Radio.analogMeter.collectAsState()
-            val meterMod = Modifier.align(Alignment.TopStart).padding(10.dp)
-            if (analog) AnalogMeter(status.meterDbm, meterMod) { sheet = Sheet.METER; fromMenu = false }
-            else MeterCard(status.meterDbm, meterMod) { sheet = Sheet.METER; fromMenu = false }
-            VfoPill(freq, status, { sheet = Sheet.MODE }, { sheet = Sheet.FILTER }, { sheet = Sheet.FREQ }, { sheet = Sheet.VFO },
-                Modifier.align(Alignment.TopCenter).padding(top = 8.dp))
-            SegmentTag(freq, Modifier.align(Alignment.TopCenter).padding(top = 76.dp))
+            val meterMod = Modifier.align(Alignment.TopStart).padding(10.dp).onGloballyPositioned { meterRect = it.boundsInParent() }
+            if (showMeter) {
+                if (analog) AnalogMeter(status.meterDbm, meterMod) { sheet = Sheet.METER; fromMenu = false }
+                else MeterCard(status.meterDbm, meterMod) { sheet = Sheet.METER; fromMenu = false }
+            } else meterRect = null
+            if (showVfo) {
+                VfoPill(freq, status, { sheet = Sheet.MODE }, { sheet = Sheet.FILTER }, { sheet = Sheet.FREQ }, { sheet = Sheet.VFO },
+                    Modifier.align(Alignment.TopCenter).padding(top = 8.dp).onGloballyPositioned { pillRect = it.boundsInParent() })
+                SegmentTag(freq, Modifier.align(Alignment.TopCenter).padding(top = 76.dp))
+                InfoGaps(status, meterRect, pillRect, buttonsRect)
+            }
             Flash(flash, Modifier.align(Alignment.TopEnd).padding(top = 66.dp, end = 12.dp))
 
-            Row(Modifier.align(Alignment.TopEnd).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.align(Alignment.TopEnd).padding(12.dp).onGloballyPositioned { buttonsRect = it.boundsInParent() },
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 // tap: 2D/3D; hold: the display settings
                 RoundButton(if (flat) "2D" else "3D", onLongClick = { sheet = Sheet.DISPLAY }) {
                     Radio.setFlat(!flat)
@@ -150,7 +166,7 @@ fun Screen(onStart: () -> Unit, onStop: () -> Unit) {
                 RoundButton("☰") { sheet = Sheet.MENU; fromMenu = false }
             }
 
-            ChipRow(status, { sheet = it; fromMenu = false }, Modifier.align(Alignment.BottomStart).padding(10.dp))
+            if (showChips) ChipRow(status, { sheet = it; fromMenu = false }, Modifier.align(Alignment.BottomStart).padding(10.dp))
 
             if (status.phase == Phase.DEMO) {
                 Text("DEMO · no radio", color = Amb, fontSize = 12.sp, fontWeight = FontWeight.Bold,
@@ -186,6 +202,8 @@ private fun SpectrumOverlay(modifier: Modifier) {
     val flat by Radio.flat.collectAsState()
     val style by Radio.style.collectAsState()
     val dsp by Radio.dsp.collectAsState()
+    val showAxis by Disp.showAxis.collectAsState()
+    val showBandBar by Disp.showBandBar.collectAsState()
     val measurer = rememberTextMeasurer()
     val scope = rememberCoroutineScope()
     val fling = remember { arrayOfNulls<Job>(1) }
@@ -194,14 +212,7 @@ private fun SpectrumOverlay(modifier: Modifier) {
     val lastTap = remember { floatArrayOf(-1f, 0f, 0f) }   // uptime ms (as float), x, y
 
     /** Where the squelch line is (px from the top), as the peak labels place a level. */
-    fun sqlY(splitY: Float, nf: Double, dbm: Double): Float = if (Radio.flat.value) {
-        val lo2 = nf + SpectrumView.PAN_LO
-        val hi2 = nf + SpectrumView.PAN_HI
-        splitY * (1 - ((dbm - lo2) / (hi2 - lo2)).coerceIn(0.0, 1.0)).toFloat()
-    } else {
-        val s = ((dbm - SpectrumView.floor3d(Radio.style.value, nf)) / SpectrumView.RANGE_3D).coerceIn(0.0, 1.0)
-        splitY * (1 - SpectrumView.ridge3d(Radio.style.value, s)).toFloat()
-    }
+    fun sqlY(splitY: Float, nf: Double, dbm: Double): Float = levelToY(splitY, nf, dbm, Radio.flat.value, Radio.style.value)
     // Lines on the spectrum (squelch, AGC) stay between the VFO pill (top) and the frequency axis.
     fun levelY(splitY: Float, top: Float, gap: Float, nf: Double, dbm: Double) =
         sqlY(splitY, nf, dbm).coerceIn(top, splitY - gap)
@@ -427,37 +438,32 @@ private fun SpectrumOverlay(modifier: Modifier) {
             drawText(t, topLeft = Offset(bx + 8.dp.toPx(), sy - t.size.height / 2))
         }
 
-        // frequency axis between the 3D view and the waterfall
+        // frequency axis between the 3D view and the waterfall (☰ → Screen can hide it)
         val axisH = 16.dp.toPx()
-        drawRect(Color(0xB802050C), Offset(0f, splitY - axisH / 2), Size(w, axisH))
-        val step = niceStep(span)
-        var f = ceil(lo / step) * step
-        val axisStyle = TextStyle(color = Color(0xD8E1EBFA), fontSize = 10.sp)
-        while (f <= lo + span) {
-            val xx = x(f)
-            if (xx > 18.dp.toPx() && xx < w - 18.dp.toPx()) {
-                val label = measurer.measure(fmtAxis(f, step), axisStyle)
-                drawText(label, topLeft = Offset(xx - label.size.width / 2, splitY - label.size.height / 2))
+        if (showAxis) {
+            drawRect(Color(0xB802050C), Offset(0f, splitY - axisH / 2), Size(w, axisH))
+            val step = niceStep(span)
+            var f = ceil(lo / step) * step
+            val axisStyle = TextStyle(color = Color(0xD8E1EBFA), fontSize = 10.sp)
+            while (f <= lo + span) {
+                val xx = x(f)
+                if (xx > 18.dp.toPx() && xx < w - 18.dp.toPx()) {
+                    val label = measurer.measure(fmtAxis(f, step), axisStyle)
+                    drawText(label, topLeft = Offset(xx - label.size.width / 2, splitY - label.size.height / 2))
+                }
+                f += step
             }
-            f += step
         }
 
         // band bar: red outside the bands, the plan's segments inside
-        bandBar(region, lo, lo + span, splitY + axisH / 2, ::x, measurer)
+        if (showBandBar) bandBar(region, lo, lo + span, splitY + (if (showAxis) axisH / 2 else 0f), ::x, measurer)
 
         // peak labels (deskHPSDR's "Peak Labels on Panadapter"), over the 2D trace or the front 3D ridge
         val nf = Radio.displayFloor
         val ls = TextStyle(color = Txt, fontSize = 9.5.sp, fontWeight = FontWeight.SemiBold)
         for ((pf, pdb) in peaks) {
             val px = x(pf)
-            val top = if (flat) {
-                val lo2 = nf + SpectrumView.PAN_LO
-                val hi2 = nf + SpectrumView.PAN_HI
-                splitY * (1 - ((pdb - lo2) / (hi2 - lo2)).coerceIn(0.0, 1.0)).toFloat()
-            } else {
-                val s = ((pdb - SpectrumView.floor3d(style, nf)) / SpectrumView.RANGE_3D).coerceIn(0.0, 1.0)
-                splitY * (1 - SpectrumView.ridge3d(style, s)).toFloat()
-            }
+            val top = levelToY(splitY, nf, pdb, flat, style)
             // below S1 deskHPSDR's table says "no signal": not worth a label
             if (Radio.labelsSmeter.value && SMeter.index(freq, pdb) == 0) continue
             val text = if (Radio.labelsSmeter.value) SMeter.label(freq, pdb) else "%.0f dBm".format(pdb)
@@ -471,6 +477,16 @@ private fun SpectrumOverlay(modifier: Modifier) {
             drawText(t, topLeft = Offset(cx - t.size.width / 2, y + 1.5.dp.toPx()))
         }
     }
+}
+
+/** Where a level (dBm) sits on the 2D trace or the front 3D ridge, px from the top: the renderer's levels. */
+internal fun levelToY(splitY: Float, nf: Double, dbm: Double, flat: Boolean, style: Int): Float = if (flat) {
+    val (lo2, hi2) = Disp.panLevels(nf)
+    splitY * (1 - ((dbm - lo2) / (hi2 - lo2)).coerceIn(0.0, 1.0)).toFloat()
+} else {
+    val (floor, range) = Disp.levels3d(style, nf)
+    val s = ((dbm - floor) / range).coerceIn(0.0, 1.0)
+    splitY * (1 - SpectrumView.ridge3d(style, s)).toFloat()
 }
 
 private fun DrawScope.bandBar(
@@ -839,7 +855,8 @@ private fun SheetHost(
 ) {
     Box(Modifier.fillMaxSize().background(Color(0x66000000)).clickable(onClick = dismiss)) {
         Column(
-            Modifier.align(Alignment.BottomCenter).widthIn(max = 560.dp).fillMaxWidth()
+            Modifier.align(Alignment.BottomCenter)
+                .widthIn(max = if (which == Sheet.DISPLAY || which == Sheet.SCREEN) 660.dp else 560.dp).fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)).background(Color(0xF20C111E))
                 .border(1.dp, Line, RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
                 .clickable(enabled = false) {}.heightIn(max = 330.dp)
@@ -862,6 +879,7 @@ private fun SheetHost(
                 Sheet.METER -> MeterSheet()
                 Sheet.NOISE, Sheet.EQ, Sheet.TOOLBAR -> {}
                 Sheet.DISPLAY -> DisplaySheet()
+                Sheet.SCREEN -> ScreenSheet()
                 Sheet.FREQ -> FreqSheet(close)
                 Sheet.AGC -> AgcSheet(st, close)
                 Sheet.VFO, Sheet.MENU -> {}
@@ -1058,66 +1076,6 @@ private fun FreqSheet(close: () -> Unit) {
     }
 }
 
-/** deskHPSDR's Display menu, the phone's way: the 3D looks first. */
-@Composable
-private fun DisplaySheet() {
-    val flat by Radio.flat.collectAsState()
-    val style by Radio.style.collectAsState()
-    val theme by Radio.wfTheme.collectAsState()
-    val depth by Radio.depthRows.collectAsState()
-    val hold by Radio.peakHold.collectAsState()
-    val labels by Radio.peakLabels.collectAsState()
-    val pass by Radio.labelsPassband.collectAsState()
-    val smeter by Radio.labelsSmeter.collectAsState()
-    val hide by Radio.labelsHideNoise.collectAsState()
-    val pct by Radio.labelsPercentile.collectAsState()
-    val ign by Radio.labelsIgnore.collectAsState()
-    val avg by Radio.avgMs.collectAsState()
-    val split by Radio.split.collectAsState()
-    val fps by Radio.fps.collectAsState()
-    val win by Radio.window.collectAsState()
-    val det by Radio.detector.collectAsState()
-    SheetTitle("Display")
-    Label("3D look")
-    GridButtons(SpectrumView.STYLES, if (flat) null else SpectrumView.STYLES[style], 4) { Radio.setStyle(it); Radio.setFlat(false) }
-    GridButtons(listOf("2D spectrum"), if (flat) "2D spectrum" else null, 1) { Radio.setFlat(true) }
-    Label("Waterfall colours")
-    GridButtons(SpectrumView.WF_THEMES, SpectrumView.WF_THEMES[theme], 6) { Radio.setWfTheme(it) }
-    Label("Peak labels: how many")
-    val counts = listOf(0, 1, 2, 3, 5, 8)
-    GridButtons(counts.map { if (it == 0) "Off" else "$it" }, if (labels == 0) "Off" else "$labels", 6) { Radio.setPeakLabels(counts[it]) }
-    GridButtons(listOf("S-units", "dBm"), if (smeter) "S-units" else "dBm", 2) { Radio.setLabelsSmeter(it == 0) }
-    GridButtons(listOf("Whole view", "Passband only"), if (pass) "Passband only" else "Whole view", 2) { Radio.setLabelsPassband(it == 1) }
-    Label("Hide peaks below the noise floor (percentile)")
-    val pcts = listOf(0, 60, 70, 80, 90)
-    GridButtons(pcts.map { if (it == 0) "Off" else "$it %" }, if (!hide) "Off" else "$pct %", 5) {
-        if (it == 0) Radio.setLabelsHideNoise(false) else { Radio.setLabelsHideNoise(true); Radio.setLabelsPercentile(pcts[it]) }
-    }
-    Label("Ignore adjacent peaks (screen width ÷)")
-    val ignores = listOf(10, 20, 30, 40)
-    GridButtons(ignores.map { "$it" }, "$ign", 4) { Radio.setLabelsIgnore(ignores[it]) }
-    Label("2D averaging (Av. Time)")
-    val avgs = listOf(0, 120, 250, 500)
-    GridButtons(avgs.map { if (it == 0) "Off" else "$it ms" }, if (avg == 0) "Off" else "$avg ms", 4) { Radio.setAvgMs(avgs[it]) }
-    Label("Peak hold (2D)")
-    GridButtons(listOf("On", "Off"), if (hold) "On" else "Off", 2) { Radio.setPeakHold(it == 0) }
-    Label("3D history (rows)")
-    val depths = listOf(40, 80, 120, 160)
-    GridButtons(depths.map { "$it" }, "$depth", 4) { Radio.setDepthRows(depths[it]) }
-    Label("Spectrum / waterfall split")
-    val splits = listOf(0.35f, 0.45f, 0.5f, 0.6f)
-    GridButtons(splits.map { "${(it * 100).roundToInt()} %" }, "${(split * 100).roundToInt()} %", 4) { Radio.setSplit(splits[it]) }
-    Label("Frames per second (spectrum rows)")
-    val rates = listOf(15, 20, 30, 60)
-    GridButtons(rates.map { "$it" }, "$fps", 4) { Radio.setDisplay(fps = rates[it]) }
-    Label("FFT window")
-    val windows = listOf("Rectangular", "Blackman-Harris 4", "Hann", "Flat-top", "Hamming", "Kaiser", "Blackman-Harris 7")
-    GridButtons(windows, windows[win], 4) { Radio.setDisplay(window = it) }
-    Label("Detector")
-    val dets = listOf("Peak", "Average", "Rosenfell", "Sample")
-    GridButtons(dets, dets[det], 4) { Radio.setDisplay(detector = it) }
-}
-
 @Composable
 internal fun Label(t: String) = Text(t, color = Dim, fontSize = 11.sp)
 
@@ -1130,7 +1088,7 @@ private class MenuItem(val label: String, val sheet: Sheet? = null, val later: S
  * Diversity is left out (it needs RX2); P2 ADC/DDC and Saturn never show on an HL2.
  */
 private val MENU_COLUMNS = listOf(
-    listOf(MenuItem("SDR Device", Sheet.SDR), MenuItem("Screen", later = "M5"), MenuItem("Display", Sheet.DISPLAY),
+    listOf(MenuItem("SDR Device", Sheet.SDR), MenuItem("Screen", Sheet.SCREEN), MenuItem("Display", Sheet.DISPLAY),
         MenuItem("Meter", Sheet.METER), MenuItem("XVTR", later = "M6"), MenuItem("Discovery", Sheet.DISCOVERY)),
     listOf(MenuItem("VFO", Sheet.VFO), MenuItem("Band", Sheet.BAND), MenuItem("BandStack", Sheet.BAND),
         MenuItem("Mode", Sheet.MODE), MenuItem("Memory", Sheet.BAND)),

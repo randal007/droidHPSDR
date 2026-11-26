@@ -84,6 +84,7 @@ void droid_set_zoom(int zoom);         /* upstream's zoom, 1..16 */
 void droid_set_fps(int fps);           /* spectrum rows per second */
 void droid_set_window(int type);       /* FFT window, Screen menu order */
 void droid_set_detector(int det);      /* 0 Peak, 1 Average, 2 Rosenfell, 3 Sample */
+void droid_set_pan_fft(int size);      /* Screen menu FFT size: 0 Auto, 16384 .. 262144 */
 
 /* M4, receive operating: each runs deskHPSDR's own vfo.c / store.c call */
 void droid_filter_preset(int index);   /* vfo_filter_changed(): 0..9 presets, 10/11 Var1/Var2 */
@@ -165,6 +166,10 @@ typedef struct {
   int peak_hold;             /* 2D: draw the peak-hold line */
   float peak_hold_s, peak_drop_db_s;   /* hold time, then fall rate */
   int avg_rows;              /* 2D: rows averaged (deskHPSDR's Av. Time x fps) */
+  int avg_mode;              /* 2D: deskHPSDR's averaging kinds: 0 None, 1 Recursive, 2 Time window, 3 Log recursive */
+  float grid_db;             /* 2D: dB between grid lines (deskHPSDR's panadapter step) */
+  int preserve;              /* 2D: deskHPSDR's "Preserve Narrow Peaks" (max of 3 analyzer pixels) */
+  float peak_rgb[3];         /* 2D: peak-hold line colour */
 } droid_view;
 
 void droid_gl_init(void);

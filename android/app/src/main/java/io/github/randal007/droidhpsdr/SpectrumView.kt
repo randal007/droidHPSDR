@@ -39,22 +39,28 @@ class SpectrumView(ctx: Context) : GLSurfaceView(ctx) {
             val style = Radio.style.value
             val f = Radio.freq.value.toDouble()
             val half = Radio.span.value / 2
+            // levels: automatic (above) or deskHPSDR's manual high / low (Display → Levels)
+            val (floor3, range3) = Disp.levels3d(style, nf)
+            val (wfLo, wfHi) = Disp.wfLevels(nf)
+            val (panLo, panHi) = Disp.panLevels(nf)
+            // peaks & hold: Hold never drops, Decay holds then falls (Display → Averaging)
+            val pk = Disp.peakMode.value
             Native.glDraw(
                 f - half, f + half, Radio.split.value.toDouble(), style,
-                floor3d(style, nf).toFloat(), RANGE_3D,
-                (nf - 2.5).toFloat(), (nf + 48.0).toFloat(),
-                Radio.flat.value, (nf + PAN_LO).toFloat(), (nf + PAN_HI).toFloat(),
+                floor3.toFloat(), range3.toFloat(), wfLo.toFloat(), wfHi.toFloat(),
+                Radio.flat.value, panLo.toFloat(), panHi.toFloat(),
                 Radio.wfTheme.value, Radio.depthRows.value,
-                Radio.peakHold.value, 2f, 10f, Radio.avgRows(),
+                pk != Disp.PEAK_OFF, if (pk == Disp.PEAK_HOLD) 1e9f else Disp.holdS.value.toFloat(),
+                if (pk == Disp.PEAK_HOLD) 0f else Disp.dropDbS.value.toFloat(), Radio.avgRows(),
+                Disp.avgMode.value, Disp.panStep.value.toFloat(), Disp.preserve.value, Disp.peakArgb(),
             )
         }
     }
 
     companion object {
-        // levels, relative to the noise floor (auto, like deskHPSDR's "Related to Noisefloor")
+        // automatic 3D levels, relative to the noise floor (like deskHPSDR's "Related to Noisefloor");
+        // the 2D ones are in Disp.panLevels
         const val RANGE_3D = 52f
-        const val PAN_LO = -8.0
-        const val PAN_HI = 62.0
         fun floor3d(style: Int, nf: Double) = nf + if (style == 0) 1.5 else -2.5
 
         /** Height of a ridge on the front 3D row, as a fraction of the 3D view (gl_render.c's formula). */
