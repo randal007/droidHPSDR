@@ -6,121 +6,40 @@ next, what's waiting on whom. Session history lives in git and in
 
 ## Now (in short)
 
-- **Next: the radio test before M7 (Randal, 2026-11-25): `docs/RADIO-TEST.md`.** Tick items there and in FEATURES.md as they pass; tag `m5-done` / `m6-done` after. Backgrounds: the 10 NASA pictures only (an ESO set was tried and reverted, Randal will find his own).
+*Offload 2026-11-25.* Branch `m3-app` (pushed) holds M3-M6; `master` is still at M1.
 
-- **2026-11-24 evening (demo mode, Randal away from the radio):** the ☰
-  button opens deskHPSDR's main menu (same columns and order); M5 built from
-  Randal's picks (D1 Noise drawer, D5 notch, D6 squelch line, D7 EQ graph,
-  D8 settings pages, D9 editable bottom row); M4 leftovers built: the AGC
-  lines on the spectrum (F) and the RX page. **Nothing of this is tested on
-  the radio yet**; the notch/squelch/AGC fixes and the RX page are not even
-  on the phone yet (adb dropped).
-- **2026-11-25 (Randal away from home, phone not reachable):** code review
-  of M4+M5 (`m3-done..HEAD`, high): 10 findings, all checked by hand and
-  fixed in f5defd6 (CTUN snapped back, start/stop races and wake-lock leak
-  on restarts, per-mode step not followed, auto gain stalled the loop on
-  toggle, band-stack index unchecked, toolbar drag one place only, CW
-  squelch scale, an attribution). **Not on the phone yet.** Extra things to
-  try with the radio: CTUN on + drag (stays put, spectrum not shifted);
-  unplug/replug the adapter, then Stop right after replugging; step per
-  mode (USB 100 → CWU 25 → back).
-- **Code review per milestone (Randal 2026-11-25):** tags `m1-done`
-  (master tip) and `m3-done` (e580fa6) mark the ends; review = `/code-review
-  <level> <tag>..<tag>`. M4+M5 done; M3 done 2026-11-25 (10 findings,
-  all checked and fixed: CW filter edges and spectrum now shifted by the
-  pitch like deskHPSDR, command queue order, Stop while connecting, phone
-  audio close race, PHONE switch follows the radio, zoom after a
-  sample-rate change, LNA set while connecting, locks released when a
-  start fails, a clear message when the radio's address changes - that one
-  needs a fresh app process, old_protocol.c keeps the address). Radio
-  checks: CW tap-to-tune lands in the passband; drag a CW filter edge.
-  **`13d5bda..ff3c548` (everything after the M4+M5 review: the review fixes,
-  M5 display, E2, M6, the IQ demo, notch handles) done 2026-11-25** (high,
-  10 findings, all checked and fixed): the demo no longer leaks into the
-  radio (never saves props while playing, VFO A and `radio` put back,
-  props path per real radio; a recording first uses the newest real
-  props), Start radio / service stop / restart while the demo plays,
-  sample-rate change during the demo, poll/span not saved from a
-  recording, playback can't spin on an empty or unreadable WAV, HL2 setup
-  targets the real HL2, full queue keeps the newest command, lock holds in
-  the demo, WAVE_FORMAT_EXTENSIBLE read properly, iq_convert.py walks the
-  chunks. **`ff3c548..45849bd` done 2026-11-25** (high, 9 findings, all
-  checked and fixed): a recording now snapshots and restores deskHPSDR's
-  VFOs, filter tables and per-mode settings (nothing from the demo reaches
-  the radio or its props); a recording first with no radio props seeds the
-  radio's VFOs from the app at its first start; PHONE during the demo is
-  shown but not saved; stopping or starting the radio while a recording
-  opens; mode/filter display put back; a recording that stops producing
-  rows ends the demo with a message (the service watchdog leaves it
-  alone); no Restart Protocol during the demo; a full command queue keeps
-  the order; iq_convert.py reads only the data chunk. Next review: from
-  this commit on. **`45849bd..59f982b` done 2026-11-25** (high, 7 findings,
-  all fixed): a demo stopped before its native start began is stopped
-  after it; 60 m table copied on the loop thread and read under a lock
-  (the poll refreshes it); markers only with the radio running; RIT step
-  only with the radio, guarded against the poll; ANT sheet follows the
-  radio starting/stopping; iq_convert.py clamps a too-long data length.
-  **`d6d0043..aa57aa6` (background pictures) done 2026-11-25:** no bugs, 5
-  nits fixed (thumbnails decoded once off the main thread, the picture
-  decoded off the GL thread and only kept while the 2D view shows, CC BY
-  4.0 note for the Webb picture, tile labels and screen-reader names).
-  Next review: from the commit after this one.
-  M1 done 2026-11-25 (`9f49c21..m1-done`, high; 10 findings, 8 fixed:
-  m1-rx's S-meter now calibrated like receiver.c (read high by the LNA
-  gain), stops with an error on an upstream FATAL, catches SIGHUP so a
-  dropped adb still sends METIS STOP, rejects an unknown -m, new `-a ip`
-  for targeted discovery; GLib shim runs a destroy notify exactly once;
-  WDSP build prints the compiler error; m0-probe -t 0 and -u bogus. Not
-  needed: thread structs (threads start once per process), vfo.c copy
-  (compiled since M4). Radio check: `run-m1.sh -a 169.254.19.221 -t 20`
-  shows the same dBm as the app. Every milestone so far reviewed. Tag
-  `m5-done` when M5 is accepted.
-- **M5 round 2 pictures sent** (E1-E6, `tools/mockups/layouts6.js`):
-  Display tabs + manual levels (E1) or dragging the dB scale (E2),
-  averaging + peaks & hold (E3), info bar as a top strip (E4) or in the
-  meter card with an overload alarm (E5), the Screen page (E6).
-  **Randal 2026-11-25: E1 (Levels tab with sliders), E3 and E6 OK as drawn;
-  info bar: E4's strip, but the screen must not get smaller and the view
-  must not be blocked.** Round 3 pictures for that (`layouts7.js`): E7
-  see-through strip over the top edge (cards 12 dp lower), E8 items in the
-  gaps between the floating cards, E9 see-through strip along the bottom
-  edge. **Randal picked E8.** All four built 2026-11-25 (`Display.kt`):
-  Display sheet with tabs (Look, Levels, Peaks, Averaging, Info bar,
-  Speed); Levels = automatic or manual high/low/step/noise margin for
-  spectrum (also sets the 3D view) and waterfall; Averaging = None /
-  Recursive / Time window / Log recursive (default, deskHPSDR's) done in
-  the 2D shader, detector, peaks & hold Off/Hold/Decay with hold time,
-  drop rate and line colour; ☰ → Screen = FFT size (upstream
-  pan_fft_size), FFT window, save zoom, preserve narrow peaks (2D, 3
-  analyzer pixels like rx_panadapter.c), show/hide meter, VFO pill,
-  bottom row, band plan bar, info bar, frequency axis; info bar in the
-  gaps beside the VFO pill (UTC clock; ADC OK / red ADC OVERLOAD for 2 s;
-  radio address), measured from where the cards are, empty when a gap is
-  too narrow. Solar data waits for M8. **E2 added as an option** (Randal,
-  same day; Levels tab switch "dB scale on the spectrum", on by default):
-  scale down the right edge under the round buttons, drag ↕ moves the
-  levels, pinch changes the range, double-tap goes back to automatic;
-  amber while manual. Builds; the 2D shader validates
-  (glslangValidator); **not run on the phone yet** (demo mode is enough).
-- Branch `m3-app` (pushed) holds M3-M5; `master` is still at M1.
-- No transmit until Randal asks for it (M7). One receiver; RX2 later.
-- **Decided 2026-11-24:** no "not doing" lines: what isn't an HL2 item goes
-  on a **later** list (unless it would be harder later). Worldmap later as
-  pictures behind the 2D waterfall (Thetis). Themes and window size are
-  covered by the 3D looks and split settings.
-- **Next with the radio:** the M4 test list (M4 section), then M5: does
-  NR2/NR4/NNR sound right on the HL2+ and the phone, notch, squelch, EQ,
-  auto gain, AGC line levels against deskHPSDR's.
-- **M4 leftovers built too (untested):** G, the analog meter with
-  Peak/Avg and the Meter menu (hold the meter); the AGC menu's rest (AGC
-  Automatic + offset, copied from rx_panadapter.c into display_bridge.c;
-  gain and hang threshold sliders). The whole M4 menu column is now built.
-- **Waiting on Randal:** whether to delete the empty leftover repo
-  `randal007/DroidHPSDR-scaffold`.
-- **Phone:** the app (debug build) installed; adb over **wireless
-  debugging** (paired; it switches itself off: turn it on again, find the
-  port with `adb mdns services`, the phone's WiFi address changes);
-  Ethernet adapter static 169.254.1.1/16; Local network permission granted.
+- **Next: the radio test before M7** (Randal, 2026-11-25): `docs/RADIO-TEST.md`,
+  every M4/M5/M6 item and the review fixes. Tick items there and in
+  FEATURES.md as they pass (only 18 of 846 ticked so far: nothing since M3
+  has been tried on the radio); fix list at its bottom; then tag `m5-done`
+  and `m6-done`, then M7 (transmit, only now that Randal asked).
+- **Built 2026-11-24/25, demo mode only:** M4 (VFO, bands, memories,
+  filters, AGC + AGC lines, analog meter, RX page), M5 (Noise drawer, NR
+  pages, notch with width handles, squelch line, EQ graph, DSP page,
+  editable bottom row, Display tabs, LEVELS panel, averaging kinds, peaks &
+  hold, Screen page, info bar in the gaps, 10 NASA background pictures),
+  M6 (HL2 section in SDR Device, HL2 setup page, ANT menu, RIT/XIT step,
+  60 m markers, IARU region, filter-board OC bits), the IQ-recording demo.
+- **Code review per milestone (Randal):** every commit up to `8c260e9`
+  reviewed (`/code-review high`), findings checked by hand and fixed. The
+  ranges: M1 `9f49c21..m1-done`, M3 `m1-done..m3-done`, M4+M5
+  `m3-done..13d5bda`, then `13d5bda..ff3c548`, `ff3c548..45849bd`,
+  `45849bd..59f982b`, `59f982b..d6d0043`, `d6d0043..aa57aa6` (fixes in the
+  commit after each). **Next review starts at `8c260e9`.** Workflow
+  (Randal): build → `/code-review` the new commits → fix → install.
+  Tags: `m1-done` (master tip), `m3-done` (e580fa6).
+- **Waiting on Randal:** the radio test; his own background pictures (an
+  ESO set was tried and reverted: too similar); gateware flashing from the
+  phone (own step, with him watching); whether to delete the empty repo
+  `randal007/DroidHPSDR-scaffold`; whether Display → Speed did nothing with
+  the radio running (the demo band ignored it: fixed).
+- **Phone:** debug build of `a13bace` (= `8c260e9` minus docs) installed
+  2026-11-25 20:57; the test IQ recording `demo_14225000Hz.wav` in
+  `Android/data/io.github.randal007.droidhpsdr/files/` (no licence: test
+  only, delete before a release). adb over wireless debugging (paired; it
+  switches itself off; the phone's WiFi address changes: `adb mdns services`).
+- No transmit until M7. One receiver; RX2 later. Nothing is "not doing":
+  non-HL2 items go on a **later** list (Randal, 2026-11-24).
 
 ## Goal
 
@@ -288,7 +207,7 @@ silent stream, tap the frequency to type one.
   profile can be copied over.
 - FEATURES.md: VFO, Band, Bandstack, Mode, Filter, AGC, Meter, Store, RX.
 
-### M5 — Receive DSP *(planned 2026-11-24)*
+### M5 — Receive DSP *(built 2026-11-25; radio test pending)*
 
 **What:** deskHPSDR's Noise menu (NB/NB2, NR/NR2/NR3/NR4, NNR with its
 models, ANF, SNB, MNF notches, NR position pre/post AGC, all the NR2/NR4/NB
@@ -317,7 +236,17 @@ RX equalizer with its graph, and the remaining Display/FFT/Screen items.
 5. Radio test (does NR2/NR4/NNR sound right on the HL2+ and the phone?),
    tick FEATURES.md.
 
-### M6 — Hardware: HL2, IO board, HL2+, PA
+**Picks and state (2026-11-24/25):** round 1 D1 Noise drawer, D5 notch
+(double-tap; width handles added after Randal couldn't drag a narrow
+notch's edge), D6 squelch line, D7 EQ graph, D8 settings pages, D9
+editable bottom row. Round 2: E1 Levels tab, E3 averaging + peaks & hold,
+E6 Screen page; info bar E8 (in the gaps beside the VFO pill; nothing moves
+or gets smaller). E2 (dragging the dB scale) was built, then replaced by
+the LEVELS chip's side panel (pick A, picture G1) as too hard to use. AGC
+lines fade 3 s after a change. 2D background pictures (Thetis-style): 10
+NASA photos, Display → Look. All built, none tried on the radio yet.
+
+### M6 — Hardware: HL2, IO board, HL2+, PA *(built 2026-11-25 except gateware flashing; radio test pending)*
 
 **Started 2026-11-25 (Randal):** step 1 done, `docs/M6-INVENTORY.md`
 (what each control does on an HL2, proposals, 7 questions for Randal).

@@ -188,15 +188,20 @@ android/
                   headless/ (radio_state.c, stubs.c, m1_main.c, display_null.c,
                   audio_null.c, net_target.c); run-m1.sh;
                   app/ (the app's native side: radio_core.c, display_bridge.c,
-                  gl_render.c, audio_aaudio.c, demo.c, jni_bridge.c)
+                  gl_render.c, audio_aaudio.c, demo.c, playback.c, hl2.c,
+                  dsp.c, autogain.c, jni_bridge.c); headless/n2adr.c
   app/            the Android app: Gradle module, Kotlin + Compose
-                  (Screen.kt, Radio.kt, RadioService.kt, SpectrumView.kt, ...)
+                  (Screen.kt, Radio.kt, RadioService.kt, SpectrumView.kt,
+                  Dsp.kt, Display.kt, Hl2.kt, Meter.kt, ...); assets/backgrounds
+                  (NASA pictures + CREDITS.md)
   build-app.sh    build (and `install`) the app
 tools/m0-probe/   P1 discovery check
 tools/features/   gen_features.py -> docs/FEATURES.md
 tools/mockups/    the UI pictures (HTML/canvas; shoot.sh renders at 3120x1440)
-docs/             ROADMAP.md (status), FEATURES.md, PORTING-NOTES.md,
-                  HARDWARE.md, M4-INVENTORY.md, M1-PLAN.md (history)
+tools/iq_convert.py, push-demo-iq.sh   the demo's IQ recording (convert, put on the phone)
+docs/             ROADMAP.md (status), RADIO-TEST.md (the test before M7),
+                  FEATURES.md, PORTING-NOTES.md, HARDWARE.md,
+                  M4/M5/M6-INVENTORY.md, M1-PLAN.md (history)
 build-android/    build output, ignored
 ```
 
@@ -228,6 +233,10 @@ Decided; don't widen these without a reason.
 - `docs/M1-PLAN.md` is the finished milestone 1, kept as history.
 - Randal works one section at a time and wants each nailed down before the
   next: mock-ups and his pick before UI code, a radio test before a tick.
+- **After every build (Randal, 2026-11-25):** `/code-review high
+  <last-reviewed>..HEAD`, check each finding by hand, fix, commit, then
+  install. ROADMAP "Now" says where the next review starts. Ask before
+  installing while the app is in front or the radio is streaming.
 - **One receiver for now; RX2 later** (Randal, 2026-11-24): don't build or
   show RX2 until he asks. `receiver[1]` already exists in code because
   `old_protocol.c` reads it.
@@ -267,11 +276,23 @@ AGP), Gradle wrapper 9.9.2, Android SDK in ~/Android/Sdk with
   the ports); it switches itself off, and the phone's WiFi address changes.
 - **WDSP display averaging is off** on purpose (it smeared the 3D view when
   tuning); the renderer averages rows itself (2D Av. Time setting).
+- **Linker wrap**: `-Wl,--wrap=old_protocol_audio_samples` (CMakeLists.txt)
+  sends receiver.c's HL2+ audio through playback.c without editing upstream;
+  the same trick works for any upstream call that needs intercepting.
+- **Stubs that hid real behaviour** (found 2026-11-25): `n2adr_oc_settings()`
+  (filter board never switched), `radio_set_alex_antennas()` (RX antenna per
+  band never applied), `apply_ppm_ll()` (calibration did nothing). Now real
+  copies. When a feature "does nothing", check stubs.c first.
 - The Gradle build is Debug: it keeps code the release build drops, so a
   missing upstream symbol may only show there (vfo.c's VFO bar did).
 - **Demo band**: `adb shell am start -n io.github.randal007.droidhpsdr/.MainActivity --ez demo true`
-  (or ☰ → Discovery → Demo band) feeds a made-up 20 m band through the real renderer:
-  display work with the radio off. Don't launch it while Randal is using
+  (or ☰ → Discovery → Demo band). With a .wav in the app's folder
+  (`tools/push-demo-iq.sh` puts the test one there) it plays that IQ
+  recording through deskHPSDR's real receiver (`playback.c`; tuning inside
+  it like CTUN, sound on the phone, I/Q swapped: WAV recorders' convention
+  is mirrored against the HL2's); without one, a made-up band (display only).
+  A recording snapshots and restores deskHPSDR's VFO/filter/per-mode state:
+  nothing from the demo may reach the radio's props. Don't launch it while Randal is using
   the phone: it restarts the app on his screen.
 - Screenshots: `adb exec-out screencap -p`; screen video:
   `adb shell screenrecord --time-limit 40 /sdcard/Download/x.mp4`.

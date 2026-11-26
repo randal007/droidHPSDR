@@ -123,3 +123,20 @@ Not compiled, logic copied where needed: `noise_menu.c`'s per-mode update
 `set_zoom()` steps. Everything else upstream calls from these files is a
 no-op in `stubs.c`, grouped by reason (transmit: RX only; TCI: M8; desktop
 UI refreshes: Compose reads the state itself).
+
+## M5/M6 (2026-11-25): more upstream logic copied in, and one linker wrap
+
+| What | From | Where | Why |
+|---|---|---|---|
+| `n2adr_oc_settings()`, `_tx()`, `n2adr_hpf_enable` | radio_menu.c | `headless/n2adr.c` | the HL2 filter board's OC bits; radio.c calls it for every HL2, we never did (relays never switched) |
+| `radio_set_alex_antennas()` | radio.c | `headless/stubs.c` (was a no-op) | band RX antenna (IO board RX input), applied by vfo.c on band changes |
+| `apply_ppm_ll()` + `ppm_factor` | radio.c | `headless/stubs.c` (was a pass-through) | frequency calibration |
+| `hl2_command()`, `hl2_eeprom()`, `hl2_write_checked()`, reboot packet | p2_programmer.c | `app/hl2.c` | HL2 setup over UDP 1025 (no static IP, no gateware flashing yet) |
+| contest-free / beacon tables | rx_panadapter.c | `Screen.kt` (CONTEST_FREE, BEACON_AREAS) | Region 1 overlays |
+
+Called from upstream, compiled: `radio_change_region()` and
+`band_apply_iaru_region()` (band.c), `vfo_set_rit_step()` (vfo.c).
+
+`old_protocol_audio_samples()` is wrapped at link time
+(`-Wl,--wrap=old_protocol_audio_samples`): `app/playback.c` drops the HL2+
+audio while an IQ recording plays and calls `__real_...` otherwise.

@@ -14,6 +14,10 @@ Forked from [deskHPSDR](https://github.com/dl1bz/deskhpsdr) by DL1BZ, which was 
 - Tuning by touch: drag, fling, pinch to zoom, tap a signal, drag the filter edges, hold the frequency and slide, or tap it and type one.
 - Audio on the HL2+ speaker, and optionally on the phone (or Bluetooth headphones) as well; it keeps playing with the screen off.
 - VFO A/B, band stacks, memories, filters, RIT, CTUN, lock and AGC, saved in deskHPSDR's own props file.
+- deskHPSDR's receive DSP: NR/NR2/NR4/NNR, NB, ANF, SNB, a notch you place on the spectrum, squelch and AGC lines you drag, the RX equalizer as a graph.
+- The HL2's own settings: IO board status, RX antenna per band, filter board, HL2+ codec, calibration, reboot and network setup over Ethernet.
+- Display settings from deskHPSDR's Display and Screen menus, an info bar, and NASA background pictures for the 2D view.
+- A demo mode that plays an IQ recording through the real receiver, so the app can be tried without a radio.
 
 Transmit is not built yet. Status and plan: [docs/ROADMAP.md](docs/ROADMAP.md).
 

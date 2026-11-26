@@ -51,3 +51,21 @@ C0-C4 slots so it doesn't disturb normal traffic:
 droidHPSDR needs only the right settings in the headless radio state (for
 example `hl2_audio_codec = HL2_CODEC_AK4951`, filter board) and a UI for the
 IO board status. The wire protocol comes with the unchanged file.
+
+## Found while building M6 (2026-11-25)
+
+- **Filter board OC bits.** On an HL2 the N2ADR filter board's relays
+  follow the OC bits deskHPSDR sets per band (`n2adr_oc_settings()`: 160 m
+  1, 80 m 66, 60/40 m 68, 30/20 m 72, 17/15 m 80, 12/10 m 96; "TX only"
+  mode puts the 3 MHz HPF bit 64 on RX). droidHPSDR sent 0 until
+  2026-11-25. Radio check: relays click on band changes.
+- **Randal's IO board runs the custom XPA125B firmware on its Pico**
+  (`hl2-xpa125b-controller/` in the repo). Upstream reports it as
+  "IO: Pico or SoC", shows the Pico's LPF status, and TUNE drives the
+  XPA125B's tuner through `hl2_iob_set_antenna_tuner()` (M7).
+- **RX antenna.** Any band RX antenna but ANT1 (`alexRxAntenna`) sets the
+  IO board's RF mode 1 (its separate RX input); 2 with PureSignal. The ANT
+  menu offers ANT1 or "RX in" (EXT1).
+- **HL2 setup** talks to UDP 1025 (EEPROM register 6 flags: 0x20 prefer
+  DHCP, 0x40 alternate MAC in 12-13, 0x80 static IP in 8-11). Static IP is
+  not offered (breaks WiFi discovery).
