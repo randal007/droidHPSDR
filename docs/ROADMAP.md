@@ -58,6 +58,11 @@ next, what's waiting on whom. Session history lives in git and in
   (the poll refreshes it); markers only with the radio running; RIT step
   only with the radio, guarded against the poll; ANT sheet follows the
   radio starting/stopping; iq_convert.py clamps a too-long data length.
+  **`d6d0043..aa57aa6` (background pictures) done 2026-11-25:** no bugs, 5
+  nits fixed (thumbnails decoded once off the main thread, the picture
+  decoded off the GL thread and only kept while the 2D view shows, CC BY
+  4.0 note for the Webb picture, tile labels and screen-reader names).
+  Next review: from the commit after this one.
   M1 done 2026-11-25 (`9f49c21..m1-done`, high; 10 findings, 8 fixed:
   m1-rx's S-meter now calibrated like receiver.c (read high by the LNA
   gain), stops with an error on an upstream FATAL, catches SIGHUP so a

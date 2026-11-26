@@ -495,6 +495,28 @@ internal fun LevelsPanel(close: () -> Unit) {
 internal fun backgroundFiles(ctx: android.content.Context): List<String> =
     (ctx.assets.list("backgrounds") ?: emptyArray()).filter { it.endsWith(".jpg") }.sorted()
 
+/** "07_cosmic_cliffs.jpg" -> "cosmic cliffs" (for screen readers). */
+internal fun pictureName(file: String) = file.substringAfter('_').substringBeforeLast('.').replace('_', ' ')
+
+/** The pictures' thumbnails, decoded once on a background thread. */
+internal object BgThumbs {
+    val list = MutableStateFlow<List<ImageBitmap?>>(emptyList())
+    @Volatile private var started = false
+    suspend fun load(ctx: android.content.Context) {
+        if (started) return
+        started = true
+        list.value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            backgroundFiles(ctx).map { f ->
+                runCatching {
+                    val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = 16 }
+                    ctx.assets.open("backgrounds/$f").use { android.graphics.BitmapFactory.decodeStream(it, null, opts) }
+                        ?.asImageBitmap()
+                }.getOrNull()
+            }
+        }
+    }
+}
+
 /** Display → Look: the picture behind the 2D spectrum, as thumbnails, and how much of it shows. */
 @Composable
 private fun BackgroundPicker() {
@@ -502,15 +524,11 @@ private fun BackgroundPicker() {
     val sel by Disp.bgImage.collectAsState()
     val strength by Disp.bgStrength.collectAsState()
     val files = remember { backgroundFiles(ctx) }
-    val thumbs: List<ImageBitmap?> = remember {
-        files.map { f ->
-            val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = 16 }
-            val bmp: android.graphics.Bitmap? = ctx.assets.open("backgrounds/$f").use { android.graphics.BitmapFactory.decodeStream(it, null, opts) }
-            bmp?.asImageBitmap()
-        }
-    }
+    // decoded once, off the main thread, and kept for the app's life (BgThumbs)
+    LaunchedEffect(Unit) { BgThumbs.load(ctx) }
+    val thumbs by BgThumbs.list.collectAsState()
     Label("2D background picture (NASA)")
-    val tiles: List<ImageBitmap?> = listOf<ImageBitmap?>(null) + thumbs
+    val tiles: List<ImageBitmap?> = listOf<ImageBitmap?>(null) + files.indices.map { thumbs.getOrNull(it) }
     tiles.chunked(6).forEachIndexed { row, chunk ->
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             chunk.forEachIndexed { col, img ->
@@ -521,15 +539,19 @@ private fun BackgroundPicker() {
                         .clickable { Disp.set(Disp.bgImage, i) },
                     contentAlignment = Alignment.Center,
                 ) {
-                    if (img != null) androidx.compose.foundation.Image(img, null, Modifier.fillMaxSize(),
-                        contentScale = androidx.compose.ui.layout.ContentScale.Crop)
-                    else Text("None", color = Dim, fontSize = 11.sp)
+                    val name = if (i == 0) "None" else pictureName(files[i - 1])
+                    when {
+                        i == 0 -> Text("None", color = Dim, fontSize = 11.sp)
+                        img != null -> androidx.compose.foundation.Image(img, name, Modifier.fillMaxSize(),
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+                        else -> Text("$i", color = Dim, fontSize = 11.sp)   // still loading (or unreadable)
+                    }
                 }
             }
             repeat(6 - chunk.size) { Box(Modifier.weight(1f)) }
         }
     }
-    Setting("Picture strength", strength.toDouble(), 10f..80f, 5.0, { "%.0f %%".format(it) }, sel > 0) {
+    Setting("Picture strength", strength.toDouble(), 10f..80f, 5.0, { "%.0f %%".format(it) }, sel in 1..files.size) {
         Disp.set(Disp.bgStrength, it.toInt())
     }
     Text("Shows in the 2D view, under the trace. Pictures: NASA (credits in About).", color = Dim, fontSize = 10.5.sp)

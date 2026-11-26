@@ -26,40 +26,64 @@ class SpectrumView(ctx: Context) : GLSurfaceView(ctx) {
         private var floor = Double.NaN
         private var bgLoaded = -1   // which picture the texture holds (-1: none uploaded in this context)
         private var bgTex = 0
+        // decoded on a background thread; the GL thread only uploads it
+        @Volatile private var pending: Pair<Int, android.graphics.Bitmap?>? = null
+        @Volatile private var decoding = -1
 
         override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
             Native.glInit()
             bgLoaded = -1; bgTex = 0   // a new GL context: the old texture is gone
         }
 
-        /** The picture chosen in Display → Look, as a GL texture (decoded and uploaded here, on the GL thread). */
+        /**
+         * The picture chosen in Display → Look, as a GL texture: only while the 2D view shows (3D
+         * never draws it, so no texture then). Decoded on a background thread, uploaded here.
+         */
         private fun syncBackground() {
-            val want = Disp.bgImage.value
+            val want = if (Radio.flat.value) Disp.bgImage.value else 0
             if (want == bgLoaded) return
+            val file = backgroundFiles(ctx).getOrNull(want - 1)
+            var bmp: android.graphics.Bitmap? = null
+            if (file != null) {
+                val ready = pending
+                if (ready == null || ready.first != want) {
+                    if (decoding != want) {
+                        decoding = want
+                        Thread {
+                            val b = runCatching {
+                                ctx.assets.open("backgrounds/$file").use { android.graphics.BitmapFactory.decodeStream(it) }
+                            }.getOrNull()
+                            pending?.second?.recycle()   // an older one nobody took
+                            pending = want to b
+                        }.start()
+                    }
+                    return   // the old picture stays until the new one is decoded
+                }
+                bmp = ready.second
+                pending = null
+                decoding = -1
+            }
             if (bgTex != 0) { android.opengl.GLES30.glDeleteTextures(1, intArrayOf(bgTex), 0); bgTex = 0 }
             var w = 0; var h = 0
-            val file = backgroundFiles(ctx).getOrNull(want - 1)
-            if (file != null) {
-                val bmp = ctx.assets.open("backgrounds/$file").use { android.graphics.BitmapFactory.decodeStream(it) }
-                if (bmp != null) {
-                    val t = IntArray(1)
-                    android.opengl.GLES30.glGenTextures(1, t, 0)
-                    bgTex = t[0]
-                    android.opengl.GLES30.glBindTexture(android.opengl.GLES30.GL_TEXTURE_2D, bgTex)
-                    for ((p, v) in listOf(
-                        android.opengl.GLES30.GL_TEXTURE_MIN_FILTER to android.opengl.GLES30.GL_LINEAR,
-                        android.opengl.GLES30.GL_TEXTURE_MAG_FILTER to android.opengl.GLES30.GL_LINEAR,
-                        android.opengl.GLES30.GL_TEXTURE_WRAP_S to android.opengl.GLES30.GL_CLAMP_TO_EDGE,
-                        android.opengl.GLES30.GL_TEXTURE_WRAP_T to android.opengl.GLES30.GL_CLAMP_TO_EDGE,
-                    )) android.opengl.GLES30.glTexParameteri(android.opengl.GLES30.GL_TEXTURE_2D, p, v)
-                    android.opengl.GLUtils.texImage2D(android.opengl.GLES30.GL_TEXTURE_2D, 0, bmp, 0)
-                    w = bmp.width; h = bmp.height
-                    bmp.recycle()
-                }
+            if (bmp != null) {
+                val t = IntArray(1)
+                android.opengl.GLES30.glGenTextures(1, t, 0)
+                bgTex = t[0]
+                android.opengl.GLES30.glBindTexture(android.opengl.GLES30.GL_TEXTURE_2D, bgTex)
+                for ((p, v) in listOf(
+                    android.opengl.GLES30.GL_TEXTURE_MIN_FILTER to android.opengl.GLES30.GL_LINEAR,
+                    android.opengl.GLES30.GL_TEXTURE_MAG_FILTER to android.opengl.GLES30.GL_LINEAR,
+                    android.opengl.GLES30.GL_TEXTURE_WRAP_S to android.opengl.GLES30.GL_CLAMP_TO_EDGE,
+                    android.opengl.GLES30.GL_TEXTURE_WRAP_T to android.opengl.GLES30.GL_CLAMP_TO_EDGE,
+                )) android.opengl.GLES30.glTexParameteri(android.opengl.GLES30.GL_TEXTURE_2D, p, v)
+                android.opengl.GLUtils.texImage2D(android.opengl.GLES30.GL_TEXTURE_2D, 0, bmp, 0)
+                w = bmp.width; h = bmp.height
+                bmp.recycle()
             }
             Native.glSetBackground(bgTex, w, h)
             bgLoaded = want
         }
+
         override fun onSurfaceChanged(gl: GL10?, w: Int, h: Int) = Native.glResize(w, h)
 
         override fun onDrawFrame(gl: GL10?) {
