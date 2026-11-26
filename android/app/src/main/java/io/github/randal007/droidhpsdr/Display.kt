@@ -61,6 +61,7 @@ internal object Disp {
     val wfAuto = MutableStateFlow(true)
     val wfHi = MutableStateFlow(-60)
     val wfLo = MutableStateFlow(-130)
+    val scaleDrag = MutableStateFlow(true)       // E2 as an option: drag / pinch the dB scale on the spectrum
 
     // Averaging and peaks & hold (E3)
     val avgMode = MutableStateFlow(AVG_LOG)      // deskHPSDR's default: Log recursive
@@ -90,7 +91,7 @@ internal object Disp {
         "wfLo" to wfLo, "avgMode" to avgMode, "peakMode" to peakMode, "peakColor" to peakColor, "fftSize" to fftSize,
     )
     private val bools = listOf(
-        "panAuto" to panAuto, "wfAuto" to wfAuto, "saveZoom" to saveZoom, "preserve" to preserve,
+        "panAuto" to panAuto, "wfAuto" to wfAuto, "scaleDrag" to scaleDrag, "saveZoom" to saveZoom, "preserve" to preserve,
         "showMeter" to showMeter, "showVfo" to showVfo, "showChips" to showChips, "showBandBar" to showBandBar,
         "showInfo" to showInfo, "showAxis" to showAxis, "infoClock" to infoClock, "infoAdc" to infoAdc,
         "infoRadio" to infoRadio,
@@ -135,6 +136,19 @@ internal object Disp {
     fun levels3d(style: Int, nf: Double): Pair<Double, Double> = if (panAuto.value) {
         SpectrumView.floor3d(style, nf) to SpectrumView.RANGE_3D.toDouble()
     } else panLo.value.toDouble() to maxOf(panHi.value - panLo.value, 10).toDouble()
+
+    /** The bottom and top (dBm) the scale shows: the 2D levels, or in 3D the floor and a full ridge. */
+    fun shownLevels(flat: Boolean, style: Int, nf: Double): Pair<Double, Double> =
+        if (flat || !panAuto.value) panLevels(nf) else levels3d(style, nf).let { it.first to it.first + it.second }
+
+    /** E2: set the spectrum levels by finger (manual from then on), kept to sensible limits. */
+    fun setPan(lo: Double, hi: Double) {
+        val range = (hi - lo).coerceIn(20.0, 150.0)
+        val l = lo.coerceIn(-170.0, -20.0 - range)
+        panLo.value = l.roundToInt(); panHi.value = (l + range).roundToInt()
+        prefs.edit().putInt("d.panLo", panLo.value).putInt("d.panHi", panHi.value).apply()
+        if (panAuto.value) set(panAuto, false)
+    }
 
     fun peakArgb(): Int = PEAK_COLORS[peakColor.value.coerceIn(0, PEAK_COLORS.size - 1)].toArgb()
 
@@ -216,6 +230,10 @@ private fun LevelsTab() {
             Setting("LOW", wl.toDouble(), -160f..-60f, 5.0, dbm, !wa) { Disp.set(Disp.wfLo, minOf(it.toInt(), wh - 10)) }
             Text("Automatic greys out HIGH / LOW, like deskHPSDR. Manual spectrum levels also set the 3D view.",
                 color = Dim, fontSize = 10.5.sp)
+            val sd by Disp.scaleDrag.collectAsState()
+            Toggle("dB scale on the spectrum", sd, Modifier.fillMaxWidth(), sub = "drag ↕ · pinch · double-tap: auto") {
+                Disp.set(Disp.scaleDrag, it)
+            }
         }
     }
 }

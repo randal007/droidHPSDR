@@ -210,6 +210,12 @@ private fun SpectrumOverlay(modifier: Modifier) {
     // a single tap waits this long for a second one: double-tap puts the notch there (M5, D5)
     val tap = remember { arrayOfNulls<Job>(1) }
     val lastTap = remember { floatArrayOf(-1f, 0f, 0f) }   // uptime ms (as float), x, y
+    // E2 (option): the dB scale on the right edge, held = show the levels
+    val scaleOn by Disp.scaleDrag.collectAsState()
+    var scaleHeld by remember { mutableStateOf(false) }
+    val lastScaleTap = remember { floatArrayOf(-1f) }
+    val panLoS by Disp.panLo.collectAsState(); val panHiS by Disp.panHi.collectAsState()
+    val panAutoS by Disp.panAuto.collectAsState()
 
     /** Where the squelch line is (px from the top), as the peak labels place a level. */
     fun sqlY(splitY: Float, nf: Double, dbm: Double): Float = levelToY(splitY, nf, dbm, Radio.flat.value, Radio.style.value)
@@ -265,9 +271,15 @@ private fun SpectrumOverlay(modifier: Modifier) {
                 val agcY = levelY(splitY, top, gap, nf, d0[Dsp.AGC_LINE])
                 val hangY = levelY(splitY, top, gap, nf, d0[Dsp.AGC_HANG_LINE])
                 val handleW = 190.dp.toPx()
+                // E2: the dB scale strip on the right edge, under the round buttons
+                val inScale = Disp.scaleDrag.value && down.position.x > w - SCALE_W.dp.toPx() &&
+                    down.position.y > SCALE_TOP.dp.toPx() && down.position.y < splitY - gap
+                val (sLo, sHi) = Disp.shownLevels(Radio.flat.value, Radio.style.value, nf)
+                var startDy = 0f
                 // 0 = tune, 1 = low edge, 2 = high edge, 3 = RIT (RIT on: drag the middle of the passband),
                 // 5 = notch, 6 = squelch line, 7 = AGC gain line, 8 = AGC hang threshold line
                 val edge = when {
+                    inScale -> 9
                     sqlOn && abs(down.position.y - sy) < 16.dp.toPx() &&
                         down.position.x > minOf(xa, xb) - 20.dp.toPx() && down.position.x < maxOf(xa, xb) + 20.dp.toPx() -> 6
                     st.agc != 0 && down.position.x < handleW && abs(down.position.y - agcY) < 16.dp.toPx() -> 7
@@ -287,6 +299,18 @@ private fun SpectrumOverlay(modifier: Modifier) {
                     val ev = awaitPointerEvent()
                     val pressed = ev.changes.filter { it.pressed }
                     if (pressed.isEmpty()) break
+                    if (pressed.size >= 2 && edge == 9) {
+                        // pinch the scale: fingers apart = fewer dB on screen, around the middle
+                        val dy = maxOf(abs(pressed[0].position.y - pressed[1].position.y), 20.dp.toPx())
+                        if (!pinch) { pinch = true; moved = true; startDy = dy; scaleHeld = true }
+                        else {
+                            val range = (sHi - sLo) * startDy / dy
+                            val mid = (sLo + sHi) / 2
+                            Disp.setPan(mid - range / 2, mid + range / 2)
+                        }
+                        ev.changes.forEach { it.consume() }
+                        continue
+                    }
                     if (pressed.size >= 2) {
                         val d = (pressed[0].position - pressed[1].position).getDistance()
                         if (!pinch) {
@@ -330,12 +354,24 @@ private fun SpectrumOverlay(modifier: Modifier) {
                                 Radio.setDsp(Dsp.AGC_HANG_TH, th.roundToInt().toDouble())
                                 Radio.setDsp(Dsp.AGC_HANG_LINE, dbmAt(splitY, top, gap, nf, c.position.y))
                             }
+                            9 -> {
+                                // drag the scale: the levels move with the finger
+                                scaleHeld = true
+                                val shift = (c.position.y - down.position.y) * (sHi - sLo) / splitY
+                                Disp.setPan(sLo + shift, sHi + shift)
+                            }
                             else -> Radio.tune(f0 - dx * hzpx)
                         }
                         c.consume()
                     }
                 }
-                if (!moved) {
+                scaleHeld = false
+                if (!moved && edge == 9) {
+                    // double-tap the scale: back to automatic
+                    val t = down.uptimeMillis.toFloat()
+                    if (t - lastScaleTap[0] < 300f) { Disp.set(Disp.panAuto, true); lastScaleTap[0] = -1f }
+                    else lastScaleTap[0] = t
+                } else if (!moved) {
                     val f = lo + down.position.x * hzpx
                     val t = down.uptimeMillis.toFloat()
                     val again = tap[0]?.isActive == true && t - lastTap[0] < 300f &&
@@ -455,6 +491,48 @@ private fun SpectrumOverlay(modifier: Modifier) {
             }
         }
 
+        // E2 (option): the dB scale down the right edge; amber while the levels are manual
+        if (scaleOn) {
+            val manual = !panAutoS
+            val x0 = w - SCALE_W.dp.toPx()
+            val y0 = SCALE_TOP.dp.toPx(); val y1 = splitY - 10.dp.toPx()
+            if (y1 > y0 + 40.dp.toPx()) {
+                val amb = Color(0xFFFFD27A)
+                drawRect(
+                    androidx.compose.ui.graphics.Brush.horizontalGradient(
+                        listOf(Color.Transparent, if (manual) amb.copy(alpha = 0.16f) else Color(0x14FFFFFF)), x0, w),
+                    Offset(x0, y0), Size(w - x0, y1 - y0),
+                )
+                drawLine(if (manual) amb.copy(alpha = 0.35f) else Line, Offset(x0, y0), Offset(x0, y1), 1.dp.toPx())
+                val nf2 = Radio.displayFloor
+                // reading the collected levels here redraws the scale when they change
+                val (l2, h2) = if (manual) panLoS.toDouble() to maxOf(panHiS, panLoS + 10).toDouble()
+                    else Disp.shownLevels(flat, style, nf2)
+                val stepDb = Disp.panStep.value.coerceAtLeast(5).let { if ((h2 - l2) / it > 14) it * 2 else it }
+                val ss = TextStyle(color = if (manual) amb else Dim, fontSize = 10.sp, shadow = androidx.compose.ui.graphics.Shadow(Color.Black, Offset(0f, 1f), 4f))
+                var d = ceil(l2 / stepDb) * stepDb
+                while (d <= h2) {
+                    val yy = levelToY(splitY, nf2, d, flat, style)
+                    if (yy in y0..y1) {
+                        val t = measurer.measure("%.0f".format(d), ss)
+                        drawText(t, topLeft = Offset(w - t.size.width - 6.dp.toPx(), yy - t.size.height / 2))
+                    }
+                    d += stepDb
+                }
+                if (scaleHeld) {
+                    val t1 = measurer.measure("Levels %.0f … %.0f dBm · %s".format(h2, l2, if (manual) "manual" else "auto"),
+                        TextStyle(color = amb, fontSize = 11.sp, fontWeight = FontWeight.SemiBold))
+                    val t2 = measurer.measure("drag ↕: move · pinch: range · double-tap: automatic", TextStyle(color = Dim, fontSize = 10.sp))
+                    val bw = maxOf(t1.size.width, t2.size.width) + 18.dp.toPx()
+                    val bh = t1.size.height + t2.size.height + 12.dp.toPx()
+                    val bx = x0 - bw - 8.dp.toPx(); val by = y0 + 30.dp.toPx()
+                    drawRoundRect(Color(0xE005080F), Offset(bx, by), Size(bw, bh), CornerRadius(9.dp.toPx()))
+                    drawText(t1, topLeft = Offset(bx + 9.dp.toPx(), by + 6.dp.toPx()))
+                    drawText(t2, topLeft = Offset(bx + 9.dp.toPx(), by + 6.dp.toPx() + t1.size.height))
+                }
+            }
+        }
+
         // band bar: red outside the bands, the plan's segments inside
         if (showBandBar) bandBar(region, lo, lo + span, splitY + (if (showAxis) axisH / 2 else 0f), ::x, measurer)
 
@@ -478,6 +556,10 @@ private fun SpectrumOverlay(modifier: Modifier) {
         }
     }
 }
+
+// E2: the dB scale strip (dp): its width, and its top (under the round buttons)
+private const val SCALE_W = 46
+private const val SCALE_TOP = 64
 
 /** Where a level (dBm) sits on the 2D trace or the front 3D ridge, px from the top: the renderer's levels. */
 internal fun levelToY(splitY: Float, nf: Double, dbm: Double, flat: Boolean, style: Int): Float = if (flat) {

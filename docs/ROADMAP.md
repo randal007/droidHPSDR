@@ -63,7 +63,11 @@ next, what's waiting on whom. Session history lives in git and in
   bottom row, band plan bar, info bar, frequency axis; info bar in the
   gaps beside the VFO pill (UTC clock; ADC OK / red ADC OVERLOAD for 2 s;
   radio address), measured from where the cards are, empty when a gap is
-  too narrow. Solar data waits for M8. Builds; the 2D shader validates
+  too narrow. Solar data waits for M8. **E2 added as an option** (Randal,
+  same day; Levels tab switch "dB scale on the spectrum", on by default):
+  scale down the right edge under the round buttons, drag ↕ moves the
+  levels, pinch changes the range, double-tap goes back to automatic;
+  amber while manual. Builds; the 2D shader validates
   (glslangValidator); **not run on the phone yet** (demo mode is enough).
 - Branch `m3-app` (pushed) holds M3-M5; `master` is still at M1.
 - No transmit until Randal asks for it (M7). One receiver; RX2 later.
