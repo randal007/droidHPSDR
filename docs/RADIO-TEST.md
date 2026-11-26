@@ -10,9 +10,9 @@ the log), the newest build installed, USB Ethernet adapter plugged in.
 
 ## 1. Start and connection
 
-- [ ] Start radio over Ethernet: connects, spectrum and HL2+ audio come up
+- [x] Start radio over Ethernet: connects, spectrum and HL2+ audio come up
 - [ ] Info bar beside the VFO: UTC clock, "ADC OK", "HL2 169.254.19.221"
-- [ ] Unplug the adapter, plug it back: the radio comes back by itself
+- [x] Unplug the adapter, plug it back: the radio comes back by itself
 - [ ] Replug, then press Stop straight away: it really stops
 - [ ] Close the app (swipe it away) and open it again: frequency, mode, filter, band stacks, settings all kept
 - [ ] Display → Speed 15 vs 60: the waterfall scrolls slower / faster
@@ -22,7 +22,7 @@ the log), the newest build installed, USB Ethernet adapter plugged in.
 - [ ] Change band 160 → 80 → 40 → 20 → 15 → 10: the HL2's relays click (filter board now switched)
 - [ ] ☰ → SDR Device: IO board status says "Pico found", with the LPF shown
 - [ ] ☰ → Ant: set 40 m to "RX in": the IO board switches to its RX input on 40 m, back on ANT1 for other bands
-- [ ] SDR Device → 60 m markers "CA": on 60 m, five amber channels at 5332 / 5348 / 5358.5 / 5373 / 5405 kHz
+- [x] SDR Device → 60 m markers "CA": on 60 m, five amber channels at 5332 / 5348 / 5358.5 / 5373 / 5405 kHz
 - [ ] Frequency calibration: a known carrier (WWV 10 MHz, CHU 7.85 MHz) lands right; adjust ppm if not
 - [ ] ADC gain calibration moves the S-meter and spectrum dBm
 - [ ] Codec "None" then back to "HL2+": speaker audio stops and returns
@@ -55,7 +55,7 @@ the log), the newest build installed, USB Ethernet adapter plugged in.
 - [ ] NR2, NR4, NNR: sound right on the HL2+ speaker and on the phone (PHONE on)
 - [ ] NB / NB2 on impulse noise; ANF on a carrier; SNB
 - [ ] Notch: double-tap places it, drag moves it, the red handles change its width, push up removes it
-- [ ] Squelch line: drag it, it opens and closes (SSB, AM, FM)
+- [x] Squelch line: drag it, it opens and closes (SSB, AM, FM)
 - [ ] EQ graph: drag points, hear the change
 - [ ] Binaural with headphones; CW audio peak filter in CW
 - [ ] Per mode: NR2 on in SSB, off in CW, comes back when returning to SSB
@@ -78,6 +78,27 @@ the log), the newest build installed, USB Ethernet adapter plugged in.
 
 - [ ] `android/native/run-m1.sh -a 169.254.19.221 -t 20`: same dBm as the app's meter
 
+## Results 2026-11-25 (Randal, evening)
+
+Randal: "the majority of everything works, I don't really have any
+complaint". Explicitly checked: start, replug (comes back, but slowly),
+60 m CA channels, squelch, RIT, the bottom row (toolbar). 40 m was dead
+that evening (another radio heard nothing either), so receive checks used
+what was on. Gateware flashing: not tested, later (Randal: no need now).
+
 ## Fix list (found during the test)
 
-(empty)
+1. **60 m band bar wrong:** BandPlan.kt only has the WRC-15 band
+   (5351.5-5366.5 kHz), so in Region 2 the Canadian/US channels (5332,
+   5348, 5373, 5405) show "OUT OF BAND" and the segment label doesn't fit
+   the channels. Add the Region 2 60 m channels to the band plan.
+2. **RIT step does nothing:** RIT drag rounds to a fixed 10 Hz
+   (Screen.kt, edge 3); it should snap to vfo rit_step (1/10/100 Hz).
+   Randal asked what the step is for: it is the RIT increment.
+3. **Bottom row overflow:** too many chips stack up at the right end and
+   look wrong: the row should scroll (or wrap) instead.
+4. **Toolbar editor:** a shadow/outline doesn't line up while choosing
+   chips (the dragged/selected chip's background vs its border).
+5. **Replug is slow to come back** (about 15 s unplugged, then a while):
+   check where the time goes (Android's network up, the 1.5 s replug
+   delay, discovery, watchdog) and shorten it if it's ours.

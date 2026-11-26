@@ -8,12 +8,16 @@ next, what's waiting on whom. Session history lives in git and in
 
 *Offload 2026-11-25.* Branch `m3-app` (pushed) holds M3-M6; `master` is still at M1.
 
-- **Next: the radio test before M7** (Randal, 2026-11-25): `docs/RADIO-TEST.md`,
-  every M4/M5/M6 item and the review fixes. Tick items there and in
-  FEATURES.md as they pass (only 18 of 846 ticked so far: nothing since M3
-  has been tried on the radio); fix list at its bottom; then tag `m5-done`
-  and `m6-done`, then M7 (transmit, only now that Randal asked).
-- **Built 2026-11-24/25, demo mode only:** M4 (VFO, bands, memories,
+- **Radio test done 2026-11-25** (`docs/RADIO-TEST.md`): Randal is happy,
+  "the majority of everything works". **Next session, in order:** (1) the
+  5 small fixes at the bottom of RADIO-TEST.md (60 m band bar in Region 2,
+  RIT step not used by the RIT drag, bottom row overflow, toolbar editor
+  shadow, slow replug); build → review → install; (2) tag `m5-done` and
+  `m6-done`; (3) **start M7** (transmit, Randal 2026-11-25): its plan is the
+  M7 section below; step 1 of "How each section is done" is the inventory.
+  Gateware flashing from the phone goes on the later list (Randal: not
+  needed now, scary). Only explicitly checked items are ticked in FEATURES.md.
+- **Built 2026-11-24/25:** M4 (VFO, bands, memories,
   filters, AGC + AGC lines, analog meter, RX page), M5 (Noise drawer, NR
   pages, notch with width handles, squelch line, EQ graph, DSP page,
   editable bottom row, Display tabs, LEVELS panel, averaging kinds, peaks &
@@ -293,7 +297,7 @@ The two must-haves get their full UI here (the protocol side already works).
   parts of the Radio and ANT menus, transverters.
 - FEATURES.md: Radio, ANT, OC, PA, XVTR.
 
-### M7 — Transmit *(only when Randal asks)*
+### M7 — Transmit *(Randal asked 2026-11-25: next, after the radio-test fixes)*
 
 Strict order, each step tested on a dummy load first:
 

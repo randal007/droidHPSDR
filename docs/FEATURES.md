@@ -359,7 +359,7 @@ Which milestone each section belongs to: docs/ROADMAP.md.
 - [ ] SAT Off  _(choice)_
 - [ ] SAT  _(choice)_
 - [ ] RSAT  _(choice)_
-- [ ] Channel Marker for 60m
+- [x] Channel Marker for 60m
 - [ ] IARU Region
 - [ ] NONE (VFO)  _(choice)_
 - [ ] UK Channels  _(choice)_
@@ -912,9 +912,9 @@ Each needs a home in the phone UI (button, gesture, slider, menu entry) or a "no
 - [ ] RF Gain
 - [ ] RF Gain RX1
 - [ ] RF Gain RX2 — later: one receiver for now, RX2 maybe later (Randal, 2026-11-24)
-- [ ] RIT
-- [ ] RIT Clear
-- [ ] RIT On/Off
+- [x] RIT
+- [x] RIT Clear
+- [x] RIT On/Off
 - [ ] RIT -
 - [ ] RIT +
 - [ ] RIT RX1
@@ -931,7 +931,7 @@ Each needs a home in the phone UI (button, gesture, slider, menu entry) or a "no
 - [ ] EXIT App
 - [ ] SNB
 - [ ] Split
-- [ ] Squelch
+- [x] Squelch
 - [ ] Squelch RX1
 - [ ] Squelch RX2 — later: one receiver for now, RX2 maybe later (Randal, 2026-11-24)
 - [ ] Swap RX
