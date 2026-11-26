@@ -369,7 +369,7 @@ waited for a control to be touched); dsp.c has the real ones. Code review
 out-of-band VOX refusal, VOX chip flicker, wrong mode label with split,
 graphs ate page scrolls, PROC/MON chips stale after stop, NULL guard,
 this paragraph), all fixed in the next commit; **next review starts after
-that fix commit**. Not run on the radio yet.
+71d3881**. Not run on the radio yet.
 
 **Step 2 radio check (low drive, Randal watching the XPA125B):**
 1. Drawer: processor on, LEVEL 5-10 dB: ALC/meter on voice peaks, does it
