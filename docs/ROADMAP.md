@@ -344,6 +344,11 @@ little hot: one mic gain for all sources, as deskHPSDR). **Force-stopping the
 app or pulling the Ethernet adapter while transmitting: the HL2 unkeys** (Randal).
 Not done yet: the HL2+ jack mic (no mic at hand: skipped for now), the
 timeout, the HL2+ mic PTT.
+**Step 4 (PureSignal) before step 3, Randal 2026-11-26:** inventory in
+docs/M7-INVENTORY.md "Step 4" (84927b2): the HL2 has no sampler; Randal's
+sampler after the XPA125B feeds the IO board's PS input, PS already works
+for him in Thetis and deskHPSDR. Pictures S1-S6 in
+`~/Pictures/droidhpsdr-mockups/m7-round3`; **waiting on Randal's pick.**
 **Step 1 leftovers (Randal 2026-11-25):** built: the external TX inhibit
 input switch (TX page, as deskHPSDR's radio menu), XIT (VFO panel, with
 split now enabled), PA calibration Save / Load saved (band.c's own file in

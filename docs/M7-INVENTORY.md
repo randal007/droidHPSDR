@@ -264,6 +264,17 @@ threads (sources at the end; forum posts are user reports, not specs).
    switched off. Proposed: a separate, short limit for Two Tone / Noise
    (e.g. 10 s) inside the TX timeout.
 
+**Randal's answers (2026-11-26):** PureSignal already works for him in
+Thetis and deskHPSDR on this station: a sampler on the XPA125B's output
+feeds the IO board's PS input. 1 yes; 2 the sampler is adjustable; 3 the
+regular antenna port (ANT1, IO board mode 0); 4 calibration as deskHPSDR
+does it (no extra limit; the app's TX timeout still applies, as to every
+transmission). **Pictures round 1:** S1-S6 in
+`~/Pictures/droidhpsdr-mockups/m7-round3` (`tools/mockups/layouts13.js`):
+S1 A drawer, S2 B status in the TX meter card, S3 C calibration page,
+S4 AmpView as deskHPSDR (one graph), S5 AmpView split, S6 settings + the
+TX ATT 0 warning.
+
 Sources: [IO board and Pure Signal](https://groups.google.com/g/hermes-lite/c/AwyN2R8OuwY),
 [Pure Signal with HL2](https://groups.google.com/g/hermes-lite/c/03cl7KLlbqM),
 [Internal pure signal & sample rate](https://groups.google.com/g/hermes-lite/c/ehyX9zKA6Fc).
