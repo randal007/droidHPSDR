@@ -196,10 +196,12 @@ android/
                   audio_null.c, net_target.c); run-m1.sh;
                   app/ (the app's native side: radio_core.c, display_bridge.c,
                   gl_render.c, audio_aaudio.c, demo.c, playback.c, hl2.c,
-                  dsp.c, autogain.c, jni_bridge.c); headless/n2adr.c
+                  dsp.c, autogain.c, jni_bridge.c; M7: transmit.c, puresignal.c,
+                  cw.c); headless/n2adr.c
   app/            the Android app: Gradle module, Kotlin + Compose
                   (Screen.kt, Radio.kt, RadioService.kt, SpectrumView.kt,
-                  Dsp.kt, Display.kt, Hl2.kt, Meter.kt, ...); assets/backgrounds
+                  Dsp.kt, Display.kt, Hl2.kt, Meter.kt, Transmit.kt, TxAudio.kt,
+                  PureSignal.kt, Cw.kt, ...); assets/backgrounds
                   (NASA pictures + CREDITS.md)
   build-app.sh    build (and `install`) the app
 tools/m0-probe/   P1 discovery check
@@ -294,6 +296,12 @@ AGP), Gradle wrapper 9.9.2, Android SDK in ~/Android/Sdk with
 - **Linker wrap**: `-Wl,--wrap=old_protocol_audio_samples` (CMakeLists.txt)
   sends receiver.c's HL2+ audio through playback.c without editing upstream;
   the same trick works for any upstream call that needs intercepting.
+- **The HL2+'s CW keyer keys the radio (and the amplifier) by itself**,
+  without asking the app, whenever the "CW" bit (`cw_keyer_internal`, sent
+  by old_protocol.c in CW modes) is set. Only `cw.c`'s `droid_cw_poll()`
+  may set it, and only while a PTT would be allowed (Transmit enabled, no
+  demo, no inhibit, in band, not timed out); `droid_tx_off_now()` clears
+  it. Never set it anywhere else (docs/M7-INVENTORY.md "Step 3").
 - **Stubs that hid real behaviour** (found 2026-11-25): `n2adr_oc_settings()`
   (filter board never switched), `radio_set_alex_antennas()` (RX antenna per
   band never applied), `apply_ppm_ll()` (calibration did nothing). Now real

@@ -37,6 +37,17 @@ Setting: `hl2_audio_codec` (radio.h: `HL2_CODEC_OFF` 0, `HL2_CODEC_AK4951` 1,
   the HL2+'s AH-4 ATU support. Details and sources: docs/M7-INVENTORY.md.
 - Traps from the Zeus HL2+ work (station-engine, 2026-09): the FPGA CW keyer
   only arms in a CW mode, and the paddle goes in the KEY jack, not MIC.
+- **CW (read 2026-11-27, not yet checked on the radio):** the stock HL2 has
+  no keyer (the KEY tip is a straight key, the gateware shapes the
+  carrier); the HL2+ gateware adds an iambic keyer and "electronic bug"
+  mode, with sidetone on PHONES and the speaker. old_protocol.c arms it
+  with 0x1E C1 bit 0 (HL2 register 0x0f bit 24) in CW modes and sends
+  speed / mode / weight / spacing / reversed (0x16), sidetone level and
+  PTT delay (0x1E), hang time and sidetone frequency (0x20). Only the hang
+  time is in the HL2 wiki; which of the rest the HL2+ follows is a radio
+  check. The radio reports PTT (held through the hang time) and the dot
+  bit; old_protocol.c keeps dot/dash in statics. droidHPSDR's gate: see
+  CLAUDE.md's CW trap and `android/native/app/cw.c`.
 
 ## N2ADR IO board
 

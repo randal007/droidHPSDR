@@ -6,49 +6,40 @@ next, what's waiting on whom. Session history lives in git and in
 
 ## Now (in short)
 
-*Offload 2026-11-25 (late).* Branch `m3-app` (pushed) holds M3-M6; `master` is still at M1.
+*Offload 2026-11-27.* Branch `m3-app` (pushed) holds M3-M7 so far; `master` is still at M1.
 
-- **Radio test done 2026-11-25** (`docs/RADIO-TEST.md`): Randal is happy,
-  "the majority of everything works". The 5 fixes from it are built,
-  reviewed and installed (60 m band bar follows the channel set, RIT drag
-  in RIT steps, bottom row scrolls, toolbar editor, replug: faster retry +
-  "Waiting for the HL2" note; the ~20 s is the HL2's DHCP wait). Check them
-  on the radio in passing. **Randal 2026-11-25: everything up to
-  M7 is done and he's happy** (tweaks later, once the app is complete);
-  tagged `m5-done` and `m6-done`. **Next session: start M7** (transmit, Randal 2026-11-25): its plan is the
-  M7 section below; step 1 of "How each section is done" is the inventory.
-  Gateware flashing from the phone goes on the later list (Randal: not
-  needed now, scary). Only explicitly checked items are ticked in FEATURES.md.
-- **Built 2026-11-24/25:** M4 (VFO, bands, memories,
-  filters, AGC + AGC lines, analog meter, RX page), M5 (Noise drawer, NR
-  pages, notch with width handles, squelch line, EQ graph, DSP page,
-  editable bottom row, Display tabs, LEVELS panel, averaging kinds, peaks &
-  hold, Screen page, info bar in the gaps, 10 NASA background pictures),
-  M6 (HL2 section in SDR Device, HL2 setup page, ANT menu, RIT/XIT step,
-  60 m markers, IARU region, filter-board OC bits), the IQ-recording demo.
-- **Code review per milestone (Randal):** every commit up to `8c260e9`
-  reviewed (`/code-review high`), findings checked by hand and fixed. The
-  ranges: M1 `9f49c21..m1-done`, M3 `m1-done..m3-done`, M4+M5
-  `m3-done..13d5bda`, then `13d5bda..ff3c548`, `ff3c548..45849bd`,
-  `45849bd..59f982b`, `59f982b..d6d0043`, `d6d0043..aa57aa6` (fixes in the
-  commit after each), and `8c260e9..1b6ee78` (the radio-test fixes; 6
-  findings fixed in the next commit). **Next review starts after the
-  2026-11-25 offload commit.** Workflow
-  (Randal): build → `/code-review` the new commits → fix → install.
-  Tags: `m1-done` (master tip), `m3-done` (e580fa6), `m5-done` and
-  `m6-done` (2026-11-25, the offload commit; M4 is inside m5-done).
-- **Waiting on Randal:** the radio test; his own background pictures (an
-  ESO set was tried and reverted: too similar); gateware flashing from the
-  phone (own step, with him watching); whether to delete the empty repo
-  `randal007/DroidHPSDR-scaffold`; whether Display → Speed did nothing with
-  the radio running (the demo band ignored it: fixed).
-- **Phone:** debug build of `922774f` (all fixes, reviewed) installed
-  2026-11-25 22:15; the test IQ recording `demo_14225000Hz.wav` in
-  `Android/data/io.github.randal007.droidhpsdr/files/` (no licence: test
-  only, delete before a release). adb over wireless debugging (paired; it
-  switches itself off; the phone's WiFi address changes: `adb mdns services`).
-- No transmit until M7. One receiver; RX2 later. Nothing is "not doing":
-  non-HL2 items go on a **later** list (Randal, 2026-11-24).
+- **M7 (transmit) in progress.** Step 1 (SSB voice, PTT, drive, TUNE) is
+  on the air and works (2026-11-25). **Built, reviewed, not yet checked on
+  the radio:** step 2 TX audio chain (820b539 + 71d3881), step 4
+  PureSignal (44e150f + 1b87ff0; done before step 3 at Randal's request),
+  step 3 CW (7de3d13 + 0249ff5). Each has its "radio check" list in the M7
+  section below. Step 1 leftovers still to check: HL2+ jack mic and mic
+  PTT, timeout, split/XIT, PA Save/Load, inhibit input.
+- **Next session:** install (the phone has only the step 2 build,
+  71d3881; adb wasn't connected at offload: wireless debugging off), then
+  Randal's radio checks (steps 2, 4, 3), then **step 3b voice keyer**
+  (Randal said yes: inventory + pictures first), then step 5 (AM / FM /
+  digital / test signals).
+- **Feature count (2026-11-27,** page
+  https://claude.ai/artifact/RjT8MD478BJFRKRedNaqcF, sorted by reading the
+  code, not saved in FEATURES.md): 846 items, 33 ticked, 453 built and
+  waiting for a radio check, 168 left to build (85 of them M8), 140 on the
+  later list, 39 waiting for Randal's "not doing / keep", 13 headings.
+- **Code review:** every commit up to `0249ff5` reviewed (`/code-review
+  high`), findings checked by hand and fixed. **Next review starts after
+  `0249ff5`.** Workflow (Randal): build → `/code-review` the new commits →
+  fix → install (ask first if the app is in front or streaming).
+- **Pictures:** `~/Pictures/droidhpsdr-mockups/m7-round1..4` (round 4 = CW
+  C1-C6, picked C1 + C4).
+- **Waiting on Randal:** the radio checks above; his own background
+  pictures; gateware flashing from the phone (later); whether to delete the
+  empty repo `randal007/DroidHPSDR-scaffold`; the 39 "decide" items.
+- **Phone:** debug build of 71d3881 (step 2); the test IQ recording
+  `demo_14225000Hz.wav` in `Android/data/io.github.randal007.droidhpsdr/files/`
+  (no licence: test only). adb over wireless debugging (it switches itself
+  off; the phone's WiFi address changes: `adb mdns services`).
+- One receiver; RX2 later. Nothing is "not doing" without Randal: non-HL2
+  items go on a **later** list (2026-11-24).
 
 ## Goal
 
@@ -383,7 +374,8 @@ timeout re-armed the keyer; a zero beat survived a stop; a refused zero
 beat said "no tone"; the timeout note could miss the CW part; the CW chip
 migration could land after TX), the 9th (`active_receiver` NULL) guarded
 anyway. Also fixed: the screen PTT held in CW now survives the radio's PTT
-dropping after the hang time. **Next review starts after that commit.**
+dropping after the hang time. All in 0249ff5; **next review starts after
+`0249ff5`**. Pictures: `~/Pictures/droidhpsdr-mockups/m7-round4`.
 Not run on the radio yet.
 
 **Step 3 radio check (low drive first, Randal watching the amplifier):**

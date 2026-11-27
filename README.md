@@ -8,7 +8,7 @@ Forked from [deskHPSDR](https://github.com/dl1bz/deskhpsdr) by DL1BZ, which was 
 
 ## Status
 
-**Pre-alpha, receive only.** There is an app (no release APK yet): on a Galaxy S26 Ultra it runs a Hermes Lite 2 with the HL2+ and the IO board over USB Ethernet at up to 384 kHz, using deskHPSDR's own protocol, receiver, VFO and settings code with WDSP on the phone.
+**Pre-alpha; transmit in progress.** There is an app (no release APK yet): on a Galaxy S26 Ultra it runs a Hermes Lite 2 with the HL2+ and the IO board over USB Ethernet at up to 384 kHz, using deskHPSDR's own protocol, receiver, VFO and settings code with WDSP on the phone.
 
 - A GPU 3D spectrum (four looks: X6100, AetherSDR-style curtains, lit terrain, neon wire) or a 2D spectrum, over a waterfall; a colour band-plan bar with a segment alert; peak labels in S-units.
 - Tuning by touch: drag, fling, pinch to zoom, tap a signal, drag the filter edges, hold the frequency and slide, or tap it and type one.
@@ -19,7 +19,7 @@ Forked from [deskHPSDR](https://github.com/dl1bz/deskhpsdr) by DL1BZ, which was 
 - Display settings from deskHPSDR's Display and Screen menus, an info bar, and NASA background pictures for the 2D view.
 - A demo mode that plays an IQ recording through the real receiver, so the app can be tried without a radio.
 
-Transmit is not built yet. Status and plan: [docs/ROADMAP.md](docs/ROADMAP.md).
+Transmit (milestone 7) is being built step by step and checked on the air at low drive: SSB voice with a hold-to-talk PTT, TUNE and the TX meter work on the radio; deskHPSDR's TX audio chain (processor, CFC, TX EQ, VOX, noise gate, monitor), PureSignal with AmpView, and CW with the HL2+'s own keyer are built and waiting for their on-air checks. Status and plan: [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ---
 
