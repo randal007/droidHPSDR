@@ -272,10 +272,13 @@ static void gen_set(int field, int state) {
   if (state) {
     int why = droid_tx_refuse_reason();
     if (why) {
-      atomic_store(&gen_refused, atomic_load(&gen_refused) + 1);
+      atomic_fetch_add(&gen_refused, 1);
       return;
     }
-    if (tune) radio_tune_update(0);   /* the tone replaces TUNE's carrier */
+    if (tune) {   /* the tone replaces TUNE's carrier; with the Pico the tuner start ends too (code review) */
+      radio_tune_update(0);
+      if (device == DEVICE_HERMES_LITE2 && hl2_pico_is_present()) hl2_iob_set_antenna_tuner(0);
+    }
     gen_since_us = g_get_monotonic_time();
     gen_keyed = 0;
   }
@@ -283,11 +286,20 @@ static void gen_set(int field, int state) {
   else tx_set_noise(transmitter, state);
 }
 
-/* Any way back to receive also ends Two Tone / Noise (transmit.c's off-now and its poll). */
+/* Any way back to receive, and TUNE, also end Two Tone / Noise (transmit.c's off-now, TUNE and its
+ * poll). Only the generator: tx_set_twotone(0) / tx_set_noise(0) also queue a MOX off, which would
+ * cancel a TUNE that takes over, or wait in the queue for the next start after a stop (code review).
+ * The callers end the transmission themselves; ps_calibration_timer stops with both flags clear. */
 void droid_ps_generators_off(void) {
   if (transmitter == NULL || !can_transmit) return;
-  if (transmitter->twotone) tx_set_twotone(transmitter, 0);
-  if (transmitter->noise) tx_set_noise(transmitter, 0);
+  if (transmitter->twotone) {
+    SetTXAPostGenRun(transmitter->id, 0);
+    transmitter->twotone = 0;
+  }
+  if (transmitter->noise) {
+    SetTXAPreGenRun(transmitter->id, 0);
+    transmitter->noise = 0;
+  }
 }
 
 /* The loop thread's poll: a generator that never keyed (refused upstream) or whose
@@ -296,12 +308,15 @@ void droid_ps_poll(void) {
   if (transmitter == NULL || !can_transmit) return;
   if (!transmitter->twotone && !transmitter->noise) return;
   if (radio_is_transmitting()) {
-    if (!tune) gen_keyed = 1;
-    if (tune) droid_ps_generators_off();
+    gen_keyed = 1;
     return;
   }
-  if (gen_keyed || g_get_monotonic_time() - gen_since_us > 1500000) {
+  if (gen_keyed) {
     droid_ps_generators_off();
+  } else if (g_get_monotonic_time() - gen_since_us > 1500000) {
+    /* never keyed: refused on the way (ext_mox_update, the band check): say so (code review) */
+    droid_ps_generators_off();
+    atomic_fetch_add(&gen_refused, 1);
   }
 }
 
@@ -379,7 +394,7 @@ int droid_ps_apply(int field, double v) {
     tx_ps_setparams(tx);
     break;
   case TXP_SETPK:    /* setpk_cb */
-    if (v > 0.01 && v < 1.01 && fabs(v - tx->ps_setpk) > 0.001) {
+    if (v > 0.01 && v < 1.01 && fabs(v - tx->ps_setpk) > 0.0005) {   /* the UI steps by 0.001 (code review) */
       tx->ps_setpk = v;
       tx_ps_setparams(tx);
       ps_off_on();

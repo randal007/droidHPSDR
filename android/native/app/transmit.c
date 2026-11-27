@@ -751,7 +751,8 @@ int ext_mox_update_immediate(void *data) {
  * screen PTT; 0 = it may. The reason is kept for the UI (TXS_REFUSED). */
 int droid_tx_refuse_reason(void) {
   int why = TXR_NONE;
-  if (radio_get_tx_inhibit()) why = droid_blocked() ? TXR_DISABLED : TXR_INHIBIT;
+  if (atomic_load(&timed_out)) why = TXR_TIMEOUT;   /* the screen PTT the timeout stopped is still held */
+  else if (radio_get_tx_inhibit()) why = droid_blocked() ? TXR_DISABLED : TXR_INHIBIT;
   else if (cw_mode_refused()) why = TXR_CW;
   else if (!TransmitAllowed() && !tx_out_of_band_allowed) why = TXR_BAND;
   atomic_store(&refused, why);
@@ -1130,6 +1131,7 @@ void droid_tx_apply(int field, double v) {
     if (want && !TransmitAllowed() && !tx_out_of_band_allowed) { atomic_store(&refused, TXR_BAND); break; }
     atomic_store(&refused, TXR_NONE);
     atomic_store(&ptt_screen, 0);
+    if (want) droid_ps_generators_off();   /* TUNE's carrier replaces PureSignal's Two Tone / Noise */
     radio_tune_update(want);
     if (device == DEVICE_HERMES_LITE2 && hl2_pico_is_present()) hl2_iob_set_antenna_tuner(want ? 1 : 0);
     break;

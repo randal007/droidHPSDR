@@ -356,7 +356,13 @@ callbacks, radio.c's feedback receivers and PS restore at start, the TX ATT
 0 warning), `PureSignal.kt` (drawer, AmpView, settings page, warning), PS
 chip (added once before TX), ☰ → PureSignal. droidHPSDR's own: Two Tone /
 Noise are refused like the screen PTT and end with any way back to receive
-(the TX timeout included). Not run on the radio yet.
+(the TX timeout included). Code review `71d3881..44e150f`: 6 findings
+(TUNE during Two Tone stopped TUNE and left the Pico's tuner start on;
+Two Tone during TUNE left it on too; a stop during Two Tone queued a MOX
+off for the next start; a late refusal was silent and the timeout hold
+was skipped; the SetPk slider snapped back; the AmpView line didn't
+update), all fixed in the next commit; **next review starts after that
+commit**. Not run on the radio yet.
 
 **Step 4 radio check (low drive first, Randal watching the XPA125B):**
 1. PureSignal on (drawer): receive keeps running after the short restart;
@@ -393,8 +399,7 @@ waited for a control to be touched); dsp.c has the real ones. Code review
 `4597c58..820b539`: 8 findings (graph drag crash on unloaded points, silent
 out-of-band VOX refusal, VOX chip flicker, wrong mode label with split,
 graphs ate page scrolls, PROC/MON chips stale after stop, NULL guard,
-this paragraph), all fixed in the next commit; **next review starts after
-71d3881**. Not run on the radio yet.
+this paragraph), all fixed in the next commit; next review: see step 4. Not run on the radio yet.
 
 **Step 2 radio check (low drive, Randal watching the XPA125B):**
 1. Drawer: processor on, LEVEL 5-10 dB: ALC/meter on voice peaks, does it

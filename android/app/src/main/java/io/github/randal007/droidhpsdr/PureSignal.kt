@@ -297,7 +297,8 @@ private fun AmpViewPage(v: DoubleArray, back: () -> Unit) {
                 drawText(tm, t, Offset(x0 + 26.dp.toPx(), y0 - 7.dp.toPx()), TextStyle(color = Color(0xFFD9D9D9), fontSize = 10.sp))
             }
         }
-        val ns = buf[0].toInt(); val cp = buf[1].toInt()
+        // read with `frame`, so the line follows new data too (code review)
+        val ns = if (frame >= 0) buf[0].toInt() else 0; val cp = buf[1].toInt()
         Text("input magnitude →   ·   samples $ns   ·   correction points $cp   ·   phase reference %.1f°".format(buf[2]) +
             if (ps) "" else "   ·   PureSignal is off", color = Dim, fontSize = 10.sp)
     }
@@ -324,11 +325,17 @@ private fun PsSettingsPage(v: DoubleArray, back: () -> Unit) {
                 Setting("TX delay (+ delays TX, − delays RX)", v[Tx.PS_DELAY], -10000f..10000f, 50.0, { "%.0f ns".format(it) }, en) {
                     Tx.set(Tx.PS_DELAY, it)
                 }
-                Setting("SetPk · the HL2's peak", v[Tx.PS_SETPK], 0.02f..1.0f, 0.001, { "%.3f".format(it) }, en) { Tx.set(Tx.PS_SETPK, it) }
+                // steps, not a slider: every change restarts PS (100 ms on the radio's thread), as ps_menu.c's entry
+                Label("SETPK · the HL2's peak")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    SmallButton("HL2 default 0.240") { if (en) Tx.set(Tx.PS_SETPK, 0.24) }
-                    Text("GetPk now %.3f".format(v[Tx.PS_GETPK]), color = Dim, fontSize = 10.sp)
+                    val pk = v[Tx.PS_SETPK]
+                    fun step(d: Double) { if (en) Tx.set(Tx.PS_SETPK, ((pk + d) * 1000).roundToInt().coerceIn(20, 1000) / 1000.0) }
+                    SmallButton("−") { step(-0.001) }
+                    Text("%.3f".format(pk), color = if (en) Txt else Dim, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    SmallButton("+") { step(0.001) }
+                    SmallButton("HL2 0.240") { if (en) Tx.set(Tx.PS_SETPK, 0.24) }
                 }
+                Text("GetPk now %.3f".format(v[Tx.PS_GETPK]), color = Dim, fontSize = 10.sp)
             }
         }
     }
