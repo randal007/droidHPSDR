@@ -170,17 +170,103 @@ does the keying and old_protocol.c doesn't set MOX.
 | Keyboard CW (`cw_engine.c`, text → Morse) | **build** if wanted (question 7) |
 | Voice keyer (record from the HL2+ mic, play slots) | **build** if wanted (question 8) |
 
-## Step 4: PureSignal
+## Step 4: PureSignal (researched 2026-11-26)
+
+Randal asked for PureSignal before CW (2026-11-26), so step 4 comes before
+step 3. Read from upstream `ps_menu.c`, `transmitter.c` (tx_ps_*,
+tx_set_twotone / tx_set_noise) and `old_protocol.c` (= upstream 9f49c21;
+`git fetch upstream` 2026-11-26: nothing newer), plus Hermes-Lite forum
+threads (sources at the end; forum posts are user reports, not specs).
+
+### How it works on an HL2 (code reading)
+
+- **Enable PS restarts the stream with 4 receivers.** `tx_ps_onoff()`
+  stops Protocol 1, sets `transmitter->puresignal`, runs it again:
+  `how_many_receivers()` returns 4 for an HL2 while PS is on (RX4 is a copy
+  of the TX DAC, hard-wired in the gateware; the feedback comes in on the
+  PS RX channel). Then it starts the WDSP PS engine (`SetPSControl`).
+  So switching PS on or off gives a short gap (~0.1 s) in receive too.
+- **While transmitting with PS**, the HL2's RX gain is set from the TX ATT
+  (`rxgain = 31 - attenuation`, range **-29..+31 dB**), and every sample
+  pair (DAC copy + feedback) goes to `tx_add_ps_iq_samples()` → WDSP `pscc`.
+- **The feedback signal has to reach the HL2's receiver from outside.**
+  The HL2 has no built-in sampler (forum: K9AQ 2019 "not able to get
+  enough leakage feedback"; he added a coupler). With the XPA125B the
+  sampler must sit **after the XPA125B** (otherwise PS sees only the HL2's
+  own 5 W PA, which the XPA125B then distorts again). The N2ADR IO board's
+  **J10 (PS input)** feeds the HL2's RF3 (N2ADR, forum 2023). K9AQ ran
+  about -17 dBm from his coupler; another post says at most -5 dBm.
+- **IO board RF mode** (N2ADR, forum 2023): 0 = normal, J10 still injects
+  into RF3; 1 = J9 is the RX input, no PS input; 2 = J9 on receive, J10
+  switched to RF3 through an attenuator on transmit. Upstream sends 2 only
+  when the band's RX antenna is "RX in" (EXT1) *and* PS is on; with ANT1
+  it sends 0. **check:** whether the XPA125B firmware on Randal's Pico
+  (DL1BZ's, only the uf2 in the repo) still does the J9/J10 switching.
+- **Calibration source:** Two Tone (WDSP post-generator, 700 + 1900 Hz,
+  0.5 each; LSB: negative) or Noise (pre-generator, -12..+3 dB, through the
+  TX filter). Either **keys MOX until switched off** (`ext_mox_update`) and
+  starts `ps_calibration_timer` (100 ms): reset → resume, and with **Auto
+  Attenuate** it moves TX ATT until the feedback level is 150..155 (one step
+  of `20·log10(level/152.3)` dB, ±15 dB if far off, +6 dB on each HL2 ADC
+  overflow). Full average power through the XPA125B for as long as it runs.
+- **Continuous vs OneShot:** normally PS keeps calibrating on every
+  transmission (automode); OneShot calibrates once and holds it.
+- **TX ATT is kept per band** (`band.c` ps_tx_att, applied by vfo.c on band
+  changes; both compiled already).
+- **SetPk** (the HL2's peak): default 0.2400 for an HL2 ("measured 0.2386").
+  GetPk shows what PS measures.
+- **Status** (`GetPSInfo`): feedback level (colour: red <90, yellow, green
+  128..181, blue >181; "optimal 140..165"), correction count, Correcting
+  yes/no, state (RESET, WAIT, MOXDELAY, SETUP, COLLECT, MOXCHECK, CALC,
+  DELAY, STAYON, TURNON).
+- **MON** (`transmitter->feedback`): the TX spectrum shows the feedback
+  signal instead of what is sent (display only). With PS working, that is
+  where the cleaner shoulders show.
+- **AmpView:** the amplifier's AM/AM and AM/PM curves and PS's correction
+  curves (`tx_ps_getdisp`, 4096 points, 10 times a second).
+- **Feedback antenna Internal / Ext1 / ByPass:** sets ALEX relay bits that an
+  HL2 has no relays for; the IO board's RF mode reads the *receiver's* RX
+  antenna, not this one (code reading, not checked on the radio).
+  Proposed **not shown**.
+- **Sample rate.** PS sends 4 streams: 26 bytes per sample time, about
+  **85 Mbit/s at 384 kHz** with framing, 43 at 192 kHz. The HL2 is gigabit
+  (KF7O). The app runs at 384 kHz. The phone's adapter speed is hidden
+  (`/sys/class/net/eth0/speed` not readable). Thetis users report
+  scrambled TX with PS at 384 kHz; "192 kHz has been recommended for PS
+  since PowerSDR"; DL1YCF: 384 kHz can't work at 100 Mbit/s. **check** at
+  384 kHz (lost packets in the info bar), else 192 kHz while PS is on.
+
+### Controls
 
 | Control | Proposed |
 |---|---|
-| Enable PS, OFF, Restart, MON, OneShot, Two Tone | **build** |
-| Auto Attenuate, TX ATT (−29..+31 dB on an HL2), GetPk / SetPk, feedback level ("optimal 140..165"), Correcting / Noise status | **build** |
-| PS feedback antenna: Internal / Ext1 / ByPass | **check** which ones mean anything on the HL2 (my guess: Internal only, not confirmed) |
-| PS stability Strict / Medium / Relaxed, PS TX delay (ns) | **build** (settings page) |
-| AmpView (the correction curves) | **build** as a GPU graph (pictures) |
-| "Don't show this warning again" | heading, ticked when the page is built |
-| Sample rate: two RX + two feedback DDCs at 384 kHz over the link? | **check** (ROADMAP M7 step 4); falls back to 192 kHz |
+| Enable PS (restarts the stream), OFF (reset), Restart (resume) | **build** |
+| Two Tone, Noise + level, as PS calibration sources | **build**; they key the radio: Transmit enabled, out-of-band lock and the TX timeout apply; switching either off, or any "back to RX", stops the generator |
+| Auto Attenuate, TX ATT (-29..+31 dB, per band) | **build** (ps_calibration_timer copied, as noise_menu.c was) |
+| OneShot, Stability Strict / Medium / Relaxed, TX delay (ns), SetPk | **build** (a settings part, not the main view) |
+| Feedback level, Correcting, GetPk, cor.cnt, sln.chk, dg.cnt, state | **build** (pictures) |
+| MON (feedback on the TX spectrum) | **build** |
+| AmpView | **build** as a GPU or Compose graph (pictures) |
+| TX ATT 0 warning, "Don't show again" | **build** |
+| Feedback antenna Internal / Ext1 / ByPass | **not shown** (no ALEX relays on an HL2) |
+
+### Questions for Randal (step 4)
+
+1. **Sampler:** is there a coupler / RF sampler on the XPA125B's output,
+   and is it wired to the IO board's J10 (PS input)? Without one PS has
+   no feedback: Feedback stays red and nothing is corrected.
+2. **Level:** if there is one, roughly what does it put out at 100 W (or
+   its coupling in dB)? With the HL2's -29..+31 dB TX ATT, about -17 dBm
+   worked for K9AQ; >-5 dBm risks the ADC.
+3. **RX antenna:** ANT1 on every band (IO board mode 0), or the IO board's
+   RX input (mode 2, J10 switched in only on TX)?
+4. **Calibration:** Two Tone keys the XPA125B at full average power until
+   switched off. Proposed: a separate, short limit for Two Tone / Noise
+   (e.g. 10 s) inside the TX timeout.
+
+Sources: [IO board and Pure Signal](https://groups.google.com/g/hermes-lite/c/AwyN2R8OuwY),
+[Pure Signal with HL2](https://groups.google.com/g/hermes-lite/c/03cl7KLlbqM),
+[Internal pure signal & sample rate](https://groups.google.com/g/hermes-lite/c/ehyX9zKA6Fc).
 
 ## Step 5: AM, FM, digital, test signals
 
