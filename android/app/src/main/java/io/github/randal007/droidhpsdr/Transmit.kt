@@ -79,7 +79,7 @@ object Tx {
     const val MIC = 53; const val HIGH_SWR = 54; const val SECONDS = 55; const val TIMEOUTS = 56; const val REFUSED = 57
     const val RADIO_PTT = 58; const val UNDERRUN = 59; const val OVERRUN = 60; const val OUT_OF_BAND_NOW = 61
     const val MAX_W = 62; const val PICO = 63; const val INHIBITED = 64; const val PA_FILE_OK = 65; const val VOX_PEAK = 66
-    const val VOX_REFUSED = 67; const val TX_MODE = 68
+    const val VOX_REFUSED = 67; const val TX_MODE = 68; const val SCREEN_PTT = 69
     /** the live fields, the radio's and never the UI's: [LIVE] until [LIVE_END] */
     private const val LIVE = ON_AIR
     private const val LIVE_END = 72
@@ -187,7 +187,8 @@ object Tx {
     fun setEnabled(on: Boolean) {
         enabled.value = on
         prefs.edit().putBoolean("enabled", on).apply()
-        if (running) Native.txSet(ENABLED, if (on) 1.0 else 0.0)
+        // also while stopped: the native side takes it at once, so the CW keyer's gate has it at the next start (code review)
+        Native.txSet(ENABLED, if (on) 1.0 else 0.0)
     }
 
     /** After every start: the safety switch and the mic (the rest comes back from deskHPSDR's props file). */
@@ -318,7 +319,11 @@ object Tx {
         val zb = a[CW_ZB_DONE].toInt()
         if (zb > lastZbDone) {
             val hz = a[CW_ZB_HZ].toInt()
-            note.value = (if (hz != 0) "Zero beat: moved %+d Hz".format(hz) else "Zero beat: no clear CW tone near the pitch, or already on it") to
+            note.value = when (hz) {
+                99999 -> "Zero beat works with the receiver in CWU / CWL, while receiving"   // cw.c CW_ZB_REFUSED
+                0 -> "Zero beat: no clear CW tone near the pitch, or already on it"
+                else -> "Zero beat: moved %+d Hz".format(hz)
+            } to
                 System.currentTimeMillis()
         }
         lastZbDone = zb
@@ -397,7 +402,7 @@ internal fun PttChip(modifier: Modifier = Modifier) {
             onAir -> {
                 val limit = v[Tx.TIMEOUT]
                 val left = if (limit > 0) (limit - v[Tx.SECONDS]).coerceAtLeast(0.0).toInt() else -1
-                val paddle = v[Tx.CW_NOW] != 0.0 && v[Tx.RADIO_PTT] != 0.0 && v[Tx.PTT] == 0.0   // the HL2+'s keyer (C4)
+                val paddle = v[Tx.CW_NOW] != 0.0 && v[Tx.RADIO_PTT] != 0.0 && v[Tx.SCREEN_PTT] == 0.0   // the HL2+'s keyer (C4)
                 Text(if (v[Tx.TUNE] != 0.0) "TUNE" else if (paddle) "PADDLE" else if (held) "ON AIR" else "TX", color = Color.White,
                     fontSize = 10.sp)
                 Text(if (left >= 0) "%d:%02d".format(left / 60, left % 60) else "on", color = Color.White,

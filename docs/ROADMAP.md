@@ -374,7 +374,17 @@ props, zero beat with a result) and droidHPSDR's safety: the radio's keyer
 is armed only while transmitting is allowed (Transmit enabled, demo, TX
 inhibit, band), and the TX timeout disarms it until "Arm the keyer again".
 `Cw.kt` (drawer, settings page, the TX meter card's CW row), CW chip (only
-in CW modes, added once), ☰ → CW. Review: see below. Not run on the radio yet.
+in CW modes, added once), ☰ → CW. Code review `1b87ff0..7de3d13`: 9
+findings, checked by hand; 8 fixed in the next commit (a screen PTT let go
+while the paddle sends left the radio keyed with the app in receive and no
+timeout; the keyer stayed armed through a stop and, at the next start,
+before Transmit enabled was known; the PADDLE label never showed; a TUNE
+timeout re-armed the keyer; a zero beat survived a stop; a refused zero
+beat said "no tone"; the timeout note could miss the CW part; the CW chip
+migration could land after TX), the 9th (`active_receiver` NULL) guarded
+anyway. Also fixed: the screen PTT held in CW now survives the radio's PTT
+dropping after the hang time. **Next review starts after that commit.**
+Not run on the radio yet.
 
 **Step 3 radio check (low drive first, Randal watching the amplifier):**
 1. CWU, Transmit enabled **off**: the paddle must not key (watch the amp's

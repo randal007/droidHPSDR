@@ -126,13 +126,22 @@ void droid_cw_poll(void) {
 
 /* The TX timeout ended a transmission (transmit.c): in CW the radio's keyer may still be keying. */
 void droid_cw_timeout(void) {
-  if (!is_cw(vfo_get_tx_mode())) return;
+  if (!is_cw(vfo_get_tx_mode()) || tune) return;   /* TUNE: the keyer isn't what was sending */
   atomic_store(&cw_timed_out, 1);
   droid_cw_poll();   /* disarm now, not on the next round */
 }
 
+/* droid_tx_off_now (stop, Transmit enabled off, the timeout): disarm at once; with the radio running
+ * the next poll arms it again if transmitting is allowed. A zero beat in progress is forgotten (a stop
+ * would otherwise report it against the next run's frequency). */
+void droid_cw_off(void) {
+  cw_keyer_internal = 0;
+  zb_pending = 0;
+}
+
 int droid_cw_apply(int field, double v) {
   if (field < TXC_FIRST || field >= TXC_END) return 0;
+  if (active_receiver == NULL) return 1;
   switch (field) {
   case TXC_SPEED: cw_keyer_speed = clampi(v, 1, 60); break;
   case TXC_MODE: cw_keyer_mode = clampi(v, KEYER_STRAIGHT, KEYER_MODE_B); break;
@@ -156,13 +165,13 @@ int droid_cw_apply(int field, double v) {
     schedule_high_priority();
     return 1;
   case TXC_ZB_START:   /* actions.c CW_ZERO_BEAT */
-    if (zb_pending || active_receiver == NULL) break;
+    if (zb_pending) return 1;
     zb_from = zb_freq();
     rx_cw_zero_beat_start(active_receiver);
     if (active_receiver->cw_zero_beat_active) {
       zb_pending = 1;
-    } else {   /* refused: not CW, or transmitting */
-      atomic_store(&zb_hz, 0);
+    } else {   /* refused: the receiver isn't in CW, or transmitting */
+      atomic_store(&zb_hz, CW_ZB_REFUSED);
       atomic_fetch_add(&zb_done, 1);
     }
     return 1;

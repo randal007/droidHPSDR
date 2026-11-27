@@ -289,7 +289,7 @@ object Radio {
         // M7 step 3: the CW chip (shown only in CW modes), once, before PS / TX
         if (!prefs.getBoolean("chipsCwAdded", false)) {
             if ("CW" !in chips.value) {
-                val at = listOf("PS", "TX").map { chips.value.indexOf(it) }.firstOrNull { it >= 0 } ?: chips.value.size
+                val at = listOf("PS", "TX").map { chips.value.indexOf(it) }.filter { it >= 0 }.minOrNull() ?: chips.value.size
                 setChips(chips.value.take(at) + "CW" + chips.value.drop(at))
             }
             prefs.edit().putBoolean("chipsCwAdded", true).apply()

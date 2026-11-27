@@ -725,13 +725,26 @@ void set_drive(double value) {
 /* cw.c: the same "no" as a PTT, for the radio's keyer */
 int droid_tx_blocked(void) { return droid_blocked(); }
 
+/* droid_tx_set (any thread, also while stopped): the switch counts from now; the queued TX_ENABLED
+ * still does the rest (back to receive) on the loop thread. */
+void droid_tx_enabled_now(int on) { atomic_store(&tx_enabled, on); }
+
+/* droidHPSDR: a screen PTT ends; the radio may still hold PTT (the CW keyer sending, the HL2+ mic PTT),
+ * and old_protocol.c only reports a change, so transmit then stays with the radio's PTT (code review) */
+static void screen_ptt_off(void) {
+  radio_mox_update(radio_ptt && !radio_get_tx_inhibit() ? 1 : 0);
+}
+
 int ext_mox_update(void *data) {
-  /* the HL2+ mic PTT (old_protocol.c, radio_ptt) */
+  /* the HL2+ mic PTT and the radio's CW keyer (old_protocol.c, radio_ptt) */
   int state = GPOINTER_TO_INT(data);
   if (state && radio_get_tx_inhibit()) {   /* droidHPSDR: say why */
-    if (radio_get_tx_inhibit()) atomic_store(&refused, droid_blocked() ? TXR_DISABLED : TXR_INHIBIT);
+    atomic_store(&refused, droid_blocked() ? TXR_DISABLED : TXR_INHIBIT);
     return G_SOURCE_REMOVE;
   }
+  /* droidHPSDR: the screen PTT held in CW (Randal: as deskHPSDR, the paddle sends inside it) keeps
+   * transmit when the radio's PTT drops after the hang time; the finger's release ends it */
+  if (!state && atomic_load(&ptt_screen) && mox) return G_SOURCE_REMOVE;
   radio_mox_update(state);
   return G_SOURCE_REMOVE;
 }
@@ -927,6 +940,7 @@ void droid_tx_off_now(void) {
   }
   if (radio_is_transmitting()) radio_set_mox_immediate(0);
   vox_enabled = 0;
+  droid_cw_off();   /* after TUNE ended (it restores the keyer bit): the radio's keyer off until the poll allows it */
 }
 
 /* tx_menu.c's TX filter: the global values, then the transmitter's own (unless it follows RX) */
@@ -1088,6 +1102,7 @@ static void tx_audio_get(const TRANSMITTER *tx, double *o) {
   o[TXS_VOX_PEAK] = vox_get_peak();
   o[TXS_VOX_REFUSED] = atomic_load(&vox_refusals);
   o[TXS_TX_MODE] = vfo_get_tx_mode();
+  o[TXS_SCREEN_PTT] = atomic_load(&ptt_screen);
 }
 
 /* On the loop thread (radio_core.c CMD_TX). */
@@ -1115,7 +1130,7 @@ void droid_tx_apply(int field, double v) {
       atomic_store(&timed_out, 0);   /* released: the next press may transmit */
       if (atomic_load(&ptt_screen)) {
         atomic_store(&ptt_screen, 0);
-        radio_mox_update(0);
+        screen_ptt_off();
       }
     }
     break;
@@ -1315,14 +1330,14 @@ void droid_tx_poll(void) {
   if (atomic_load(&ptt_screen) && mox && t - atomic_load(&ptt_seen_us) > 1500000) {
     droid_log("screen PTT: no repeat for 1.5 s, back to receive");
     atomic_store(&ptt_screen, 0);
-    radio_mox_update(0);
+    screen_ptt_off();
   }
   int limit = atomic_load(&tx_timeout_s);
   if (limit > 0 && t - tx_since_us > (long long)limit * 1000000) {
     droid_log("TX timeout (%d s): back to receive", limit);
+    droid_cw_timeout();   /* in CW the radio's keyer may still be keying: disarm it (before the count: the UI's note) */
     atomic_fetch_add(&timeouts, 1);
     if (atomic_load(&ptt_screen)) atomic_store(&timed_out, 1);
-    droid_cw_timeout();   /* in CW the radio's keyer may still be keying: disarm it */
     droid_tx_off_now();
     tx_since_us = 0;
   }

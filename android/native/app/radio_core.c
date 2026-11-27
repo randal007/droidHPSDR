@@ -165,6 +165,7 @@ void droid_save(void) { post((cmd){ .type = CMD_SAVE }); }
 void droid_dsp_set(int field, double value) { post((cmd){ .type = CMD_DSP, .a = field, .d = value }); }
 void droid_tx_set(int field, double value) {
   if (field == TX_PTT && value != 0) droid_tx_ptt_seen();   /* the finger is still down, even if the queue is slow */
+  if (field == TX_ENABLED) droid_tx_enabled_now(value != 0);   /* at once: the CW keyer's gate reads it at the next start (code review) */
   post((cmd){ .type = CMD_TX, .a = field, .d = value });
 }
 

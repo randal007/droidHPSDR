@@ -150,6 +150,7 @@ enum {
   TXS_VOX_PEAK,                    /* vox.c's detector level (DEXP), 0..1: the mic bar of the VOX page */
   TXS_VOX_REFUSED,                 /* times VOX was refused out of band (the UI says so when it grows) */
   TXS_TX_MODE,                     /* the TX VFO's mode: the per-mode settings are that mode's */
+  TXS_SCREEN_PTT,                  /* the screen PTT holds MOX (not the radio's PTT: CW's PADDLE label) */
   TXS_LIVE_END = 72,               /* the live fields are TXS_ON_AIR .. TXS_LIVE_END-1 */
   /* M7 step 2, the TX audio chain (tx_menu.c, equalizer_menu.c, vox_menu.c, the TX monitor).
    * deskHPSDR keeps the ones marked "per mode" in mode_settings[] (copy_mode_settings). */
@@ -232,6 +233,7 @@ enum {
   TXCS_END,
   TX_COUNT = TXCS_END
 };
+enum { CW_ZB_REFUSED = 99999 };   /* TXCS_ZB_HZ: the zero beat couldn't start (not CW on RX, or transmitting) */
 /* PureSignal's AmpView data (droid_ps_disp): float offsets */
 enum { PSD_SAMPLES = 4096, PSD_POINTS = 512, PSD_X = 3, PSD_YM = PSD_X + PSD_SAMPLES, PSD_YC = PSD_YM + PSD_SAMPLES,
        PSD_YS = PSD_YC + PSD_SAMPLES, PSD_XM_COR = PSD_YS + PSD_SAMPLES, PSD_YM_COR = PSD_XM_COR + PSD_POINTS,
@@ -251,6 +253,8 @@ void droid_cw_create(void);                    /* with the transmitter: radio.c'
 void droid_cw_save(void);
 void droid_cw_poll(void);                      /* loop thread: arm the radio's keyer only while TX is allowed */
 void droid_cw_timeout(void);                   /* the TX timeout fired: in CW, disarm the keyer */
+void droid_cw_off(void);                       /* back to receive / stop: keyer disarmed until the next poll */
+void droid_tx_enabled_now(int on);             /* "Transmit enabled", from any thread, even while stopped */
 int droid_cw_apply(int field, double v);       /* 1 if it was a CW field */
 void droid_cw_get(double *out);
 int droid_tx_blocked(void);                    /* transmit.c: Transmit enabled off, demo band, or no transmitter */
