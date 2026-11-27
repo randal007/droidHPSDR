@@ -75,7 +75,7 @@ static pthread_mutex_t cmd_lock = PTHREAD_MUTEX_INITIALIZER;
 static int tx_event(const cmd *c) {
   return c->type == CMD_TX && (c->a == TX_PTT || c->a == TX_TUNE || c->a == TX_MIC_LOCAL || c->a == TX_ENABLED ||
                                c->a == TX_PA_FILE || c->a == TXP_ENABLE || c->a == TXP_RESET || c->a == TXP_RESUME ||
-                               c->a == TXP_TWOTONE || c->a == TXP_NOISE);
+                               c->a == TXP_TWOTONE || c->a == TXP_NOISE || c->a == TXC_ZB_START || c->a == TXC_REARM);
 }
 
 static void post(cmd c) {

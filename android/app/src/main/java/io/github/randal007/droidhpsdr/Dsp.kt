@@ -519,7 +519,7 @@ internal val ALL_CHIPS = listOf(
     "BINAURAL" to "BINAURAL", "CWPEAK" to "CW PEAK", "BAND" to "BAND", "MODE" to "MODE", "AF" to "AF", "LNA" to "LNA",
     "PHONE" to "PHONE", "FILTER" to "FILTER", "AGC" to "AGC", "STEP" to "STEP", "SPAN" to "SPAN", "RIT" to "RIT",
     "CTUN" to "CTUN", "LOCK" to "LOCK", "AB" to "A⇄B", "LEVELS" to "LEVELS", "TX" to "TX",
-    "PROC" to "PROC", "VOX" to "VOX", "MON" to "MON", "PS" to "PS",
+    "PROC" to "PROC", "VOX" to "VOX", "MON" to "MON", "PS" to "PS", "CW" to "CW",
 )
 
 /** One chip of the bottom row. Toggles: tap = on/off, hold = their settings. */
@@ -608,6 +608,15 @@ internal fun ChipFor(id: String, st: Status, open: (Sheet) -> Unit, modifier: Mo
             val pb by Radio.playback.collectAsState()
             val v = if (st.phase == Phase.RUNNING && !pb) psLabel(tx) else "—"
             Chip("PS", v, v != "Off" && v != "—", modifier, { open(Sheet.PS) }) { open(Sheet.PS) }
+        }
+        // M7 step 3 (pick C1): the CW drawer; the chip shows the speed, 🔒 when the radio's keyer isn't armed
+        "CW" -> {
+            val tx by Tx.v.collectAsState()
+            val pb by Radio.playback.collectAsState()
+            val run = st.phase == Phase.RUNNING && !pb
+            val wpm = "${tx[Tx.CW_SPEED].roundToInt()} wpm"
+            Chip("CW", if (!run) "—" else if (tx[Tx.CW_ARMED] != 0.0) wpm else "🔒 $wpm", run && tx[Tx.CW_ARMED] != 0.0, modifier,
+                { open(Sheet.CW) }) { open(Sheet.CW) }
         }
         "VOX" -> {
             val tx by Tx.v.collectAsState()

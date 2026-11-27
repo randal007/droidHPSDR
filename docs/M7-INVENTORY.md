@@ -273,6 +273,18 @@ and hermeslite2plus.com on 2026-11-27.
    Thetis or deskHPSDR? (default 30 ms delay, 500 ms hang)
 4. **Voice keyer** next (step 3b), before step 5?
 
+**Randal's answers (2026-11-27):** C1 and C4. Screen PTT in CW: yes, as
+deskHPSDR. Timing: the defaults (30 ms / 500 ms), and don't name the
+XPA125B on screen: other people use other amplifiers. Voice keyer: yes,
+next (step 3b).
+
+**Built differently from the proposal:** the timeout's CW lock ends with a
+tap ("Arm the keyer again", CW drawer) rather than when the paddle is let
+go: once the keyer is disarmed the app can't tell whether the paddle is
+still held (old_protocol.c keeps dot/dash to itself), and a stuck paddle
+is what the timeout is for. The C4 hang bar isn't built for the same
+reason; the CW row shows the radio's PTT instead.
+
 ## Step 4: PureSignal (researched 2026-11-26)
 
 Randal asked for PureSignal before CW (2026-11-26), so step 4 comes before

@@ -361,8 +361,34 @@ Noise are refused like the screen PTT and end with any way back to receive
 Two Tone during TUNE left it on too; a stop during Two Tone queued a MOX
 off for the next start; a late refusal was silent and the timeout hold
 was skipped; the SetPk slider snapped back; the AmpView line didn't
-update), all fixed in the next commit; **next review starts after that
-commit**. Not run on the radio yet.
+update), all fixed in 1b87ff0. Not run on the radio yet.
+**Step 3 (CW), 2026-11-27:** inventory in docs/M7-INVENTORY.md "Step 3"
+(e3d614b): the keyer is the HL2+'s own (paddle in the KEY jack), armed by
+one bit while in CWU/CWL; the radio keys itself and the app follows its PTT.
+Pictures C1-C6 (`tools/mockups/layouts14.js`). **Randal picked C1 (CW
+drawer) and C4 (sending view)**; screen PTT in CW as deskHPSDR (holds
+transmit, the paddle sends); defaults 30 ms PTT delay / 500 ms hang; **no
+amplifier named on screen** (others use other amps); voice keyer next as
+step 3b. Built: `android/native/app/cw.c` (cw_menu.c's settings, radio.c's
+props, zero beat with a result) and droidHPSDR's safety: the radio's keyer
+is armed only while transmitting is allowed (Transmit enabled, demo, TX
+inhibit, band), and the TX timeout disarms it until "Arm the keyer again".
+`Cw.kt` (drawer, settings page, the TX meter card's CW row), CW chip (only
+in CW modes, added once), ☰ → CW. Review: see below. Not run on the radio yet.
+
+**Step 3 radio check (low drive first, Randal watching the amplifier):**
+1. CWU, Transmit enabled **off**: the paddle must not key (watch the amp's
+   PTT and the watt meter); CW chip shows 🔒.
+2. Transmit enabled on: the paddle keys, sidetone on the HL2+ speaker /
+   phones, the app switches to the TX meter with the CW row, PADDLE on the
+   PTT chip, back to receive after the hang time.
+3. Speed, Iambic A / B / Straight, weight, keys reversed, letter spacing,
+   sidetone level and pitch: does the HL2+ follow each one?
+4. Hang time and PTT delay change what the amp does (no hot switching).
+5. Out of band: the paddle does nothing. TX timeout set to 1 min, hold a
+   dash: the keyer goes off, message; "Arm the keyer again" brings it back.
+6. Zero beat on a CW signal: moves onto it, says how far.
+7. Screen PTT in CW: transmit without carrier, the paddle sends in it.
 
 **Step 4 radio check (low drive first, Randal watching the XPA125B):**
 1. PureSignal on (drawer): receive keeps running after the short restart;

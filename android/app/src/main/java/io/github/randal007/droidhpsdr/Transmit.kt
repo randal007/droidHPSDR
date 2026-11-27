@@ -104,7 +104,14 @@ object Tx {
     const val PS_FEEDBACK = 183; const val PS_COR_COUNT = 184; const val PS_SLN_CHECK = 185; const val PS_DG_COUNT = 186
     const val PS_CORRECTING = 187; const val PS_STATE = 188; const val PS_GETPK = 189; const val PS_WARN = 190
     const val PS_GEN_REFUSED = 191; const val PS_BAND = 192
-    const val COUNT = 193
+    // step 3, CW (droid_app.h TXC_* / TXCS_*, cw.c = deskHPSDR's cw_menu.c for the HL2+'s keyer)
+    const val CW_SPEED = 193; const val CW_MODE = 194; const val CW_WEIGHT = 195; const val CW_SPACING = 196
+    const val CW_REVERSED = 197; const val CW_HANG = 198; const val CW_PTT_DELAY = 199; const val CW_SIDE_LEVEL = 200
+    const val CW_PITCH = 201; const val CW_ZB_CORR = 202; const val CW_ZB_START = 203; const val CW_REARM = 204
+    /** live, the radio's: [CW_ARMED] until [COUNT] */
+    const val CW_ARMED = 205; const val CW_LOCK = 206; const val CW_ZB_ACTIVE = 207; const val CW_ZB_DONE = 208
+    const val CW_ZB_HZ = 209; const val CW_NOW = 210
+    const val COUNT = 211
     /** the audio chain's fields: set only while the radio runs (they belong to the mode it is in), never kept for later */
     private const val AUDIO = COMP
 
@@ -122,6 +129,9 @@ object Tx {
         it[MAX_W] = 5.0; it[SWR] = 1.0; it[ALC] = -100.0; it[MIC] = -100.0; it[VOX_HANG] = 250.0; it[VOX_THRESH] = 0.001
         it[MON_GAIN] = -6.0; it[MON_POST] = 1.0
         it[PS_TOLERANCE] = 2.0; it[PS_DELAY] = 150.0; it[PS_SETPK] = 0.24; it[PS_ZERO_WARN] = 1.0
+        // radio.c's CW defaults
+        it[CW_SPEED] = 16.0; it[CW_MODE] = 1.0; it[CW_WEIGHT] = 50.0; it[CW_HANG] = 500.0; it[CW_PTT_DELAY] = 30.0
+        it[CW_SIDE_LEVEL] = 50.0; it[CW_PITCH] = 800.0; it[CW_ZB_CORR] = 15.0
         for (b in 0 until 24) it[PA_CAL0 + b] = 38.8
     })
     /** the safety switch (TX page): off until Randal turns it on; kept across starts */
@@ -147,6 +157,7 @@ object Tx {
     private var lastVoxRefused = 0
     private var lastPsWarn = 0
     private var lastGenRefused = 0
+    private var lastZbDone = 0
     /** VOX as the radio last reported it: only its own switch-off (timeout, stop) overrides a fresh tap (code review) */
     private var nativeVox = 0.0
     private var lastRefusedAt = 0.0
@@ -201,6 +212,7 @@ object Tx {
         // PureSignal's status, and Two Tone / Noise (stopping ends them); the counters stay for the next run's compare
         for (i in PS_FEEDBACK..PS_GETPK) a[i] = 0.0
         a[PS_TWOTONE] = 0.0; a[PS_NOISE] = 0.0
+        a[CW_ARMED] = 0.0; a[CW_ZB_ACTIVE] = 0.0   // the CW lock reason stays: the drawer shows why when it restarts
         if (!a.contentEquals(v.value)) v.value = a
     }
 
@@ -288,7 +300,8 @@ object Tx {
             for (i in LIVE until LIVE_END) it[i] = buf[i]
             it[PTT] = buf[PTT]; it[TUNE] = buf[TUNE]
             if (nativeVox != 0.0 && buf[VOX] == 0.0) it[VOX] = 0.0   // the timeout switched VOX off
-            for (i in PS_FEEDBACK until COUNT) it[i] = buf[i]
+            for (i in PS_FEEDBACK until CW_SPEED) it[i] = buf[i]   // the CW settings in between are the UI's for now
+            for (i in CW_ARMED until COUNT) it[i] = buf[i]
             if (buf[PS_AUTO] != 0.0) it[PS_ATT] = buf[PS_ATT]   // Auto Attenuate moves it
         }
         nativeVox = buf[VOX]
@@ -302,9 +315,17 @@ object Tx {
         if (gr > lastGenRefused) note.value = refusalOf(a[REFUSED].toInt()).ifEmpty { "Two Tone / Noise can't transmit now" } to
             System.currentTimeMillis()
         lastGenRefused = gr
+        val zb = a[CW_ZB_DONE].toInt()
+        if (zb > lastZbDone) {
+            val hz = a[CW_ZB_HZ].toInt()
+            note.value = (if (hz != 0) "Zero beat: moved %+d Hz".format(hz) else "Zero beat: no clear CW tone near the pitch, or already on it") to
+                System.currentTimeMillis()
+        }
+        lastZbDone = zb
         val t = a[TIMEOUTS].toInt()
         if (t > lastTimeouts) note.value = "TX timeout (${timeoutLabel(a[TIMEOUT])}): back to receive" +
-            (if (v.value[VOX] != 0.0) ", VOX off" else "") to System.currentTimeMillis()
+            (if (v.value[VOX] != 0.0) ", VOX off" else "") +
+            (if (a[CW_LOCK].toInt() == 5) ", CW keyer off: arm it again in the CW drawer" else "") to System.currentTimeMillis()
         lastTimeouts = t
         if (!a.contentEquals(v.value)) v.value = a
     }
@@ -315,7 +336,6 @@ object Tx {
     private fun refusalOf(r: Int): String = when (r) {
         1 -> "Transmit is off: turn it on in ☰ → TX"
         2 -> "External TX inhibit input (IO1) is active: see ☰ → TX"
-        3 -> "CW transmit comes with M7 step 3: switch to SSB"
         4 -> "Out of band: no transmit here"
         5 -> "TX timeout: let go of PTT, then press again"
         else -> ""
@@ -377,7 +397,9 @@ internal fun PttChip(modifier: Modifier = Modifier) {
             onAir -> {
                 val limit = v[Tx.TIMEOUT]
                 val left = if (limit > 0) (limit - v[Tx.SECONDS]).coerceAtLeast(0.0).toInt() else -1
-                Text(if (v[Tx.TUNE] != 0.0) "TUNE" else if (held) "ON AIR" else "TX", color = Color.White, fontSize = 10.sp)
+                val paddle = v[Tx.CW_NOW] != 0.0 && v[Tx.RADIO_PTT] != 0.0 && v[Tx.PTT] == 0.0   // the HL2+'s keyer (C4)
+                Text(if (v[Tx.TUNE] != 0.0) "TUNE" else if (paddle) "PADDLE" else if (held) "ON AIR" else "TX", color = Color.White,
+                    fontSize = 10.sp)
                 Text(if (left >= 0) "%d:%02d".format(left / 60, left % 60) else "on", color = Color.White,
                     fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             }
@@ -420,6 +442,8 @@ internal fun TxMeterCard(modifier: Modifier) {
         MeterRow("SWR", "%.1f".format(swr), ((swr - 1.0) / 2.0).coerceIn(0.0, 1.0)) { p -> if (p < 0.4) Grn else if (p < 0.6) Amb else Red }
         val alc = v[Tx.ALC]
         MeterRow("ALC", if (alc < -90) "—" else "%.0f dB".format(alc), ((alc + 30.0) / 30.0).coerceIn(0.0, 1.0)) { p -> if (p < 0.9) Acc else Red }
+        val cw = v[Tx.CW_NOW] != 0.0 && v[Tx.TUNE] == 0.0   // M7 step 3 (C4): the paddle sends, no mic
+        if (cw) { CwMeterRow(v); return@Column }
         val mic = v[Tx.MIC]
         MeterRow("MIC", if (mic < -90) "—" else "%.0f dB".format(mic), ((mic + 40.0) / 40.0).coerceIn(0.0, 1.0)) { p -> if (p < 0.85) Acc else Red }
     }

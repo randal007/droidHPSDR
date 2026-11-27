@@ -69,6 +69,7 @@ add_library(droidhpsdr SHARED
   ${UPSTREAM}/sintab.c
   app/transmit.c                 #     radio.c's transmit functions + droidHPSDR's safety
   app/puresignal.c               #     ps_menu.c: PureSignal (M7 step 4)
+  app/cw.c                       #     cw_menu.c: CW, the HL2+'s keyer (M7 step 3)
   app/audio_aaudio.c
   app/autogain.c
   app/demo.c

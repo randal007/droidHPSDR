@@ -15,7 +15,7 @@
  *
  * droidHPSDR's own (Randal's safety rules, docs/M7-INVENTORY.md):
  *   - Two Tone and Noise key the radio: refused like the screen PTT
- *     (Transmit enabled, inhibit, out of band, CW until step 3);
+ *     (Transmit enabled, inhibit, out of band, the timeout);
  *   - any way back to receive (PTT release, the TX timeout, TUNE, stop)
  *     also switches the generator off, so it never keys the radio again
  *     on the next MOX (deskHPSDR switches them off when the PS menu closes).

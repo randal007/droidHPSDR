@@ -154,7 +154,7 @@ object Radio {
     const val PIXELS = 2048
     const val FPS = 30
     const val SAMPLE_RATE = 384000   // default; the HL2 does 48/96/192/384 kHz
-    val DEFAULT_CHIPS = listOf("NR", "BAND", "AF", "LNA", "PHONE", "FILTER", "AGC", "STEP", "SPAN", "LEVELS", "PROC", "VOX", "MON", "PS", "TX")
+    val DEFAULT_CHIPS = listOf("NR", "BAND", "AF", "LNA", "PHONE", "FILTER", "AGC", "STEP", "SPAN", "LEVELS", "PROC", "VOX", "MON", "CW", "PS", "TX")
 
     val status = MutableStateFlow(Status())
     val freq = MutableStateFlow(14_074_000L)
@@ -285,6 +285,14 @@ object Radio {
                 setChips(chips.value.take(at) + "PS" + chips.value.drop(at))
             }
             prefs.edit().putBoolean("chipsPsAdded", true).apply()
+        }
+        // M7 step 3: the CW chip (shown only in CW modes), once, before PS / TX
+        if (!prefs.getBoolean("chipsCwAdded", false)) {
+            if ("CW" !in chips.value) {
+                val at = listOf("PS", "TX").map { chips.value.indexOf(it) }.firstOrNull { it >= 0 } ?: chips.value.size
+                setChips(chips.value.take(at) + "CW" + chips.value.drop(at))
+            }
+            prefs.edit().putBoolean("chipsCwAdded", true).apply()
         }
     }
 

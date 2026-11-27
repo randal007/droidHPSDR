@@ -207,7 +207,30 @@ enum {
   TXPS_GEN_REFUSED,                /* times Two Tone / Noise was refused (reason: TXS_REFUSED) */
   TXPS_BAND,                       /* the TX VFO's band: TX ATT is kept per band */
   TXPS_END,
-  TX_COUNT = TXPS_END
+  /* M7 step 3, CW (cw.c, deskHPSDR's cw_menu.c) for the HL2+'s keyer. Events: ZB_START, REARM. */
+  TXC_FIRST = TXPS_END,
+  TXC_SPEED = TXC_FIRST,           /* 1..60 WPM */
+  TXC_MODE,                        /* 0 straight, 1 iambic A, 2 iambic B */
+  TXC_WEIGHT,                      /* 0..100 */
+  TXC_SPACING,                     /* enforce letter spacing */
+  TXC_REVERSED,                    /* keys reversed */
+  TXC_HANG,                        /* the radio's hang time (break-in delay), 0..1000 ms */
+  TXC_PTT_DELAY,                   /* RF after the amplifier's PTT, 0..255 ms (old_protocol.c caps it at 900 / speed) */
+  TXC_SIDE_LEVEL,                  /* sidetone level 0..127 */
+  TXC_PITCH,                       /* sidetone frequency = the CW pitch, 100..1000 Hz */
+  TXC_ZB_CORR,                     /* zero beat correction, -50..50 Hz (active receiver) */
+  TXC_ZB_START,                    /* zero beat now */
+  TXC_REARM,                       /* arm the keyer again after the TX timeout disarmed it */
+  TXC_END,
+  /* live, read-only */
+  TXCS_ARMED = TXC_END,            /* the radio's keyer is armed (CW mode, transmitting allowed) */
+  TXCS_LOCK,                       /* why it isn't (TXR_*) */
+  TXCS_ZB_ACTIVE,                  /* a zero beat is listening */
+  TXCS_ZB_DONE,                    /* zero beats finished (grows) */
+  TXCS_ZB_HZ,                      /* how far the last one moved the VFO, Hz (0: no clear tone / already on it) */
+  TXCS_CW,                         /* the TX mode is CWU / CWL */
+  TXCS_END,
+  TX_COUNT = TXCS_END
 };
 /* PureSignal's AmpView data (droid_ps_disp): float offsets */
 enum { PSD_SAMPLES = 4096, PSD_POINTS = 512, PSD_X = 3, PSD_YM = PSD_X + PSD_SAMPLES, PSD_YC = PSD_YM + PSD_SAMPLES,
@@ -223,6 +246,14 @@ void droid_ps_generators_off(void);
 int droid_ps_apply(int field, double v);       /* 1 if it was a PS field */
 void droid_ps_get(double *out);
 int droid_ps_disp(float *out, int max);        /* AmpView, PSD_COUNT floats */
+/* cw.c */
+void droid_cw_create(void);                    /* with the transmitter: radio.c's props entries */
+void droid_cw_save(void);
+void droid_cw_poll(void);                      /* loop thread: arm the radio's keyer only while TX is allowed */
+void droid_cw_timeout(void);                   /* the TX timeout fired: in CW, disarm the keyer */
+int droid_cw_apply(int field, double v);       /* 1 if it was a CW field */
+void droid_cw_get(double *out);
+int droid_tx_blocked(void);                    /* transmit.c: Transmit enabled off, demo band, or no transmitter */
 /* why the last PTT / TUNE did not transmit */
 enum { TXR_NONE, TXR_DISABLED, TXR_INHIBIT, TXR_CW, TXR_BAND, TXR_TIMEOUT };
 void droid_tx_set(int field, double value);    /* queued to the loop thread */

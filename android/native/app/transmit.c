@@ -18,7 +18,9 @@
  *     and the radio goes back to receive when the repeats stop (a lost
  *     "release" can't leave it transmitting);
  *   - a TX timeout (default 2 min) ends any transmission;
- *   - VOX is off at every start; MOX in CW waits for M7 step 3 (CW);
+ *   - VOX is off at every start;
+ *   - CW (step 3, cw.c): the radio's keyer is armed only while transmitting
+ *     is allowed, and the timeout disarms it;
  *   - the radio leaves transmit before the stream stops (radio_core.c).
  *   - VOX (step 2) goes through upstream's vox.c and the same checks, and
  *     is refused out of band like the screen PTT.
@@ -720,20 +722,13 @@ void set_drive(double value) {
 
 /* ---- ext.c: the protocol thread's requests, run on the loop thread ---- */
 
-/* MOX in a CW mode waits for M7 step 3 (CW): the keyer isn't armed yet. */
-static int cw_mode_refused(void) {
-  int m = vfo_get_tx_mode();
-  if (m == modeCWU || m == modeCWL) {
-    atomic_store(&refused, TXR_CW);
-    return 1;
-  }
-  return 0;
-}
+/* cw.c: the same "no" as a PTT, for the radio's keyer */
+int droid_tx_blocked(void) { return droid_blocked(); }
 
 int ext_mox_update(void *data) {
   /* the HL2+ mic PTT (old_protocol.c, radio_ptt) */
   int state = GPOINTER_TO_INT(data);
-  if (state && (radio_get_tx_inhibit() || cw_mode_refused())) {   /* droidHPSDR: say why */
+  if (state && radio_get_tx_inhibit()) {   /* droidHPSDR: say why */
     if (radio_get_tx_inhibit()) atomic_store(&refused, droid_blocked() ? TXR_DISABLED : TXR_INHIBIT);
     return G_SOURCE_REMOVE;
   }
@@ -753,7 +748,6 @@ int droid_tx_refuse_reason(void) {
   int why = TXR_NONE;
   if (atomic_load(&timed_out)) why = TXR_TIMEOUT;   /* the screen PTT the timeout stopped is still held */
   else if (radio_get_tx_inhibit()) why = droid_blocked() ? TXR_DISABLED : TXR_INHIBIT;
-  else if (cw_mode_refused()) why = TXR_CW;
   else if (!TransmitAllowed() && !tx_out_of_band_allowed) why = TXR_BAND;
   atomic_store(&refused, why);
   return why;
@@ -887,6 +881,7 @@ void droid_tx_create(int pixels) {
    * stream runs (droid_ps_started), as radio.c does. */
   duplex = 0;
   droid_ps_create(pixels);
+  droid_cw_create();
   vox_enabled = 0;
   transmitter->local_microphone = 0;
   g_strlcpy(transmitter->microphone_name, "phone", sizeof transmitter->microphone_name);
@@ -902,6 +897,7 @@ void droid_tx_create(int pixels) {
 void droid_tx_save(void) {
   if (transmitter == NULL || !can_transmit) return;
   droid_ps_save();
+  droid_cw_save();
   SetPropI0("pa_enabled", pa_enabled);
   SetPropI0("pa_power", pa_power);
   SetPropI0("mic_boost", mic_boost);
@@ -946,7 +942,8 @@ static double clampd(double v, double lo, double hi) { return v < lo ? lo : v > 
 /* ---- step 2: the TX audio chain ---- */
 
 _Static_assert(TXA_ADDGAIN_GAIN == 103 && TXP_ENABLE == 169 && TXP_ZERO_WARN == 182 && TXPS_FEEDBACK == 183 &&
-               TXPS_BAND == 192 && TX_COUNT == 193, "TXA_* / TXP_* numbering: keep in step with Tx in Transmit.kt");
+               TXPS_BAND == 192 && TXC_SPEED == 193 && TXC_REARM == 204 && TXCS_ARMED == 205 && TXCS_CW == 210 &&
+               TX_COUNT == 211, "TXA_* / TXP_* / TXC_* numbering: keep in step with Tx in Transmit.kt");
 
 static int clampi(double v, int lo, int hi) { int i = (int)lround(v); return i < lo ? lo : i > hi ? hi : i; }
 
@@ -1110,7 +1107,6 @@ void droid_tx_apply(int field, double v) {
       /* still the finger the timeout stopped: wait for a release (code review: the repeats re-keyed) */
       if (atomic_load(&timed_out)) { atomic_store(&refused, TXR_TIMEOUT); break; }
       if (radio_get_tx_inhibit()) { atomic_store(&refused, droid_blocked() ? TXR_DISABLED : TXR_INHIBIT); break; }
-      if (cw_mode_refused()) break;
       if (!TransmitAllowed() && !tx_out_of_band_allowed) { atomic_store(&refused, TXR_BAND); break; }
       atomic_store(&refused, TXR_NONE);
       atomic_store(&ptt_screen, 1);
@@ -1197,6 +1193,7 @@ void droid_tx_apply(int field, double v) {
   }
   default:
     if (droid_ps_apply(field, v)) break;
+    if (droid_cw_apply(field, v)) break;
     if (tx_audio_apply(transmitter, field, v)) break;
     if (field >= TX_PA_CAL0 && field < TX_PA_CAL0 + BANDS) {   /* pa_menu.c: 38.8 .. 70 dB */
       BAND *b = band_get_band(field - TX_PA_CAL0);
@@ -1259,6 +1256,7 @@ void droid_tx_get(double *o) {
   o[TX_XIT] = vfo[txv].xit;
   tx_audio_get(tx, o);
   droid_ps_get(o);
+  droid_cw_get(o);
 }
 
 int droid_tx_on_air(void) { return can_transmit && radio_is_transmitting(); }
@@ -1282,6 +1280,7 @@ void droid_tx_poll(void) {
     else if (t - fifo_seen_us > 2000000) { tx_fifo_underrun = 0; tx_fifo_overrun = 0; fifo_seen_us = 0; }
   }
   droid_ps_poll();   /* Two Tone / Noise end with the transmission */
+  droid_cw_poll();   /* the radio's keyer: armed only while transmitting is allowed */
   int on = radio_is_transmitting();
   static long long log_us;
   static unsigned frames_then;
@@ -1323,6 +1322,7 @@ void droid_tx_poll(void) {
     droid_log("TX timeout (%d s): back to receive", limit);
     atomic_fetch_add(&timeouts, 1);
     if (atomic_load(&ptt_screen)) atomic_store(&timed_out, 1);
+    droid_cw_timeout();   /* in CW the radio's keyer may still be keying: disarm it */
     droid_tx_off_now();
     tx_since_us = 0;
   }
