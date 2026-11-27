@@ -14,6 +14,7 @@ const I = {
   mode: '<path d="M4 18V6l5 8 5-8v12"/><path d="M17 10h4M19 8v4"/>',
   dsp: '<path d="M3 12h3l2-6 3 12 3-9 2 3h5"/>',
   gear: '<circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v3M12 18.2v3M2.8 12h3M18.2 12h3M5.5 5.5l2.1 2.1M16.4 16.4l2.1 2.1M5.5 18.5l2.1-2.1M16.4 7.6l2.1-2.1"/>',
+  target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M1 12h4M19 12h4"/>',
   lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   swap: '<path d="M5 8h13l-3-3M19 16H6l3 3"/>',
   chev: '<path d="M9 6l6 6-6 6"/>',
