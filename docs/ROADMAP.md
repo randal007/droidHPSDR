@@ -348,7 +348,27 @@ timeout, the HL2+ mic PTT.
 docs/M7-INVENTORY.md "Step 4" (84927b2): the HL2 has no sampler; Randal's
 sampler after the XPA125B feeds the IO board's PS input, PS already works
 for him in Thetis and deskHPSDR. Pictures S1-S6 in
-`~/Pictures/droidhpsdr-mockups/m7-round3`; **waiting on Randal's pick.**
+`~/Pictures/droidhpsdr-mockups/m7-round3`. **Randal picked S1 (drawer) and
+S4 (AmpView as deskHPSDR)**; no sample-rate switch (Thetis now runs PS at
+384 kHz on an HL2; deskHPSDR uses the receivers' rate). Built 2026-11-26:
+`android/native/app/puresignal.c` (ps_menu.c's calibration timer and
+callbacks, radio.c's feedback receivers and PS restore at start, the TX ATT
+0 warning), `PureSignal.kt` (drawer, AmpView, settings page, warning), PS
+chip (added once before TX), ☰ → PureSignal. droidHPSDR's own: Two Tone /
+Noise are refused like the screen PTT and end with any way back to receive
+(the TX timeout included). Not run on the radio yet.
+
+**Step 4 radio check (low drive first, Randal watching the XPA125B):**
+1. PureSignal on (drawer): receive keeps running after the short restart;
+   info bar: no lost packets at 384 kHz.
+2. Two Tone, Auto att. on: TX ATT settles, feedback 140-165, Correcting;
+   Two Tone off: back to receive.
+3. Voice with PS on: Correcting stays on; MON shows the feedback on the
+   TX spectrum, cleaner shoulders than with PS off.
+4. AmpView: the curves fill in during Two Tone.
+5. Transmit enabled off: Two Tone refused with the reason; TX timeout
+   ends Two Tone.
+6. Restart the app: PS comes back on (and the TX ATT 0 warning if 0 dB).
 **Step 1 leftovers (Randal 2026-11-25):** built: the external TX inhibit
 input switch (TX page, as deskHPSDR's radio menu), XIT (VFO panel, with
 split now enabled), PA calibration Save / Load saved (band.c's own file in

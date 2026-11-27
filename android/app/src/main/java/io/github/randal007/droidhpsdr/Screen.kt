@@ -112,7 +112,7 @@ internal val Grn = Color(0xFF3EE07A)
 internal val Red = Color(0xFFFF5A50)
 
 
-internal enum class Sheet { ANT, LEVELS, HL2SETUP, SCREEN, BAND, MODE, AF, LNA, FILTER, MENU, DISPLAY, FREQ, VFO, AGC, SDR, DISCOVERY, ABOUT, NOISE, EQ, DSP, TOOLBAR, RX, METER, TX, PA, TXPANEL, TXAUDIO, TXVOX }
+internal enum class Sheet { ANT, LEVELS, HL2SETUP, SCREEN, BAND, MODE, AF, LNA, FILTER, MENU, DISPLAY, FREQ, VFO, AGC, SDR, DISCOVERY, ABOUT, NOISE, EQ, DSP, TOOLBAR, RX, METER, TX, PA, TXPANEL, TXAUDIO, TXVOX, PS }
 
 internal fun Modifier.glass(r: Int = 14) =
     clip(RoundedCornerShape(r.dp)).background(Glass).border(1.dp, Line, RoundedCornerShape(r.dp))
@@ -206,10 +206,12 @@ fun Screen(onStart: () -> Unit, onStop: () -> Unit) {
                 Sheet.EQ -> EqPanel(status, dismiss)
                 Sheet.TXAUDIO -> TxAudioDrawer(status, null, dismiss)
                 Sheet.TXVOX -> TxAudioDrawer(status, "VOX", dismiss)
+                Sheet.PS -> PsDrawer(dismiss)
                 Sheet.TOOLBAR -> ToolbarEditor(status, dismiss)
                 null -> {}
                 else -> SheetHost(sheet!!, status, onStart, onStop, dismiss, done) { sheet = it }
             }
+            PsZeroAttWarning()   // M7 step 4: PureSignal on with TX ATT 0 dB (deskHPSDR's warning)
         }
     }
 }
@@ -1014,7 +1016,7 @@ private fun SheetHost(
                 Sheet.DSP -> DspSheet(st)
                 Sheet.RX -> RxSheet(st)
                 Sheet.METER -> MeterSheet()
-                Sheet.NOISE, Sheet.EQ, Sheet.TOOLBAR, Sheet.TXAUDIO, Sheet.TXVOX -> {}
+                Sheet.NOISE, Sheet.EQ, Sheet.TOOLBAR, Sheet.TXAUDIO, Sheet.TXVOX, Sheet.PS -> {}
                 Sheet.DISPLAY -> DisplaySheet()
                 Sheet.SCREEN -> ScreenSheet()
                 Sheet.ANT -> AntSheet()
@@ -1235,7 +1237,7 @@ private val MENU_COLUMNS = listOf(
     listOf(MenuItem("RX", Sheet.RX), MenuItem("RX Filter", Sheet.FILTER), MenuItem("Noise", Sheet.NOISE),
         MenuItem("AGC", Sheet.AGC)),
     listOf(MenuItem("TX", Sheet.TX), MenuItem("PA", Sheet.PA), MenuItem("TX audio", Sheet.TXAUDIO), MenuItem("VOX", Sheet.TXVOX),
-        MenuItem("PS", later = "M7"), MenuItem("CW", later = "M7")),
+        MenuItem("PureSignal", Sheet.PS), MenuItem("CW", later = "M7")),
     listOf(MenuItem("DSP", Sheet.DSP), MenuItem("WDSP EQ", Sheet.EQ), MenuItem("Ant", Sheet.ANT),
         MenuItem("OC Output", later = "M6"), MenuItem("Extras", later = "M8")),
     listOf(MenuItem("Toolbar", Sheet.TOOLBAR), MenuItem("CAT/TCI", later = "M8"), MenuItem("MIDI", later = "M8")),

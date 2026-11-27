@@ -179,8 +179,50 @@ enum {
   TXA_CFC_FREQ0 = TXA_EQ_FREQ0 + 13,   /* 13: [0] unused */
   TXA_CFC_LVL0 = TXA_CFC_FREQ0 + 13,   /* [0] Pre Comp, 0..20 dB */
   TXA_CFC_POST0 = TXA_CFC_LVL0 + 13,   /* [0] Post Gain, -20..20 dB */
-  TX_COUNT = TXA_CFC_POST0 + 13
+  /* M7 step 4, PureSignal (puresignal.c, deskHPSDR's ps_menu.c). Events: ENABLE, RESET, RESUME, TWOTONE, NOISE. */
+  TXP_FIRST = TXA_CFC_POST0 + 13,
+  TXP_ENABLE = TXP_FIRST,          /* tx_ps_onoff(): restarts the stream with the feedback receivers */
+  TXP_RESET,                       /* "OFF": PS reset */
+  TXP_RESUME,                      /* "Restart" */
+  TXP_TWOTONE, TXP_NOISE,          /* the calibration sources: they key the radio until switched off */
+  TXP_NOISE_LEVEL,                 /* -12..+3 dB */
+  TXP_AUTO,                        /* Auto Attenuate */
+  TXP_ATT,                         /* TX ATT, -29..+31 dB on an HL2, kept per band */
+  TXP_MON,                         /* the TX spectrum shows the feedback (transmitter->feedback) */
+  TXP_ONESHOT,
+  TXP_TOLERANCE,                   /* 0 Strict, 1 Medium, 2 Relaxed */
+  TXP_DELAY,                       /* TX delay, ns */
+  TXP_SETPK,
+  TXP_ZERO_WARN,                   /* radio.c ps_zero_att_warning */
+  TXP_END,
+  /* live, read-only */
+  TXPS_FEEDBACK = TXP_END,         /* GetPSInfo: info[4], the feedback level */
+  TXPS_COR_COUNT,                  /* info[5] */
+  TXPS_SLN_CHECK,                  /* info[6] */
+  TXPS_DG_COUNT,                   /* info[13] */
+  TXPS_CORRECTING,                 /* info[14] */
+  TXPS_STATE,                      /* info[15]: 0 RESET .. 9 TURNON */
+  TXPS_GETPK,                      /* GetPSMaxTX */
+  TXPS_WARN,                       /* times the "TX ATT is 0" warning is due (grows: the UI shows it) */
+  TXPS_GEN_REFUSED,                /* times Two Tone / Noise was refused (reason: TXS_REFUSED) */
+  TXPS_BAND,                       /* the TX VFO's band: TX ATT is kept per band */
+  TXPS_END,
+  TX_COUNT = TXPS_END
 };
+/* PureSignal's AmpView data (droid_ps_disp): float offsets */
+enum { PSD_SAMPLES = 4096, PSD_POINTS = 512, PSD_X = 3, PSD_YM = PSD_X + PSD_SAMPLES, PSD_YC = PSD_YM + PSD_SAMPLES,
+       PSD_YS = PSD_YC + PSD_SAMPLES, PSD_XM_COR = PSD_YS + PSD_SAMPLES, PSD_YM_COR = PSD_XM_COR + PSD_POINTS,
+       PSD_XA_COR = PSD_YM_COR + PSD_POINTS, PSD_YA_COR = PSD_XA_COR + PSD_POINTS, PSD_COUNT = PSD_YA_COR + PSD_POINTS };
+/* puresignal.c */
+void droid_ps_create(int pixels);              /* with the transmitter: the feedback receivers */
+void droid_ps_save(void);
+void droid_ps_sample_rate(int rate);           /* the receivers' rate changed (stream stopped) */
+void droid_ps_started(void);                   /* loop thread, after a start: PS back on if it was */
+void droid_ps_poll(void);                      /* loop thread: Two Tone / Noise end with the transmission */
+void droid_ps_generators_off(void);
+int droid_ps_apply(int field, double v);       /* 1 if it was a PS field */
+void droid_ps_get(double *out);
+int droid_ps_disp(float *out, int max);        /* AmpView, PSD_COUNT floats */
 /* why the last PTT / TUNE did not transmit */
 enum { TXR_NONE, TXR_DISABLED, TXR_INHIBIT, TXR_CW, TXR_BAND, TXR_TIMEOUT };
 void droid_tx_set(int field, double value);    /* queued to the loop thread */

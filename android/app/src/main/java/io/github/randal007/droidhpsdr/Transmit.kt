@@ -95,7 +95,16 @@ object Tx {
     const val MON = 99; const val MON_GAIN = 100; const val MON_POST = 101; const val ADDGAIN = 102; const val ADDGAIN_GAIN = 103
     /** 13 each: [0] added gain / unused / Pre Comp / Post Gain, [1..12] the points */
     const val EQ_GAIN0 = 104; const val EQ_FREQ0 = 117; const val CFC_FREQ0 = 130; const val CFC_LVL0 = 143; const val CFC_POST0 = 156
-    const val COUNT = 169
+    // step 4, PureSignal (droid_app.h TXP_* / TXPS_*, puresignal.c = deskHPSDR's ps_menu.c)
+    const val PS_ENABLE = 169; const val PS_RESET = 170; const val PS_RESUME = 171; const val PS_TWOTONE = 172
+    const val PS_NOISE = 173; const val PS_NOISE_LEVEL = 174; const val PS_AUTO = 175; const val PS_ATT = 176
+    const val PS_MON = 177; const val PS_ONESHOT = 178; const val PS_TOLERANCE = 179; const val PS_DELAY = 180
+    const val PS_SETPK = 181; const val PS_ZERO_WARN = 182
+    /** live, the radio's: [PS_FEEDBACK] until [COUNT] */
+    const val PS_FEEDBACK = 183; const val PS_COR_COUNT = 184; const val PS_SLN_CHECK = 185; const val PS_DG_COUNT = 186
+    const val PS_CORRECTING = 187; const val PS_STATE = 188; const val PS_GETPK = 189; const val PS_WARN = 190
+    const val PS_GEN_REFUSED = 191; const val PS_BAND = 192
+    const val COUNT = 193
     /** the audio chain's fields: set only while the radio runs (they belong to the mode it is in), never kept for later */
     private const val AUDIO = COMP
 
@@ -112,6 +121,7 @@ object Tx {
         it[FILTER_LOW] = 100.0; it[FILTER_HIGH] = 2900.0; it[MUTE_RX] = 1.0; it[PA] = 1.0; it[PA_POWER] = 1.0
         it[MAX_W] = 5.0; it[SWR] = 1.0; it[ALC] = -100.0; it[MIC] = -100.0; it[VOX_HANG] = 250.0; it[VOX_THRESH] = 0.001
         it[MON_GAIN] = -6.0; it[MON_POST] = 1.0
+        it[PS_TOLERANCE] = 2.0; it[PS_DELAY] = 150.0; it[PS_SETPK] = 0.24; it[PS_ZERO_WARN] = 1.0
         for (b in 0 until 24) it[PA_CAL0 + b] = 38.8
     })
     /** the safety switch (TX page): off until Randal turns it on; kept across starts */
@@ -120,6 +130,8 @@ object Tx {
     val micSource = MutableStateFlow(0)
     /** a message for the screen (refusals, the timeout), with when it was set */
     val note = MutableStateFlow("" to 0L)
+    /** PureSignal was switched on with TX ATT 0 (deskHPSDR's warning dialog) */
+    val psWarn = MutableStateFlow(false)
 
     private lateinit var prefs: SharedPreferences
     private lateinit var appCtx: Context
@@ -133,6 +145,8 @@ object Tx {
     private val pttLock = Any()
     private var lastTimeouts = 0
     private var lastVoxRefused = 0
+    private var lastPsWarn = 0
+    private var lastGenRefused = 0
     /** VOX as the radio last reported it: only its own switch-off (timeout, stop) overrides a fresh tap (code review) */
     private var nativeVox = 0.0
     private var lastRefusedAt = 0.0
@@ -182,10 +196,12 @@ object Tx {
 
     private fun clearLive() {
         val a = v.value.copyOf()
-        if (a[ON_AIR] == 0.0 && a[PTT] == 0.0 && a[TUNE] == 0.0 && a[FWD] == 0.0 && a[VOX] == 0.0 && a[VOX_PEAK] == 0.0) return
         for (i in LIVE until LIVE_END) if (i != MAX_W && i != TIMEOUTS) a[i] = 0.0
         a[PTT] = 0.0; a[TUNE] = 0.0; a[SWR] = 1.0; a[ALC] = -100.0; a[MIC] = -100.0; a[VOX] = 0.0   // the radio switches VOX off when it stops
-        v.value = a
+        // PureSignal's status, and Two Tone / Noise (stopping ends them); the counters stay for the next run's compare
+        for (i in PS_FEEDBACK..PS_GETPK) a[i] = 0.0
+        a[PS_TWOTONE] = 0.0; a[PS_NOISE] = 0.0
+        if (!a.contentEquals(v.value)) v.value = a
     }
 
     // ---- the microphone: HL2+ jack, the phone's, or a Bluetooth headset ----
@@ -272,11 +288,20 @@ object Tx {
             for (i in LIVE until LIVE_END) it[i] = buf[i]
             it[PTT] = buf[PTT]; it[TUNE] = buf[TUNE]
             if (nativeVox != 0.0 && buf[VOX] == 0.0) it[VOX] = 0.0   // the timeout switched VOX off
+            for (i in PS_FEEDBACK until COUNT) it[i] = buf[i]
+            if (buf[PS_AUTO] != 0.0) it[PS_ATT] = buf[PS_ATT]   // Auto Attenuate moves it
         }
         nativeVox = buf[VOX]
         val vr = a[VOX_REFUSED].toInt()
         if (vr > lastVoxRefused) note.value = "Out of band: VOX can't key the radio here" to System.currentTimeMillis()
         lastVoxRefused = vr
+        val pw = a[PS_WARN].toInt()
+        if (pw > lastPsWarn && a[PS_ZERO_WARN] != 0.0) psWarn.value = true
+        lastPsWarn = pw
+        val gr = a[PS_GEN_REFUSED].toInt()
+        if (gr > lastGenRefused) note.value = refusalOf(a[REFUSED].toInt()).ifEmpty { "Two Tone / Noise can't transmit now" } to
+            System.currentTimeMillis()
+        lastGenRefused = gr
         val t = a[TIMEOUTS].toInt()
         if (t > lastTimeouts) note.value = "TX timeout (${timeoutLabel(a[TIMEOUT])}): back to receive" +
             (if (v.value[VOX] != 0.0) ", VOX off" else "") to System.currentTimeMillis()
@@ -285,7 +310,9 @@ object Tx {
     }
 
     /** Why the last PTT/TUNE didn't transmit (transmit.c TXR_*); read once per press. */
-    fun refusal(): String = when (v.value[REFUSED].toInt()) {
+    fun refusal(): String = refusalOf(v.value[REFUSED].toInt())
+
+    private fun refusalOf(r: Int): String = when (r) {
         1 -> "Transmit is off: turn it on in ☰ → TX"
         2 -> "External TX inhibit input (IO1) is active: see ☰ → TX"
         3 -> "CW transmit comes with M7 step 3: switch to SSB"

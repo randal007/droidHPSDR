@@ -74,7 +74,8 @@ static pthread_mutex_t cmd_lock = PTHREAD_MUTEX_INITIALIZER;
  * flight replaced a queued release; a mic close + open merged into one no-op open) */
 static int tx_event(const cmd *c) {
   return c->type == CMD_TX && (c->a == TX_PTT || c->a == TX_TUNE || c->a == TX_MIC_LOCAL || c->a == TX_ENABLED ||
-                               c->a == TX_PA_FILE);
+                               c->a == TX_PA_FILE || c->a == TXP_ENABLE || c->a == TXP_RESET || c->a == TXP_RESUME ||
+                               c->a == TXP_TWOTONE || c->a == TXP_NOISE);
 }
 
 static void post(cmd c) {
@@ -455,6 +456,7 @@ static int newest_props(const char *dir, char *out, size_t len) {
 
 static void *loop(void *arg) {
   (void)arg;
+  droid_ps_started();   /* radio.c: PureSignal back on if it was (it restarts the stream once) */
   while (atomic_load(&running)) {
     for (;;) {
       cmd c;
@@ -676,6 +678,7 @@ setup:
     /* radio.c's radio_change_sample_rate(), with the stream stopped */
     rx_change_sample_rate(receiver[0], sample_rate);
     if (p1_started) old_protocol_set_mic_sample_rate(sample_rate);
+    if (can_transmit) droid_ps_sample_rate(sample_rate);   /* PureSignal's feedback receiver and rate */
   }
   if (pb) {
     memcpy(pb_saved_vfos, vfo, sizeof pb_saved_vfos);

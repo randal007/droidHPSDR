@@ -747,6 +747,17 @@ int ext_mox_update_immediate(void *data) {
   return G_SOURCE_REMOVE;
 }
 
+/* droidHPSDR: why a press that keys the radio (PureSignal's Two Tone / Noise) can't, as for the
+ * screen PTT; 0 = it may. The reason is kept for the UI (TXS_REFUSED). */
+int droid_tx_refuse_reason(void) {
+  int why = TXR_NONE;
+  if (radio_get_tx_inhibit()) why = droid_blocked() ? TXR_DISABLED : TXR_INHIBIT;
+  else if (cw_mode_refused()) why = TXR_CW;
+  else if (!TransmitAllowed() && !tx_out_of_band_allowed) why = TXR_BAND;
+  atomic_store(&refused, why);
+  return why;
+}
+
 int ext_set_vox(void *data) {
   /* droidHPSDR: out of band, VOX is refused like the screen PTT */
   if (GPOINTER_TO_INT(data) && !TransmitAllowed() && !tx_out_of_band_allowed) {
@@ -772,8 +783,8 @@ void sort_tx_eq(TRANSMITTER *tx) {
 
 void get_screen_size(int *width, int *height) { *width = 1280; *height = 600; }
 
-/* ---- not built yet: Protocol 2, the RTTY engine, TCI audio, PureSignal's
- *      menu timer (M7 step 4), the voice keyer (step 3), slider widgets ---- */
+/* ---- not built yet: Protocol 2, the RTTY engine, TCI audio, the voice keyer
+ *      (step 3), slider widgets (PureSignal's timer: puresignal.c) ---- */
 void new_protocol_iq_samples(int isample, int qsample) { (void)isample; (void)qsample; }
 void new_protocol_cw_audio_samples(short l, short r) { (void)l; (void)r; }
 uint64_t new_protocol_tx_fence_begin(void) { return 0; }
@@ -787,7 +798,6 @@ void rtty_engine_abort(void) {}
 void tci_get_next_mic_sample(double *micsample) { (void)micsample; }
 void tci_mox_changed(int state) { (void)state; }
 void tci_tune_changed(int state) { (void)state; }
-int ps_calibration_timer(gpointer arg) { (void)arg; return G_SOURCE_REMOVE; }
 void voice_keyer_stop_for_ptt_takeover(void) {}
 void update_slider_mic_gain_btn(void) {}
 void update_slider_tune_drive_btn(void) {}
@@ -871,10 +881,11 @@ void droid_tx_create(int pixels) {
   can_transmit = 1;
   transmitter->x = 0;
   transmitter->y = 0;
-  /* droidHPSDR M7 step 1: no PureSignal (step 4), no duplex (later), VOX off at every start
-   * (Randal), the radio's own mic until the UI picks another */
-  transmitter->puresignal = 0;
+  /* droidHPSDR: no duplex (later), VOX off at every start (Randal), the radio's own mic until
+   * the UI picks another. PureSignal (step 4): the feedback receivers now, PS itself once the
+   * stream runs (droid_ps_started), as radio.c does. */
   duplex = 0;
+  droid_ps_create(pixels);
   vox_enabled = 0;
   transmitter->local_microphone = 0;
   g_strlcpy(transmitter->microphone_name, "phone", sizeof transmitter->microphone_name);
@@ -889,6 +900,7 @@ void droid_tx_create(int pixels) {
 /* radio_core.c's save: radio.c's entries for what the TX page sets, and the transmitter's own */
 void droid_tx_save(void) {
   if (transmitter == NULL || !can_transmit) return;
+  droid_ps_save();
   SetPropI0("pa_enabled", pa_enabled);
   SetPropI0("pa_power", pa_power);
   SetPropI0("mic_boost", mic_boost);
@@ -911,6 +923,7 @@ void droid_tx_save(void) {
 void droid_tx_off_now(void) {
   if (!can_transmit || transmitter == NULL) return;
   atomic_store(&ptt_screen, 0);
+  droid_ps_generators_off();   /* PureSignal's Two Tone / Noise end with it */
   if (tune) {
     radio_tune_update(0);
     if (device == DEVICE_HERMES_LITE2 && hl2_pico_is_present()) hl2_iob_set_antenna_tuner(0);
@@ -931,7 +944,8 @@ static double clampd(double v, double lo, double hi) { return v < lo ? lo : v > 
 
 /* ---- step 2: the TX audio chain ---- */
 
-_Static_assert(TXA_ADDGAIN_GAIN == 103 && TX_COUNT == 169, "TXA_* numbering: keep in step with Tx in Transmit.kt");
+_Static_assert(TXA_ADDGAIN_GAIN == 103 && TXP_ENABLE == 169 && TXP_ZERO_WARN == 182 && TXPS_FEEDBACK == 183 &&
+               TXPS_BAND == 192 && TX_COUNT == 193, "TXA_* / TXP_* numbering: keep in step with Tx in Transmit.kt");
 
 static int clampi(double v, int lo, int hi) { int i = (int)lround(v); return i < lo ? lo : i > hi ? hi : i; }
 
@@ -1180,6 +1194,7 @@ void droid_tx_apply(int field, double v) {
     break;
   }
   default:
+    if (droid_ps_apply(field, v)) break;
     if (tx_audio_apply(transmitter, field, v)) break;
     if (field >= TX_PA_CAL0 && field < TX_PA_CAL0 + BANDS) {   /* pa_menu.c: 38.8 .. 70 dB */
       BAND *b = band_get_band(field - TX_PA_CAL0);
@@ -1241,6 +1256,7 @@ void droid_tx_get(double *o) {
   o[TX_XIT_ON] = vfo[txv].xit_enabled;
   o[TX_XIT] = vfo[txv].xit;
   tx_audio_get(tx, o);
+  droid_ps_get(o);
 }
 
 int droid_tx_on_air(void) { return can_transmit && radio_is_transmitting(); }
@@ -1263,6 +1279,7 @@ void droid_tx_poll(void) {
     if (fifo_seen_us == 0) fifo_seen_us = t;
     else if (t - fifo_seen_us > 2000000) { tx_fifo_underrun = 0; tx_fifo_overrun = 0; fifo_seen_us = 0; }
   }
+  droid_ps_poll();   /* Two Tone / Noise end with the transmission */
   int on = radio_is_transmitting();
   static long long log_us;
   static unsigned frames_then;

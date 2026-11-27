@@ -58,6 +58,8 @@ object Native {
     external fun txGet(out: DoubleArray): Int
     /** The phone mic's AAudio device id (0 = default) and whether it is a Bluetooth headset. */
     external fun micRoute(device: Int, bluetooth: Boolean)
+    /** M7 step 4: PureSignal's AmpView data (puresignal.c, Ps.D_* offsets); returns the floats written, 0 if none. */
+    external fun psDisp(out: FloatArray): Int
 
     // deskHPSDR's tables, one entry per line, fields split by '|'
     external fun filters(mode: Int): String     // title|low|high

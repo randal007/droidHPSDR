@@ -292,6 +292,19 @@ JNIEXPORT jint JNICALL FN(txGet)(JNIEnv *env, jobject self, jdoubleArray out) {
   (*env)->SetDoubleArrayRegion(env, out, 0, n, v);
   return n;
 }
+/* M7 step 4: PureSignal's AmpView data (puresignal.c, PSD_* offsets) */
+JNIEXPORT jint JNICALL FN(psDisp)(JNIEnv *env, jobject self, jfloatArray out) {
+  (void)self;
+  static float v[PSD_COUNT];
+  static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+  jsize n = (*env)->GetArrayLength(env, out);
+  if (n < PSD_COUNT) return 0;
+  pthread_mutex_lock(&lock);
+  int r = droid_ps_disp(v, PSD_COUNT);
+  if (r > 0) (*env)->SetFloatArrayRegion(env, out, 0, r, v);
+  pthread_mutex_unlock(&lock);
+  return r;
+}
 JNIEXPORT void JNICALL FN(micRoute)(JNIEnv *env, jobject self, jint device, jboolean bluetooth) {
   (void)env; (void)self;
   droid_mic_route(device, bluetooth);

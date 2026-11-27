@@ -68,6 +68,7 @@ add_library(droidhpsdr SHARED
   ${UPSTREAM}/vox.c
   ${UPSTREAM}/sintab.c
   app/transmit.c                 #     radio.c's transmit functions + droidHPSDR's safety
+  app/puresignal.c               #     ps_menu.c: PureSignal (M7 step 4)
   app/audio_aaudio.c
   app/autogain.c
   app/demo.c

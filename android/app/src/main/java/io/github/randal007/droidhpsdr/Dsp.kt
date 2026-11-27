@@ -519,7 +519,7 @@ internal val ALL_CHIPS = listOf(
     "BINAURAL" to "BINAURAL", "CWPEAK" to "CW PEAK", "BAND" to "BAND", "MODE" to "MODE", "AF" to "AF", "LNA" to "LNA",
     "PHONE" to "PHONE", "FILTER" to "FILTER", "AGC" to "AGC", "STEP" to "STEP", "SPAN" to "SPAN", "RIT" to "RIT",
     "CTUN" to "CTUN", "LOCK" to "LOCK", "AB" to "A⇄B", "LEVELS" to "LEVELS", "TX" to "TX",
-    "PROC" to "PROC", "VOX" to "VOX", "MON" to "MON",
+    "PROC" to "PROC", "VOX" to "VOX", "MON" to "MON", "PS" to "PS",
 )
 
 /** One chip of the bottom row. Toggles: tap = on/off, hold = their settings. */
@@ -601,6 +601,13 @@ internal fun ChipFor(id: String, st: Status, open: (Sheet) -> Unit, modifier: Mo
             // stopped: the values are the last run's (the drawer says "start the radio"), so no state shown (code review)
             val v = if (st.phase == Phase.RUNNING && !pb) procLabel(tx) else "—"
             Chip("PROC", v, v != "Off" && v != "—", modifier, { open(Sheet.TXAUDIO) }) { open(Sheet.TXAUDIO) }
+        }
+        // M7 step 4 (pick S1): the PureSignal drawer; the chip shows the feedback level, ✓ while correcting
+        "PS" -> {
+            val tx by Tx.v.collectAsState()
+            val pb by Radio.playback.collectAsState()
+            val v = if (st.phase == Phase.RUNNING && !pb) psLabel(tx) else "—"
+            Chip("PS", v, v != "Off" && v != "—", modifier, { open(Sheet.PS) }) { open(Sheet.PS) }
         }
         "VOX" -> {
             val tx by Tx.v.collectAsState()
